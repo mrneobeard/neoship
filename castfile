@@ -1,0 +1,62 @@
+id: neo-ship
+name: Neo Ship
+subcmds:
+  - aspire
+  - build
+  - dotnet
+  - ui
+  - audit
+  - lint
+
+paths:
+  - ./node_modules/.bin
+
+tasks:
+  aspire:run:
+    desc: Run API and UI through Aspire apphost
+    uses: shell
+    run: pnpm --dir apps/apphost run dev
+
+  aspire:build:
+    desc: Build Aspire apphost model
+    uses: shell
+    run: pnpm --dir apps/apphost run build
+
+  build:dotnet:
+    desc: Build all .NET projects in the solution
+    uses: dotnet
+    run: dotnet build neoship.slnx
+
+  build:ui:
+    desc: Build UI project
+    uses: shell
+    run: pnpm --dir apps/ui run build
+
+  lint:ui:
+    desc: Check UI project for formatting and type checks
+    uses: shell
+    run: pnpm --dir apps/ui run check
+
+  lint:ui:format:
+    desc: Format UI + apphost frontend files with oxfmt
+    uses: shell
+    env:
+      OXFMT_CHECK_ONLY: "0"
+    run: pnpm --dir apps/ui exec oxfmt ./ --write
+
+  audit:ui:
+    desc: Audit UI npm dependencies
+    uses: shell
+    run: pnpm --dir apps/ui audit
+
+  audit:dotnet:
+    desc: Audit .NET package vulnerabilities
+    uses: shell
+    run: dotnet list neoship.slnx package --vulnerable --include-transitive
+
+  audit:packages:
+    desc: Audit .NET and UI dependencies
+    uses: shell
+    needs: [audit:dotnet, audit:ui]
+    run: |
+      :

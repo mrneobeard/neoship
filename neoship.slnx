@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/apps/" />
+  <Folder Name="/apps/api/" />
+  <Folder Name="/apps/api/ApiSvc/">
+    <Project Path="apps/api/ApiSvc/NeoShip.ApiSvc.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/Data.Model.Mssql/">
+    <Project Path="apps/api/Data.Model.Mssql/NeoShip.Data.Mssql.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/Data.Model.Pgsql/">
+    <Project Path="apps/api/Data.Model.Pgsql/NeoShip.Data.Pgsql.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/Data.Model.Sqlite/">
+    <Project Path="apps/api/Data.Model.Sqlite/NeoShip.Data.Sqlite.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/Data.Model/">
+    <Project Path="apps/api/Data.Model/NeoShip.Data.Model.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/ServiceDefaults/">
+    <Project Path="apps/api/ServiceDefaults/NeoShip.ServiceDefaults.csproj" />
+  </Folder>
+</Solution>
