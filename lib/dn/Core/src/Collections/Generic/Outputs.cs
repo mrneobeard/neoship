@@ -193,10 +193,22 @@ public class Outputs : Dictionary<string, object?>
     {
     }
 
+    /// <summary>
+    /// Gets a shared empty outputs collection.
+    /// </summary>
+    /// <value>An empty <see cref="Outputs"/> instance.</value>
     public static Outputs Empty => new EmptyOutputs();
 
+    /// <summary>
+    /// Gets whether this collection has no entries.
+    /// </summary>
+    /// <value><see langword="true"/> when <see cref="Count"/> is zero.</value>
     public virtual bool IsEmpty => this.Count == 0;
 
+    /// <summary>
+    /// Gets whether the collection is read only.
+    /// </summary>
+    /// <value><see langword="false"/> for mutable <see cref="Outputs"/> instances.</value>
     public virtual bool IsReadOnly => false;
 }
 
@@ -228,8 +240,16 @@ public class EmptyOutputs : Outputs
     {
     }
 
+    /// <summary>
+    /// Gets whether this collection is empty.
+    /// </summary>
+    /// <value><see langword="true"/> always.</value>
     public override bool IsEmpty => true;
 
+    /// <summary>
+    /// Gets whether this collection is read only.
+    /// </summary>
+    /// <value><see langword="true"/> always.</value>
     public override bool IsReadOnly => true;
 
     /// <summary>
@@ -244,7 +264,6 @@ public class EmptyOutputs : Outputs
     /// Assert.Throws&lt;NotSupportedException&gt;(() => empty.Add("key", 42));
     /// </code>
     /// </example>
-    /// </remarks>
     public new void Add(string key, object? value)
     {
         throw new NotSupportedException("Cannot add items to an empty Outputs instance.");

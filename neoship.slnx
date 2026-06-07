@@ -19,6 +19,9 @@
   <Folder Name="/apps/api/ServiceDefaults/">
     <Project Path="apps/api/ServiceDefaults/NeoShip.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/lib/" />
+  <Folder Name="/lib/dn/" />
+  <Folder Name="/lib/dn/Age/" />
   <Folder Name="/lib/dn/Age/src/">
     <Project Path="lib/dn/Age/src/NeoBeard.Age.csproj" />
   </Folder>
@@ -26,6 +29,7 @@
   <Folder Name="/lib/dn/Age/test/">
     <Project Path="lib/dn/Age/test/NeoBeard.Age.Tests.csproj" />
   </Folder>
+  <Folder Name="/lib/dn/Colors.Primitives/" />
   <Folder Name="/lib/dn/Colors.Primitives/src/">
     <Project Path="lib/dn/Colors.Primitives/src/NeoBeard.Colors.Primitives.csproj" />
   </Folder>
@@ -39,5 +43,8 @@
   <Folder Name="/lib/dn/Core/" />
   <Folder Name="/lib/dn/Core/src/">
     <Project Path="lib/dn/Core/src/NeoBeard.Core.csproj" />
+  </Folder>
+  <Folder Name="/lib/dn/Core/test/">
+    <Project Path="lib/dn/Core/test/NeoBeard.Core.Tests.csproj" />
   </Folder>
 </Solution>

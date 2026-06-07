@@ -193,10 +193,25 @@ public class Inputs : Dictionary<string, object?>
     {
     }
 
+    /// <summary>
+    /// Gets a shared empty input collection.
+    /// </summary>
+    /// <value>An empty <see cref="Inputs"/> instance.</value>
+    /// <returns>An empty collection.</returns>
     public static Inputs Empty => new EmptyInputs();
 
+    /// <summary>
+    /// Gets whether the dictionary contains no entries.
+    /// </summary>
+    /// <value><see langword="true"/> when <see cref="Count"/> is zero.</value>
+    /// <returns>Whether the collection is empty.</returns>
     public virtual bool IsEmpty => this.Count == 0;
 
+    /// <summary>
+    /// Gets whether the collection is read only.
+    /// </summary>
+    /// <value><see langword="false"/> for mutable <see cref="Inputs"/> instances.</value>
+    /// <returns>Whether writes are allowed.</returns>
     public virtual bool IsReadOnly => false;
 }
 
@@ -228,8 +243,16 @@ public class EmptyInputs : Inputs
     {
     }
 
+    /// <summary>
+    /// Gets whether the collection is empty.
+    /// </summary>
+    /// <value><see langword="true"/> always.</value>
     public override bool IsEmpty => true;
 
+    /// <summary>
+    /// Gets whether the collection is read only.
+    /// </summary>
+    /// <value><see langword="true"/> always.</value>
     public override bool IsReadOnly => true;
 
     /// <summary>
@@ -237,14 +260,12 @@ public class EmptyInputs : Inputs
     /// </summary>
     /// <param name="key">The key to add.</param>
     /// <param name="value">The value to add.</param>
-    /// <remarks>
     /// <example>
     /// <code lang="csharp">
     /// var empty = new EmptyInputs();
     /// Assert.Throws&lt;InvalidOperationException&gt;(() => empty.Add("key", 42));
     /// </code>
     /// </example>
-    /// </remarks>
     public new void Add(string key, object? value)
     {
         throw new InvalidOperationException("Cannot add to Empty Inputs.");
@@ -254,13 +275,11 @@ public class EmptyInputs : Inputs
     /// Returns the string representation of the empty inputs.
     /// </summary>
     /// <returns>The string "Empty Inputs".</returns>
-    /// <remarks>
     /// <example>
     /// <code lang="csharp">
     /// var empty = new EmptyInputs();
     /// Assert.Equal("Empty Inputs", empty.ToString());
     /// </code>
     /// </example>
-    /// </remarks>
     public override string ToString() => "Empty Inputs";
 }
