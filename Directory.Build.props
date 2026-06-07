@@ -1,8 +1,13 @@
 <Project>
   <PropertyGroup>
-    <LangVersion>latest</LangVersion>
+    <LangVersion>preview</LangVersion>
     <Fx>net11.0</Fx>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <RootDir>$(MSBuildThisFileDirectory)</RootDir>
+    <CmnDir>$(MSBuildThisFileDirectory)lib/dn/Common/src</CmnDir>
   </PropertyGroup>
 </Project>

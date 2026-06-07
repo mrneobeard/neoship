@@ -19,4 +19,14 @@
   <Folder Name="/apps/api/ServiceDefaults/">
     <Project Path="apps/api/ServiceDefaults/NeoShip.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/lib/" />
+  <Folder Name="/lib/dn/" />
+  <Folder Name="/lib/dn/Common/" />
+  <Folder Name="/lib/dn/Common/src/">
+    <Project Path="lib/dn/Common/src/NeoBeard.Common.csproj" />
+  </Folder>
+  <Folder Name="/lib/dn/Core/" />
+  <Folder Name="/lib/dn/Core/src/">
+    <Project Path="lib/dn/Core/src/NeoBeard.Core.csproj" />
+  </Folder>
 </Solution>

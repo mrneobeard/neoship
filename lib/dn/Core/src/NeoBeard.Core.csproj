@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(Fx)</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="$(CmnDir)/ffi/unix/libc/chown.cs" Link="FFI/Unix/chown.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/libc/chmod.cs" Link="FFI/Unix/chmod.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/libc/getgrgid.cs" Link="FFI/Unix/getgrgid.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/system.native/stat.cs" Link="FFI/Unix/stat.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/errors.cs" Link="FFI/Unix/Errors.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/system.native/getpwuid.cs" Link="FFI/Unix/getpwuid.cs" />
+    <Compile Include="$(CmnDir)/ffi/unix/libs.cs" Link="FFI/Unix/Libs.cs" />
+  </ItemGroup>
+
+</Project>
