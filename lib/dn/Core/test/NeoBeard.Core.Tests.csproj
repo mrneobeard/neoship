@@ -5,6 +5,7 @@
     <RootNamespace>NeoBeard.Colors.Primitives.Tests</RootNamespace>
     <TargetFramework>$(Fx)</TargetFramework>
     <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
