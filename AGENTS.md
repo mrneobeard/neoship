@@ -11,3 +11,4 @@
 - Add code examples for methods, classes, and structs.
 - Use exact return type names in signatures and docs for all methods, not inferred language.
 - For equality with floating-point (`double`/`float`), avoid direct `==` on raw values; use tolerance-based comparisons (epsilon/tolerance) to avoid precision-loss issues.
+- After every code change in this workspace, run relevant tests before finishing and fix all resulting test failures, build errors, warnings, and style issues.
