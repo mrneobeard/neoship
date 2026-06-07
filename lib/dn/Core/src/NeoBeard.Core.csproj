@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>$(Fx)</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Namespace>NeoBeard</Namespace>
   </PropertyGroup>
 
   <ItemGroup>

@@ -151,7 +151,7 @@ public static partial class Env
 
                 var key = tokenBuilder.ToString();
                 var value = getValue(key);
-                if (value is not null && value.Length > 0)
+                if (value?.Length > 0)
                     output.Append(value);
                 tokenBuilder.Clear();
                 kind = TokenKind.None;
@@ -179,7 +179,7 @@ public static partial class Env
                     {
                         if (t.Kind is CommandTokenKind.DoubleQuotedArg && t.Value.Contains('$'))
                         {
-                            cmdargs.Add(Expand(t.Value, o).ToString());
+                            cmdargs.Add(Expand(t.Value, o));
                             continue;
                         }
 
@@ -223,7 +223,7 @@ public static partial class Env
                         throw new EnvironmentException($"Command substitution failed for command '{tokenBuilder}'. Exit code: {proc.ExitCode}, Error: {stderr}");
                     }
 
-                    if (stdout is not null && stdout.Length > 0)
+                    if (stdout.Length > 0)
                         output.Append(stdout.TrimEnd());
 
                     kind = TokenKind.None;
@@ -652,7 +652,6 @@ public static partial class Env
                     return new EnvironmentException("Bad interpolation. Variable name not provided.");
                 }
 
-                var substitution = tokenBuilder.ToString();
                 var (value, defaultValueError) = InterpolateVariable(tokenBuilder.AsSpan(), o);
                 if (defaultValueError is not null)
                 {
@@ -863,7 +862,9 @@ public static partial class Env
                 if (defaultValue.Contains('$'))
                 {
                     var res = TryExpand(value.AsSpan(), options);
-                    if (res is Error e)
+
+                    // res is Error e
+                    if (res.TryGetError(out var e))
                         return (string.Empty, e);
 
                     return (res.ValueOrDefault().ToString(), null);
