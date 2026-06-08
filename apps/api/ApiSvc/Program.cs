@@ -17,6 +17,7 @@ builder.Services.AddDbContext<ShipDb>(options =>
 
 builder.Services.AddSingleton<PasswordService>();
 builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<TokenExchangeService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuditService>();
@@ -26,6 +27,8 @@ builder.Services.AddScoped<ServiceAccountService>();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+
+app.UseMiddleware<NeoShip.ApiSvc.Middleware.TlsRequiredMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

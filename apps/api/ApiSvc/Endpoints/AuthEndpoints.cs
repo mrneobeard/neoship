@@ -24,6 +24,8 @@ public static class AuthEndpoints
         group.MapPost("/email-verification/request", RequestEmailVerificationAsync);
         group.MapPost("/email-verification/confirm", ConfirmEmailVerificationAsync);
 
+        group.MapPost("/token-exchange", TokenExchangeAsync);
+
         return group;
     }
 
@@ -169,5 +171,30 @@ public static class AuthEndpoints
         }
 
         return TypedResults.Ok();
+    }
+
+    public record TokenExchangeResponse(string Token, string TokenType, long ExpiresIn);
+
+    private static async Task<Results<Ok<TokenExchangeResponse>, UnauthorizedHttpResult>> TokenExchangeAsync(
+        HttpContext httpContext,
+        SessionService sessions,
+        TokenExchangeService tokenExchange,
+        CancellationToken ct)
+    {
+        var rawToken = ReadSessionToken(httpContext.Request);
+        if (rawToken is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var session = await sessions.ValidateSessionAsync(rawToken, ct);
+        if (session is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var token = tokenExchange.CreateToken(session.UserId, session.OrgId);
+
+        return TypedResults.Ok(new TokenExchangeResponse(token, "Bearer", 300));
     }
 }
