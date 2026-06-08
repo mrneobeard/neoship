@@ -20,6 +20,7 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuditService>();
+builder.Services.AddScoped<ApiKeyService>();
 
 var app = builder.Build();
 

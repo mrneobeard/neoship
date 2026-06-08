@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using NeoShip.ApiSvc.Services;
 using NeoShip.Data.Model;
@@ -15,6 +16,10 @@ public static class MeEndpoints
         group.MapGet("/", GetMeAsync);
         group.MapGet("/sessions", GetSessionsAsync);
         group.MapPost("/sessions/{sessionId:guid}/revoke", RevokeSessionAsync);
+
+        group.MapGet("/api-keys", GetApiKeysAsync);
+        group.MapPost("/api-keys", CreateApiKeyAsync);
+        group.MapPost("/api-keys/{apiKeyId:guid}/revoke", RevokeApiKeyAsync);
 
         return group;
     }
@@ -108,6 +113,90 @@ public static class MeEndpoints
         }
 
         await sessions.RevokeSessionAsync(sessionId, "user_revoked", ct);
+
+        return TypedResults.Ok();
+    }
+
+    public record ApiKeyResponse(
+        Guid Id,
+        string Name,
+        string? Description,
+        string? ScopesJson,
+        DateTime CreatedAt,
+        DateTime? LastUsedAt,
+        DateTime? ExpiresAt);
+
+    public record CreateApiKeyResponse(
+        Guid Id,
+        string Name,
+        string PlaintextKey,
+        DateTime CreatedAt);
+
+    private static async Task<Results<Ok<List<ApiKeyResponse>>, UnauthorizedHttpResult>> GetApiKeysAsync(
+        HttpContext httpContext,
+        SessionService sessions,
+        ApiKeyService apiKeys,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var keys = await apiKeys.ListUserApiKeysAsync(user.Id, ct);
+
+        var result = keys.Select(k => new ApiKeyResponse(
+            k.Id, k.Name, k.Description, k.ScopesJson, k.CreatedAt, k.LastUsedAt, k.ExpiresAt
+        )).ToList();
+
+        return TypedResults.Ok(result);
+    }
+
+    public record CreateApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
+
+    private static async Task<Results<Created<CreateApiKeyResponse>, UnauthorizedHttpResult>> CreateApiKeyAsync(
+        [FromBody] CreateApiKeyRequest req,
+        HttpContext httpContext,
+        SessionService sessions,
+        ApiKeyService apiKeys,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
+            user.Id, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
+
+        db.UserApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(ct);
+
+        return TypedResults.Created($"/api/v1/me/api-keys/{apiKey.Id}",
+            new CreateApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokeApiKeyAsync(
+        Guid apiKeyId,
+        HttpContext httpContext,
+        SessionService sessions,
+        ApiKeyService apiKeys,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var success = await apiKeys.RevokeUserApiKeyAsync(apiKeyId, user.Id, ct);
+        if (!success)
+        {
+            return TypedResults.NotFound();
+        }
 
         return TypedResults.Ok();
     }
