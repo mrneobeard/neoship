@@ -737,6 +737,15 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
+                    b.Property<string>("VerificationTokenDigest")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("verification_token_digest");
+
+                    b.Property<DateTime?>("VerificationTokenExpiresAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("verification_token_expires_at");
+
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("verified_at");
@@ -749,6 +758,9 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_user_emails_user_id");
+
+                    b.HasIndex("VerificationTokenDigest")
+                        .HasDatabaseName("ix_user_emails_verification_token_digest");
 
                     b.ToTable("user_emails", (string)null);
                 });
@@ -939,8 +951,70 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("FailedAttempts")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("failed_attempts");
+
+                    b.Property<string>("HashAlgorithm")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("hash_algorithm");
+
+                    b.Property<int>("Iterations")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("iterations");
+
+                    b.Property<DateTime?>("LockedUntil")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("locked_until");
+
+                    b.Property<int>("MemoryKib")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("memory_kib");
+
+                    b.Property<int>("Parallelism")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("parallelism");
+
+                    b.Property<DateTime?>("PasswordChangedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("password_changed_at");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("password_hash");
+
+                    b.Property<string>("PasswordSalt")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("password_salt");
+
+                    b.Property<string>("ResetTokenDigest")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reset_token_digest");
+
+                    b.Property<DateTime?>("ResetTokenExpiresAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("reset_token_expires_at");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
                     b.HasKey("UserId")
                         .HasName("pk_user_password_auths");
+
+                    b.HasIndex("ResetTokenDigest")
+                        .HasDatabaseName("ix_user_password_auths_reset_token_digest");
 
                     b.ToTable("user_password_auths", (string)null);
                 });

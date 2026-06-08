@@ -60,6 +60,7 @@ public class ShipDb : DbContext
         modelBuilder.Entity<UserEmail>(e =>
         {
             e.HasIndex(x => x.EmailDigest);
+            e.HasIndex(x => x.VerificationTokenDigest);
         });
 
         modelBuilder.Entity<UserSession>(s =>
@@ -96,6 +97,7 @@ public class ShipDb : DbContext
         {
             p.HasKey(x => x.UserId);
             p.HasOne(x => x.User).WithOne().HasForeignKey<UserPasswordAuth>(x => x.UserId).IsRequired();
+            p.HasIndex(x => x.ResetTokenDigest);
         });
 
         // User -> UserEmail

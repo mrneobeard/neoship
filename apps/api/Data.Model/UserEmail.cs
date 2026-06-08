@@ -37,6 +37,11 @@ public class UserEmail
 
     public DateTime? VerifiedAt { get; set; }
 
+    [StringLength(256)]
+    public string? VerificationTokenDigest { get; set; } = null;
+
+    public DateTime? VerificationTokenExpiresAt { get; set; } = null;
+
     public DateTime? DeletedAt { get; set; }
 
     public DateTime? ErasedAt { get; set; }

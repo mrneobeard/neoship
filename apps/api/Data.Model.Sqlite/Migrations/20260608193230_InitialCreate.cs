@@ -330,6 +330,8 @@ namespace NeoShip.Data.Sqlite.Migrations
                     created_by = table.Column<Guid>(type: "TEXT", nullable: false),
                     created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
                     verified_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    verification_token_digest = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    verification_token_expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
                     deleted_at = table.Column<DateTime>(type: "TEXT", nullable: true),
                     erased_at = table.Column<DateTime>(type: "TEXT", nullable: true),
                     status_id = table.Column<ushort>(type: "INTEGER", nullable: false)
@@ -431,7 +433,20 @@ namespace NeoShip.Data.Sqlite.Migrations
                 name: "user_password_auths",
                 columns: table => new
                 {
-                    user_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    password_hash = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    password_salt = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    hash_algorithm = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    iterations = table.Column<int>(type: "INTEGER", nullable: false),
+                    memory_kib = table.Column<int>(type: "INTEGER", nullable: false),
+                    parallelism = table.Column<int>(type: "INTEGER", nullable: false),
+                    failed_attempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    locked_until = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    reset_token_digest = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    reset_token_expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    password_changed_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -762,6 +777,11 @@ namespace NeoShip.Data.Sqlite.Migrations
                 column: "user_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_user_emails_verification_token_digest",
+                table: "user_emails",
+                column: "verification_token_digest");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_user_identity_providers_provider_type_id_org_id",
                 table: "user_identity_providers",
                 columns: new[] { "provider_type_id", "org_id" });
@@ -785,6 +805,11 @@ namespace NeoShip.Data.Sqlite.Migrations
                 name: "ix_user_mfa_factors_user_id",
                 table: "user_mfa_factors",
                 column: "user_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_password_auths_reset_token_digest",
+                table: "user_password_auths",
+                column: "reset_token_digest");
 
             migrationBuilder.CreateIndex(
                 name: "ix_user_sessions_org_id",
