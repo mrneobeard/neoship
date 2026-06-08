@@ -5,12 +5,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\lib\dn\Crypto\src\NeoBeard.Crypto.csproj" />
+    <ProjectReference Include="..\Data.Model\NeoShip.Data.Model.csproj" />
+    <ProjectReference Include="..\Data.Model.Sqlite\NeoShip.Data.Sqlite.csproj" />
     <ProjectReference Include="..\ServiceDefaults\*.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-  
-    <PackageReference Include="Microsoft.AspNetCore.OpenApi"  />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
   </ItemGroup>
 
 </Project>
