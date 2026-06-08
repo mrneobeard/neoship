@@ -2,18 +2,18 @@ namespace NeoShip.ApiSvc.Middleware;
 
 public class TlsRequiredMiddleware
 {
-    private readonly RequestDelegate _next;
-    private readonly bool _enabled;
+    private readonly RequestDelegate next;
+    private readonly bool enabled;
 
     public TlsRequiredMiddleware(RequestDelegate next, bool enabled = true)
     {
-        _next = next;
-        _enabled = enabled;
+        this.next = next;
+        this.enabled = enabled;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
-        if (_enabled)
+        if (this.enabled)
         {
             var authHeader = context.Request.Headers.Authorization.ToString();
 
@@ -42,6 +42,6 @@ public class TlsRequiredMiddleware
             }
         }
 
-        await _next(context);
+        await this.next(context);
     }
 }

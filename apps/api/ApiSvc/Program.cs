@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+
 using NeoShip.ApiSvc.Endpoints;
-using NeoShip.ApiSvc.Services;
+using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,14 +16,14 @@ builder.Services.AddDbContext<ShipDb>(options =>
         b => b.MigrationsAssembly("NeoShip.Data.Sqlite"))
            .UseSnakeCaseNamingConvention());
 
-builder.Services.AddSingleton<PasswordService>();
-builder.Services.AddSingleton<TokenService>();
-builder.Services.AddSingleton<TokenExchangeService>();
-builder.Services.AddScoped<SessionService>();
-builder.Services.AddScoped<AuthService>();
-builder.Services.AddScoped<AuditService>();
-builder.Services.AddScoped<ApiKeyService>();
-builder.Services.AddScoped<ServiceAccountService>();
+builder.Services.AddSingleton<PasswordStore>();
+builder.Services.AddSingleton<TokenStore>();
+builder.Services.AddSingleton<TokenExchangeStore>();
+builder.Services.AddScoped<SessionStore>();
+builder.Services.AddScoped<AuthStore>();
+builder.Services.AddScoped<AuditStore>();
+builder.Services.AddScoped<ApiKeyStore>();
+builder.Services.AddScoped<ServiceAccountStore>();
 
 var app = builder.Build();
 

@@ -1,7 +1,9 @@
 using System.Security.Cryptography;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using NeoShip.ApiSvc.Services;
+
+using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Endpoints;
@@ -57,7 +59,7 @@ public static class AuthEndpoints
 
     private static async Task<Results<Created<UserResponse>, Conflict<string>>> SignupAsync(
         [FromBody] SignupRequest req,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         var (result, user, _, rawToken) = await auth.SignupAsync(
@@ -76,7 +78,7 @@ public static class AuthEndpoints
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> LoginAsync(
         [FromBody] LoginRequest req,
         HttpContext httpContext,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         var ip = httpContext.Connection.RemoteIpAddress?.ToString();
@@ -102,7 +104,7 @@ public static class AuthEndpoints
 
     private static async Task<Ok> LogoutAsync(
         HttpContext httpContext,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         var rawToken = ReadSessionToken(httpContext.Request);
@@ -110,7 +112,7 @@ public static class AuthEndpoints
         if (rawToken is not null)
         {
             var tokenBytes = Convert.FromBase64String(rawToken);
-            var digest = SHA256.HashData(tokenBytes);
+            var digest = TokenStore.ComputeDigest(tokenBytes);
             var digestBase64 = Convert.ToBase64String(digest);
             await auth.LogoutAsync(digestBase64, ct);
         }
@@ -123,7 +125,7 @@ public static class AuthEndpoints
 
     private static async Task<Ok> RequestPasswordResetAsync(
         [FromBody] PasswordResetRequest req,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         await auth.RequestPasswordResetAsync(req.Email, ct);
@@ -134,7 +136,7 @@ public static class AuthEndpoints
 
     private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmPasswordResetAsync(
         [FromBody] PasswordResetConfirm req,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
@@ -150,7 +152,7 @@ public static class AuthEndpoints
 
     private static async Task<Ok> RequestEmailVerificationAsync(
         [FromBody] EmailVerificationRequest req,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         await auth.RequestEmailVerificationAsync(req.Email, ct);
@@ -161,7 +163,7 @@ public static class AuthEndpoints
 
     private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmEmailVerificationAsync(
         [FromBody] EmailVerificationConfirm req,
-        AuthService auth,
+        AuthStore auth,
         CancellationToken ct)
     {
         var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
@@ -177,8 +179,8 @@ public static class AuthEndpoints
 
     private static async Task<Results<Ok<TokenExchangeResponse>, UnauthorizedHttpResult>> TokenExchangeAsync(
         HttpContext httpContext,
-        SessionService sessions,
-        TokenExchangeService tokenExchange,
+        SessionStore sessions,
+        TokenExchangeStore tokenExchange,
         CancellationToken ct)
     {
         var rawToken = ReadSessionToken(httpContext.Request);

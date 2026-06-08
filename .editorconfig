@@ -1,4 +1,4 @@
-root = true
+0root = true
 
 # All files
 [*]
@@ -7,23 +7,19 @@ indent_style = space
 # Xml files
 [*.xml]
 indent_size = 2
+tab_width = 2
+
+[*.{yaml,yml}]
+indent_size = 2
+tab_width = 2
 
 [*.md]
 indent_size = 2
+tab_width = 2
 
-# Xml project files
-[*.{csproj,fsproj,vbproj,proj,slnx}]
+[*.csproj]
 indent_size = 2
-
-# Xml config files
-[*.{props,targets,config,nuspec}]
-indent_size = 2
-
-[*.json]
-indent_size = 2
-
-[*.{js,ts,jsx,tsx}]
-indent_size = 4
+tab_width = 2
 
 # C# files
 [*.cs]
@@ -35,6 +31,7 @@ indent_size = 4
 tab_width = 4
 
 # New line preferences
+end_of_line = crlf
 insert_final_newline = false
 
 #### .NET Coding Conventions ####
@@ -68,16 +65,13 @@ dotnet_style_require_accessibility_modifiers = for_non_interface_members:silent
 dotnet_style_coalesce_expression = true:suggestion
 dotnet_style_collection_initializer = true:suggestion
 dotnet_style_explicit_tuple_names = true:suggestion
-dotnet_style_namespace_match_folder = true:suggestion
 dotnet_style_null_propagation = true:suggestion
 dotnet_style_object_initializer = true:suggestion
 dotnet_style_operator_placement_when_wrapping = beginning_of_line
 dotnet_style_prefer_auto_properties = true:suggestion
-dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
 dotnet_style_prefer_compound_assignment = true:suggestion
 dotnet_style_prefer_conditional_expression_over_assignment = true:suggestion
 dotnet_style_prefer_conditional_expression_over_return = true:suggestion
-dotnet_style_prefer_foreach_explicit_cast_in_source = when_strongly_typed:suggestion
 dotnet_style_prefer_inferred_anonymous_type_member_names = true:suggestion
 dotnet_style_prefer_inferred_tuple_names = true:suggestion
 dotnet_style_prefer_is_null_check_over_reference_equality_method = true:suggestion
@@ -114,7 +108,6 @@ csharp_style_expression_bodied_properties = true:silent
 # Pattern matching preferences
 csharp_style_pattern_matching_over_as_with_null_check = true:suggestion
 csharp_style_pattern_matching_over_is_with_cast_check = true:suggestion
-csharp_style_prefer_extended_property_pattern = true:suggestion
 csharp_style_prefer_not_pattern = true:suggestion
 csharp_style_prefer_pattern_matching = true:silent
 csharp_style_prefer_switch_expression = true:suggestion
@@ -123,31 +116,20 @@ csharp_style_prefer_switch_expression = true:suggestion
 csharp_style_conditional_delegate_call = true:suggestion
 
 # Modifier preferences
-csharp_prefer_static_anonymous_function = true:suggestion
 csharp_prefer_static_local_function = true:warning
-csharp_preferred_modifier_order = public,private,protected,internal,file,const,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,required,volatile,async:suggestion
-csharp_style_prefer_readonly_struct = true:suggestion
-csharp_style_prefer_readonly_struct_member = true:suggestion
+csharp_preferred_modifier_order = public,private,protected,internal,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,volatile,async:silent
 
 # Code-block preferences
 csharp_prefer_braces = true:silent
 csharp_prefer_simple_using_statement = true:suggestion
-csharp_style_namespace_declarations = file_scoped:suggestion
-csharp_style_prefer_method_group_conversion = true:silent
-csharp_style_prefer_primary_constructors = true:suggestion
-csharp_style_prefer_top_level_statements = true:silent
 
 # Expression-level preferences
 csharp_prefer_simple_default_expression = true:suggestion
 csharp_style_deconstructed_variable_declaration = true:suggestion
-csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
 csharp_style_inlined_variable_declaration = true:suggestion
+csharp_style_pattern_local_over_anonymous_function = true:suggestion
 csharp_style_prefer_index_operator = true:suggestion
-csharp_style_prefer_local_over_anonymous_function = true:suggestion
-csharp_style_prefer_null_check_over_type_check = true:suggestion
 csharp_style_prefer_range_operator = true:suggestion
-csharp_style_prefer_tuple_swap = true:suggestion
-csharp_style_prefer_utf8_string_literals = true:suggestion
 csharp_style_throw_expression = true:suggestion
 csharp_style_unused_value_assignment_preference = discard_variable:suggestion
 csharp_style_unused_value_expression_statement_preference = discard_variable:silent
@@ -203,6 +185,10 @@ csharp_preserve_single_line_blocks = true
 csharp_preserve_single_line_statements = true
 
 #### Naming styles ####
+
+# IDE0320: Make anonymous function static
+csharp_prefer_static_anonymous_function = false
+
 [*.{cs,vb}]
 
 # Naming rules
@@ -247,13 +233,13 @@ dotnet_naming_rule.public_fields_should_be_pascalcase.severity = suggestion
 dotnet_naming_rule.public_fields_should_be_pascalcase.symbols = public_fields
 dotnet_naming_rule.public_fields_should_be_pascalcase.style = pascalcase
 
-dotnet_naming_rule.private_fields_should_be__camelcase.severity = suggestion
-dotnet_naming_rule.private_fields_should_be__camelcase.symbols = private_fields
-dotnet_naming_rule.private_fields_should_be__camelcase.style = _camelcase
+dotnet_naming_rule.private_fields_should_be_camelcase.severity = warning
+dotnet_naming_rule.private_fields_should_be_camelcase.symbols = private_fields
+dotnet_naming_rule.private_fields_should_be_camelcase.style = camelcase
 
-dotnet_naming_rule.private_static_fields_should_be_s_camelcase.severity = suggestion
-dotnet_naming_rule.private_static_fields_should_be_s_camelcase.symbols = private_static_fields
-dotnet_naming_rule.private_static_fields_should_be_s_camelcase.style = s_camelcase
+dotnet_naming_rule.private_static_fields_should_be_camelcase.severity = warning
+dotnet_naming_rule.private_static_fields_should_be_camelcase.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields_should_be_camelcase.style = camelcase
 
 dotnet_naming_rule.public_constant_fields_should_be_pascalcase.severity = suggestion
 dotnet_naming_rule.public_constant_fields_should_be_pascalcase.symbols = public_constant_fields
@@ -267,9 +253,9 @@ dotnet_naming_rule.public_static_readonly_fields_should_be_pascalcase.severity =
 dotnet_naming_rule.public_static_readonly_fields_should_be_pascalcase.symbols = public_static_readonly_fields
 dotnet_naming_rule.public_static_readonly_fields_should_be_pascalcase.style = pascalcase
 
-dotnet_naming_rule.private_static_readonly_fields_should_be_pascalcase.severity = suggestion
+dotnet_naming_rule.private_static_readonly_fields_should_be_pascalcase.severity = warning
 dotnet_naming_rule.private_static_readonly_fields_should_be_pascalcase.symbols = private_static_readonly_fields
-dotnet_naming_rule.private_static_readonly_fields_should_be_pascalcase.style = pascalcase
+dotnet_naming_rule.private_static_readonly_fields_should_be_pascalcase.style = camelcase
 
 dotnet_naming_rule.enums_should_be_pascalcase.severity = suggestion
 dotnet_naming_rule.enums_should_be_pascalcase.symbols = enums
@@ -378,11 +364,6 @@ dotnet_naming_style.tpascalcase.required_suffix =
 dotnet_naming_style.tpascalcase.word_separator = 
 dotnet_naming_style.tpascalcase.capitalization = pascal_case
 
-dotnet_naming_style._camelcase.required_prefix = _
-dotnet_naming_style._camelcase.required_suffix = 
-dotnet_naming_style._camelcase.word_separator = 
-dotnet_naming_style._camelcase.capitalization = camel_case
-
 dotnet_naming_style.camelcase.required_prefix = 
 dotnet_naming_style.camelcase.required_suffix = 
 dotnet_naming_style.camelcase.word_separator = 
@@ -393,7 +374,46 @@ dotnet_naming_style.s_camelcase.required_suffix =
 dotnet_naming_style.s_camelcase.word_separator = 
 dotnet_naming_style.s_camelcase.capitalization = camel_case
 
-# ignore warning
+dotnet_code_quality.enable_platform_analyzer_on_pre_net5_target = true
+
+# C# analyzer rules
+dotnet_diagnostic.CS1591.severity = none # allow missing xml comments
+
+# analyzer rules
+dotnet_diagnostic.IDE0045.severity = none # if statement can be simplified should be ignored
+dotnet_diagnostic.IDE0057.severity = none # substring can be simplified is invalide for .NET STANDARD
+dotnet_diagnostic.IDE0290.severity = none # no primary constructors. 
+
+dotnet_diagnostic.CA1704.severity = none # The spelling dictionary for .NET is hard to use. 
+
+dotnet_diagnostic.SA1000.severity = none # allow new() to be used with requiring a space between new and the parenthesis.
+dotnet_diagnostic.SA1011.severity = none # allow square brackets to end with a ? e.g. []?.
+dotnet_diagnostic.SA1010.severity = none # new collection expressions can have space before the brackets.
+dotnet_diagnostic.SA1200.severity = none # using directives should not be placed inside a namespace
+dotnet_diagnostic.SA1201.severity = none # throwing AD0001 exception
+dotnet_diagnostic.SA1308.severity = none # static variables should be prefixed with s_ 
+dotnet_diagnostic.SA1311.severity = none # staic readonly fields should begin s_camecase
+dotnet_diagnostic.SA1314.severity = none # prefer rust style generic type arg names
+dotnet_diagnostic.SA1402.severity = none # allow multiple types per file.
+dotnet_diagnostic.SA1404.severity = none # suppression justification is not required
+dotnet_diagnostic.SA1503.severity = none # braces are not preferred for brevity
+dotnet_diagnostic.SA1414.severity = none # tuple names are overrated.
+dotnet_diagnostic.SA1505.severity = none # braces are not required for single-line statements
+dotnet_diagnostic.SA1600.severity = none # elements are not required to be documented
+dotnet_diagnostic.SA1601.severity = none # partial elements are not required to be documented.
+dotnet_diagnostic.SA1602.severity = none # enumerations are not required to be documented.
+dotnet_diagnostic.SA1633.severity = none # file should have a copyright header
 
 
-dotnet_diagnostic.IDE0130.severity = none
+dotnet_diagnostic.RS0016.severity = none # 
+dotnet_diagnostic.RS0037.severity = none # 
+
+dotnet_diagnostic.S125.severity = none # code in comments are fine when they illustrate issues.
+dotnet_diagnostic.S127.severity = none # allow incrementing index inside loop.
+dotnet_diagnostic.S3236.severity = none # hiding the caller information is not always accurate due to multiple targeting frameworks.
+dotnet_diagnostic.S4035.severity = none # There are cases where its fine not to seal and not implement IEqualityComparer
+dotnet_diagnostic.S1117.severity = none # I'm fine with hiding variables of the same name by using the 'this' keyword.
+dotnet_diagnostic.S1135.severity = none # a analyzer should not create a warning for @#$@#$ TODOS.
+dotnet_diagnostic.S1172.severity = none # remove this parameter whose value is ignored... giving false positive
+dotnet_diagnostic.S3267.severity = none # LINQ for all loops is overkill.
+dotnet_diagnostic.S3925.severity = none # overide serialization is giving false positive.

@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NeoShip.ApiSvc.Services;
+
+using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Endpoints;
@@ -35,7 +36,7 @@ public static class OrgEndpoints
     private static async Task<Results<Ok<List<ServiceAccountResponse>>, NotFound>> ListServiceAccountsAsync(
         string orgSlug,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -44,7 +45,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var accounts = await service.ListAsync(org.Id, ct);
+        var accounts = await store.ListAsync(org.Id, ct);
 
         var result = accounts.Select(s => new ServiceAccountResponse(
             s.Id, s.Name, s.Description, s.CreatedAt, s.UpdatedAt
@@ -59,9 +60,9 @@ public static class OrgEndpoints
         string orgSlug,
         [FromBody] CreateServiceAccountRequest req,
         HttpContext httpContext,
-        SessionService sessions,
+        SessionStore sessions,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -73,7 +74,7 @@ public static class OrgEndpoints
         var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
         var createdBy = user?.Id ?? Guid.Empty;
 
-        var sa = await service.CreateAsync(org.Id, createdBy, req.Name, req.Description, ct);
+        var sa = await store.CreateAsync(org.Id, createdBy, req.Name, req.Description, ct);
 
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{sa.Id}",
@@ -87,7 +88,7 @@ public static class OrgEndpoints
         Guid serviceAccountId,
         [FromBody] UpdateServiceAccountRequest req,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -96,7 +97,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var sa = await service.UpdateAsync(org.Id, serviceAccountId, req.Name, req.Description, ct);
+        var sa = await store.UpdateAsync(org.Id, serviceAccountId, req.Name, req.Description, ct);
         if (sa is null)
         {
             return TypedResults.NotFound();
@@ -109,7 +110,7 @@ public static class OrgEndpoints
         string orgSlug,
         Guid serviceAccountId,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -118,7 +119,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var success = await service.DisableAsync(org.Id, serviceAccountId, ct);
+        var success = await store.DisableAsync(org.Id, serviceAccountId, ct);
         if (!success)
         {
             return TypedResults.NotFound();
@@ -137,7 +138,7 @@ public static class OrgEndpoints
         string orgSlug,
         Guid serviceAccountId,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -146,13 +147,13 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var sa = await service.GetAsync(org.Id, serviceAccountId, ct);
+        var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
             return TypedResults.NotFound();
         }
 
-        var keys = await service.ListApiKeysAsync(serviceAccountId, ct);
+        var keys = await store.ListApiKeysAsync(serviceAccountId, ct);
 
         var result = keys.Select(k => new ServiceAccountApiKeyResponse(
             k.Id, k.Name, k.Description, k.CreatedAt, k.ExpiresAt
@@ -168,7 +169,7 @@ public static class OrgEndpoints
         Guid serviceAccountId,
         [FromBody] CreateServiceAccountApiKeyRequest req,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -177,13 +178,13 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var sa = await service.GetAsync(org.Id, serviceAccountId, ct);
+        var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
             return TypedResults.NotFound();
         }
 
-        var (plaintextKey, apiKey) = service.GenerateApiKey(
+        var (plaintextKey, apiKey) = store.GenerateApiKey(
             serviceAccountId, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
 
         db.ServiceAccountApiKeys.Add(apiKey);
@@ -199,7 +200,7 @@ public static class OrgEndpoints
         Guid serviceAccountId,
         Guid apiKeyId,
         ShipDb db,
-        ServiceAccountService service,
+        ServiceAccountStore store,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -208,7 +209,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var success = await service.RevokeApiKeyAsync(apiKeyId, serviceAccountId, ct);
+        var success = await store.RevokeApiKeyAsync(apiKeyId, serviceAccountId, ct);
         if (!success)
         {
             return TypedResults.NotFound();

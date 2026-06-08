@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using NeoShip.ApiSvc.Services;
+
+using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Endpoints;
@@ -24,7 +26,7 @@ public static class MeEndpoints
         return group;
     }
 
-    public static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionService sessions, CancellationToken ct)
+    public static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionStore sessions, CancellationToken ct)
     {
         var rawToken = httpContext.Request.Cookies[AuthEndpoints.SessionCookieName];
         if (rawToken is null)
@@ -46,7 +48,7 @@ public static class MeEndpoints
 
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult>> GetMeAsync(
         HttpContext httpContext,
-        SessionService sessions,
+        SessionStore sessions,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -68,7 +70,7 @@ public static class MeEndpoints
 
     private static async Task<Results<Ok<List<SessionResponse>>, UnauthorizedHttpResult>> GetSessionsAsync(
         HttpContext httpContext,
-        SessionService sessions,
+        SessionStore sessions,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -94,7 +96,7 @@ public static class MeEndpoints
     private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokeSessionAsync(
         Guid sessionId,
         HttpContext httpContext,
-        SessionService sessions,
+        SessionStore sessions,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -134,8 +136,8 @@ public static class MeEndpoints
 
     private static async Task<Results<Ok<List<ApiKeyResponse>>, UnauthorizedHttpResult>> GetApiKeysAsync(
         HttpContext httpContext,
-        SessionService sessions,
-        ApiKeyService apiKeys,
+        SessionStore sessions,
+        ApiKeyStore apiKeys,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -158,8 +160,8 @@ public static class MeEndpoints
     private static async Task<Results<Created<CreateApiKeyResponse>, UnauthorizedHttpResult>> CreateApiKeyAsync(
         [FromBody] CreateApiKeyRequest req,
         HttpContext httpContext,
-        SessionService sessions,
-        ApiKeyService apiKeys,
+        SessionStore sessions,
+        ApiKeyStore apiKeys,
         ShipDb db,
         CancellationToken ct)
     {
@@ -182,8 +184,8 @@ public static class MeEndpoints
     private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokeApiKeyAsync(
         Guid apiKeyId,
         HttpContext httpContext,
-        SessionService sessions,
-        ApiKeyService apiKeys,
+        SessionStore sessions,
+        ApiKeyStore apiKeys,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
