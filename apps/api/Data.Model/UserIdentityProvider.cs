@@ -47,7 +47,7 @@ public class UserIdentityProvider
 
 public readonly struct UserIdentityProviderStatus
 {
-    public UserIdentityProviderStatus(ushort id, string name)
+    internal UserIdentityProviderStatus(ushort id, string name)
     {
         this.Id = id;
         this.Name = name;
@@ -79,7 +79,7 @@ public readonly struct UserIdentityProviderStatus
 
 public readonly struct UserIdentityProviderType
 {
-    public UserIdentityProviderType(ushort id, string name)
+    internal UserIdentityProviderType(ushort id, string name)
     {
         this.Id = id;
         this.Name = name;

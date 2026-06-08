@@ -19,7 +19,10 @@ public readonly struct UserStatus
     {
         0 => None,
         1 => Active,
-        2 => Inactive,
+        90 => Invited,
+        100 => Inactive,
+        200 => Suspended,
+        900 => Deleted,
         _ => Unknown
     };
 

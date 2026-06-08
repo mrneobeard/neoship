@@ -35,10 +35,10 @@ public class ServiceAccount
 
 public readonly struct ServiceAccountStatus
 {
-    public ServiceAccountStatus(ushort id, string name)
+    internal ServiceAccountStatus(ushort id, string name)
     {
         this.Id = id;
-        this.Name = string.Intern(name);
+        this.Name = name;
     }
 
     public ushort Id { get; init; }

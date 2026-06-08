@@ -53,10 +53,10 @@ public readonly struct UserEmailStatus
 
     public string Name { get; init; }
 
-    public UserEmailStatus(ushort id, string name)
+    internal UserEmailStatus(ushort id, string name)
     {
         this.Id = id;
-        this.Name = string.Intern(name);
+        this.Name = name;
     }
 
     public static UserEmailStatus Active => new(1, "current");
