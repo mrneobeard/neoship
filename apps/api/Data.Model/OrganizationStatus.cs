@@ -20,7 +20,7 @@ public readonly struct OrganizationStatus
 
     public static OrganizationStatus PendingDeleted => new(40, "pending_deleted");
 
-    public static OrganizationStatus Deleted => new(40, "deleted");
+    public static OrganizationStatus Deleted => new(50, "deleted");
 
     public static implicit operator ushort(OrganizationStatus status) => status.Id;
 

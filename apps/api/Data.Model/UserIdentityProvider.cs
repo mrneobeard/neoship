@@ -45,7 +45,7 @@ public class UserIdentityProvider
     public DateTime? UpdatedAt { get; set; } = null;
 }
 
-public struct UserIdentityProviderStatus
+public readonly struct UserIdentityProviderStatus
 {
     public UserIdentityProviderStatus(ushort id, string name)
     {
@@ -55,9 +55,9 @@ public struct UserIdentityProviderStatus
 
     public bool IsActive => this.Id < 100;
 
-    public ushort Id { get; set; }
+    public ushort Id { get; init; }
 
-    public string Name { get; set; }
+    public string Name { get; init; }
 
     public static UserIdentityProviderStatus Unknown => new(0, "unknown");
 
@@ -77,7 +77,7 @@ public struct UserIdentityProviderStatus
     public static implicit operator string(UserIdentityProviderStatus status) => status.Name;
 }
 
-public struct UserIdentityProviderType
+public readonly struct UserIdentityProviderType
 {
     public UserIdentityProviderType(ushort id, string name)
     {
@@ -85,9 +85,9 @@ public struct UserIdentityProviderType
         this.Name = name;
     }
 
-    public ushort Id { get; set; }
+    public ushort Id { get; init; }
 
-    public string Name { get; set; }
+    public string Name { get; init; }
 
     public static UserIdentityProviderType Unknown => new(0, "Unknown");
 
