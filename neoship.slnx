@@ -63,4 +63,8 @@
   <Folder Name="/lib/dn/Secrets/src/">
     <Project Path="lib/dn/Secrets/src/NeoBeard.Secrets.csproj" />
   </Folder>
+  <Folder Name="/lib/dn/Ssh/" />
+  <Folder Name="/lib/dn/Ssh/src/">
+    <Project Path="lib/dn/Ssh/src/NeoBeard.Ssh.csproj" />
+  </Folder>
 </Solution>
