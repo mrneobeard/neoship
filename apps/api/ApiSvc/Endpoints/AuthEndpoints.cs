@@ -18,6 +18,12 @@ public static class AuthEndpoints
         group.MapPost("/login", LoginAsync);
         group.MapPost("/logout", LogoutAsync);
 
+        group.MapPost("/password-reset/request", RequestPasswordResetAsync);
+        group.MapPost("/password-reset/confirm", ConfirmPasswordResetAsync);
+
+        group.MapPost("/email-verification/request", RequestEmailVerificationAsync);
+        group.MapPost("/email-verification/confirm", ConfirmEmailVerificationAsync);
+
         return group;
     }
 
@@ -108,6 +114,60 @@ public static class AuthEndpoints
         }
 
         ClearSessionCookie(httpContext.Response);
+        return TypedResults.Ok();
+    }
+
+    public record PasswordResetRequest(string Email);
+
+    private static async Task<Ok> RequestPasswordResetAsync(
+        [FromBody] PasswordResetRequest req,
+        AuthService auth,
+        CancellationToken ct)
+    {
+        await auth.RequestPasswordResetAsync(req.Email, ct);
+        return TypedResults.Ok();
+    }
+
+    public record PasswordResetConfirm(string Token, string NewPassword);
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmPasswordResetAsync(
+        [FromBody] PasswordResetConfirm req,
+        AuthService auth,
+        CancellationToken ct)
+    {
+        var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
+        if (!success)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        return TypedResults.Ok();
+    }
+
+    public record EmailVerificationRequest(string Email);
+
+    private static async Task<Ok> RequestEmailVerificationAsync(
+        [FromBody] EmailVerificationRequest req,
+        AuthService auth,
+        CancellationToken ct)
+    {
+        await auth.RequestEmailVerificationAsync(req.Email, ct);
+        return TypedResults.Ok();
+    }
+
+    public record EmailVerificationConfirm(string Token);
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmEmailVerificationAsync(
+        [FromBody] EmailVerificationConfirm req,
+        AuthService auth,
+        CancellationToken ct)
+    {
+        var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
+        if (!success)
+        {
+            return TypedResults.Unauthorized();
+        }
+
         return TypedResults.Ok();
     }
 }

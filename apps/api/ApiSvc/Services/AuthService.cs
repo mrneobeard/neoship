@@ -188,4 +188,108 @@ public class AuthService
                 session.IpAddress, session.UserAgent, ct: ct);
         }
     }
+
+    public async Task RequestPasswordResetAsync(string email, CancellationToken ct = default)
+    {
+        var emailUpcase = email.ToUpperInvariant();
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.EmailUpcase == emailUpcase, ct);
+        if (user is null)
+        {
+            return;
+        }
+
+        var auth = await _db.UserPasswordAuths.FirstOrDefaultAsync(a => a.UserId == user.Id, ct);
+        if (auth is null)
+        {
+            return;
+        }
+
+        var rawToken = Convert.ToBase64String(
+            System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var digest = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(rawToken)));
+
+        auth.ResetTokenDigest = digest;
+        auth.ResetTokenExpiresAt = DateTime.UtcNow.AddMinutes(15);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> ConfirmPasswordResetAsync(string token, string newPassword, CancellationToken ct = default)
+    {
+        var digest = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(token)));
+
+        var auth = await _db.UserPasswordAuths
+            .FirstOrDefaultAsync(a => a.ResetTokenDigest == digest
+                && a.ResetTokenExpiresAt > DateTime.UtcNow, ct);
+
+        if (auth is null)
+        {
+            return false;
+        }
+
+        auth.PasswordHash = _passwords.Hash(newPassword);
+        auth.ResetTokenDigest = null;
+        auth.ResetTokenExpiresAt = null;
+        auth.FailedAttempts = 0;
+        auth.LockedUntil = null;
+        auth.PasswordChangedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.RecordAsync("auth.password_reset", null, auth.UserId, "password_reset", null, null, ct: ct);
+
+        return true;
+    }
+
+    public async Task RequestEmailVerificationAsync(string email, CancellationToken ct = default)
+    {
+        var emailUpcase = email.ToUpperInvariant();
+
+        var userEmail = await _db.UserEmails
+            .FirstOrDefaultAsync(e => e.EmailUpcase == emailUpcase && e.StatusId == UserEmailStatus.Pending.Id, ct);
+
+        if (userEmail is null)
+        {
+            return;
+        }
+
+        var rawToken = Convert.ToBase64String(
+            System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+        var digest = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(rawToken)));
+
+        userEmail.VerificationTokenDigest = digest;
+        userEmail.VerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> ConfirmEmailVerificationAsync(string token, CancellationToken ct = default)
+    {
+        var digest = Convert.ToBase64String(
+            System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(token)));
+
+        var userEmail = await _db.UserEmails
+            .FirstOrDefaultAsync(e => e.VerificationTokenDigest == digest
+                && e.VerificationTokenExpiresAt > DateTime.UtcNow, ct);
+
+        if (userEmail is null)
+        {
+            return false;
+        }
+
+        userEmail.VerificationTokenDigest = null;
+        userEmail.VerificationTokenExpiresAt = null;
+        userEmail.VerifiedAt = DateTime.UtcNow;
+        userEmail.StatusId = UserEmailStatus.Active.Id;
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.RecordAsync("auth.email_verified", null, userEmail.UserId, "email_verified", null, null, ct: ct);
+
+        return true;
+    }
 }
