@@ -24,7 +24,7 @@ public static class MeEndpoints
         return group;
     }
 
-    private static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionService sessions, CancellationToken ct)
+    public static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionService sessions, CancellationToken ct)
     {
         var rawToken = httpContext.Request.Cookies[AuthEndpoints.SessionCookieName];
         if (rawToken is null)

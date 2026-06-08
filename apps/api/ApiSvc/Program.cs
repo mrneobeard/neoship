@@ -21,6 +21,7 @@ builder.Services.AddScoped<SessionService>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<ApiKeyService>();
+builder.Services.AddScoped<ServiceAccountService>();
 
 var app = builder.Build();
 
@@ -58,6 +59,7 @@ app.MapGet("/", () => "NeoShip Identity API");
 
 app.MapAuthEndpoints();
 app.MapMeEndpoints();
+app.MapOrgEndpoints();
 
 app.MapDefaultEndpoints();
 
