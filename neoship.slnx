@@ -55,4 +55,8 @@
   <Folder Name="/lib/dn/DotEnv/src/">
     <Project Path="lib/dn/DotEnv/src/NeoBeard.DotEnv.csproj" />
   </Folder>
+  <Folder Name="/lib/dn/Secrets/" />
+  <Folder Name="/lib/dn/Secrets/src/">
+    <Project Path="lib/dn/Secrets/src/NeoBeard.Secrets.csproj" />
+  </Folder>
 </Solution>
