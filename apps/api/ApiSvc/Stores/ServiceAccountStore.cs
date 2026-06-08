@@ -9,15 +9,17 @@ namespace NeoShip.ApiSvc.Stores;
 public class ServiceAccountStore
 {
     private readonly ShipDb db;
+    private readonly ILogger<ServiceAccountStore> logger;
 
-    public ServiceAccountStore(ShipDb db)
+    public ServiceAccountStore(ShipDb db, ILogger<ServiceAccountStore> logger)
     {
         this.db = db;
+        this.logger = logger;
     }
 
     public async Task<List<ServiceAccount>> ListAsync(Guid orgId, CancellationToken ct = default)
     {
-        return await this.db.ServiceAccounts
+        return await db.ServiceAccounts
             .Where(s => s.OrgId == orgId && s.DeletedAt == null)
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
@@ -37,14 +39,15 @@ public class ServiceAccountStore
             CreatedAt = DateTime.UtcNow,
         };
 
-        this.db.ServiceAccounts.Add(sa);
-        await this.db.SaveChangesAsync(ct);
+        db.ServiceAccounts.Add(sa);
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("Service account created: {Id} {Name} org={OrgId}", sa.Id, name, orgId);
         return sa;
     }
 
     public async Task<ServiceAccount?> GetAsync(Guid orgId, Guid serviceAccountId, CancellationToken ct = default)
     {
-        return await this.db.ServiceAccounts
+        return await db.ServiceAccounts
             .FirstOrDefaultAsync(s => s.Id == serviceAccountId && s.OrgId == orgId && s.DeletedAt == null, ct);
     }
 
@@ -52,10 +55,7 @@ public class ServiceAccountStore
         Guid orgId, Guid serviceAccountId, string? name, string? description, CancellationToken ct = default)
     {
         var sa = await GetAsync(orgId, serviceAccountId, ct);
-        if (sa is null)
-        {
-            return null;
-        }
+        if (sa is null) return null;
 
         if (name is not null)
         {
@@ -63,26 +63,21 @@ public class ServiceAccountStore
             sa.NameUpcase = name.ToUpperInvariant();
         }
 
-        if (description is not null)
-        {
-            sa.Description = description;
-        }
+        if (description is not null) sa.Description = description;
 
         sa.UpdatedAt = DateTime.UtcNow;
-        await this.db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return sa;
     }
 
     public async Task<bool> DisableAsync(Guid orgId, Guid serviceAccountId, CancellationToken ct = default)
     {
         var sa = await GetAsync(orgId, serviceAccountId, ct);
-        if (sa is null)
-        {
-            return false;
-        }
+        if (sa is null) return false;
 
         sa.DeletedAt = DateTime.UtcNow;
-        await this.db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("Service account disabled: {Id} org={OrgId}", serviceAccountId, orgId);
         return true;
     }
 
@@ -114,7 +109,7 @@ public class ServiceAccountStore
     public async Task<List<ServiceAccountApiKey>> ListApiKeysAsync(
         Guid serviceAccountId, CancellationToken ct = default)
     {
-        return await this.db.ServiceAccountApiKeys
+        return await db.ServiceAccountApiKeys
             .Where(k => k.ServiceAccountId == serviceAccountId
                 && k.DeletedAt == null && k.RevokedAt == null)
             .OrderByDescending(k => k.CreatedAt)
@@ -123,16 +118,13 @@ public class ServiceAccountStore
 
     public async Task<bool> RevokeApiKeyAsync(Guid apiKeyId, Guid serviceAccountId, CancellationToken ct = default)
     {
-        var key = await this.db.ServiceAccountApiKeys
+        var key = await db.ServiceAccountApiKeys
             .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.ServiceAccountId == serviceAccountId, ct);
 
-        if (key is null || key.RevokedAt is not null)
-        {
-            return false;
-        }
+        if (key is null || key.RevokedAt is not null) return false;
 
         key.RevokedAt = DateTime.UtcNow;
-        await this.db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
         return true;
     }
 }

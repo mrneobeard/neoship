@@ -7,12 +7,14 @@ namespace NeoShip.ApiSvc.Stores;
 public class TokenExchangeStore
 {
     private readonly byte[] encryptionKey;
+    private readonly ILogger<TokenExchangeStore> logger;
 
-    public TokenExchangeStore()
+    public TokenExchangeStore(ILogger<TokenExchangeStore> logger)
     {
         this.encryptionKey = new byte[32];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(this.encryptionKey);
+        this.logger = logger;
     }
 
     public string CreateToken(Guid userId, Guid orgId, string? scopesJson = null, int lifetimeMinutes = 5)
@@ -45,6 +47,7 @@ public class TokenExchangeStore
         Buffer.BlockCopy(tag, 0, result, nonce.Length, tag.Length);
         Buffer.BlockCopy(ciphertext, 0, result, nonce.Length + tag.Length, ciphertext.Length);
 
+        logger.LogDebug("Token exchanged for user {UserId}", userId);
         return Convert.ToBase64String(result);
     }
 
@@ -53,10 +56,7 @@ public class TokenExchangeStore
         try
         {
             var data = Convert.FromBase64String(token);
-            if (data.Length < 28)
-            {
-                return null;
-            }
+            if (data.Length < 28) return null;
 
             var nonce = data[..12];
             var tag = data[12..28];
@@ -71,9 +71,7 @@ public class TokenExchangeStore
             var payload = JsonSerializer.Deserialize<TokenPayload>(json);
 
             if (payload is not null && payload.Exp > DateTimeOffset.UtcNow.ToUnixTimeSeconds())
-            {
                 return payload;
-            }
 
             return null;
         }

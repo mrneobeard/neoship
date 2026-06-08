@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -62,13 +60,11 @@ public static class AuthEndpoints
         AuthStore auth,
         CancellationToken ct)
     {
-        var (result, user, _, rawToken) = await auth.SignupAsync(
-            req.Email, req.Name, req.Password, Constants.DefaultOrganizationId, null, null, ct);
+        var (result, user, _, _) = await auth.SignupAsync(
+            req.Email, req.Name, req.Password, Constants.DefaultOrganizationId, ct);
 
         if (result == SignupResult.EmailAlreadyExists || user is null)
-        {
             return TypedResults.Conflict("Email already registered.");
-        }
 
         return TypedResults.Created($"/api/v1/me", new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }
@@ -81,21 +77,14 @@ public static class AuthEndpoints
         AuthStore auth,
         CancellationToken ct)
     {
-        var ip = httpContext.Connection.RemoteIpAddress?.ToString();
-        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
-
         var (result, user, session, rawToken) = await auth.LoginAsync(
-            req.Email, req.Password, Constants.DefaultOrganizationId, ip, userAgent, ct);
+            req.Email, req.Password, Constants.DefaultOrganizationId, ct);
 
         if (result == LoginResult.AccountLocked)
-        {
             return TypedResults.StatusCode(423);
-        }
 
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
-        {
             return TypedResults.Unauthorized();
-        }
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 
@@ -140,12 +129,7 @@ public static class AuthEndpoints
         CancellationToken ct)
     {
         var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
-        if (!success)
-        {
-            return TypedResults.Unauthorized();
-        }
-
-        return TypedResults.Ok();
+        return success ? TypedResults.Ok() : TypedResults.Unauthorized();
     }
 
     public record EmailVerificationRequest(string Email);
@@ -167,12 +151,7 @@ public static class AuthEndpoints
         CancellationToken ct)
     {
         var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
-        if (!success)
-        {
-            return TypedResults.Unauthorized();
-        }
-
-        return TypedResults.Ok();
+        return success ? TypedResults.Ok() : TypedResults.Unauthorized();
     }
 
     public record TokenExchangeResponse(string Token, string TokenType, long ExpiresIn);
@@ -184,19 +163,12 @@ public static class AuthEndpoints
         CancellationToken ct)
     {
         var rawToken = ReadSessionToken(httpContext.Request);
-        if (rawToken is null)
-        {
-            return TypedResults.Unauthorized();
-        }
+        if (rawToken is null) return TypedResults.Unauthorized();
 
         var session = await sessions.ValidateSessionAsync(rawToken, ct);
-        if (session is null)
-        {
-            return TypedResults.Unauthorized();
-        }
+        if (session is null) return TypedResults.Unauthorized();
 
         var token = tokenExchange.CreateToken(session.UserId, session.OrgId);
-
         return TypedResults.Ok(new TokenExchangeResponse(token, "Bearer", 300));
     }
 }

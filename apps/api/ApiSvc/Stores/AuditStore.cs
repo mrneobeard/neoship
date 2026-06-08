@@ -5,10 +5,14 @@ namespace NeoShip.ApiSvc.Stores;
 public class AuditStore
 {
     private readonly ShipDb db;
+    private readonly RequestContext requestContext;
+    private readonly ILogger<AuditStore> logger;
 
-    public AuditStore(ShipDb db)
+    public AuditStore(ShipDb db, RequestContext requestContext, ILogger<AuditStore> logger)
     {
         this.db = db;
+        this.requestContext = requestContext;
+        this.logger = logger;
     }
 
     public async Task RecordAsync(
@@ -16,8 +20,6 @@ public class AuditStore
         Guid? orgId,
         Guid? userId,
         string? action,
-        string? ipAddress,
-        string? userAgent,
         string? targetType = null,
         string? targetId = null,
         string? dataJson = null,
@@ -26,18 +28,24 @@ public class AuditStore
         var evt = new AuditEvent
         {
             Type = type,
-            OrgId = orgId,
-            UserId = userId,
+            OrgId = orgId ?? requestContext.OrgId,
+            UserId = userId ?? requestContext.UserId,
             Action = action,
             TargetType = targetType,
             TargetId = targetId,
             DataJson = dataJson,
-            IpAddress = ipAddress,
-            UserAgent = userAgent,
+            IpAddress = requestContext.IpAddress,
+            UserAgent = requestContext.UserAgent,
+            SessionId = requestContext.SessionId?.ToString(),
+            TraceId = requestContext.TraceId,
+            SpanId = requestContext.SpanId,
             Timestamp = DateTime.UtcNow,
         };
 
-        this.db.AuditEvents.Add(evt);
-        await this.db.SaveChangesAsync(ct);
+        db.AuditEvents.Add(evt);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Audit event recorded: {Type} action={Action} userId={UserId} orgId={OrgId}",
+            type, action, evt.UserId, evt.OrgId);
     }
 }

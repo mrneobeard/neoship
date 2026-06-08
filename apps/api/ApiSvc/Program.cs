@@ -1,12 +1,27 @@
+using System.Diagnostics;
+
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc;
 using NeoShip.ApiSvc.Endpoints;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using Serilog;
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+builder.Logging.ClearProviders();
+builder.Host.UseSerilog((ctx, lc) => lc
+    .ReadFrom.Configuration(ctx.Configuration)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("app", OTelConstants.ServiceName)
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+    .WriteTo.File("logs/iam-.log", rollingInterval: RollingInterval.Day,
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}")
+);
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
@@ -16,9 +31,12 @@ builder.Services.AddDbContext<ShipDb>(options =>
         b => b.MigrationsAssembly("NeoShip.Data.Sqlite"))
            .UseSnakeCaseNamingConvention());
 
+builder.Services.AddScoped<RequestContext>();
+
 builder.Services.AddSingleton<PasswordStore>();
 builder.Services.AddSingleton<TokenStore>();
 builder.Services.AddSingleton<TokenExchangeStore>();
+
 builder.Services.AddScoped<SessionStore>();
 builder.Services.AddScoped<AuthStore>();
 builder.Services.AddScoped<AuditStore>();
@@ -28,8 +46,10 @@ builder.Services.AddScoped<ServiceAccountStore>();
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseSerilogRequestLogging();
 
 app.UseMiddleware<NeoShip.ApiSvc.Middleware.TlsRequiredMiddleware>();
+app.UseMiddleware<NeoShip.ApiSvc.Middleware.RequestContextMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {

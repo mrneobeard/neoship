@@ -9,10 +9,12 @@ namespace NeoShip.ApiSvc.Stores;
 public class ApiKeyStore
 {
     private readonly ShipDb db;
+    private readonly ILogger<ApiKeyStore> logger;
 
-    public ApiKeyStore(ShipDb db)
+    public ApiKeyStore(ShipDb db, ILogger<ApiKeyStore> logger)
     {
         this.db = db;
+        this.logger = logger;
     }
 
     public (string PlaintextKey, UserApiKey ApiKey) GenerateUserApiKey(
@@ -32,7 +34,7 @@ public class ApiKeyStore
 
     public async Task<List<UserApiKey>> ListUserApiKeysAsync(Guid userId, CancellationToken ct = default)
     {
-        return await this.db.UserApiKeys
+        return await db.UserApiKeys
             .Where(k => k.UserId == userId && k.DeletedAt == null && k.RevokedAt == null)
             .OrderByDescending(k => k.CreatedAt)
             .ToListAsync(ct);
@@ -40,16 +42,14 @@ public class ApiKeyStore
 
     public async Task<bool> RevokeUserApiKeyAsync(Guid apiKeyId, Guid userId, CancellationToken ct = default)
     {
-        var key = await this.db.UserApiKeys
+        var key = await db.UserApiKeys
             .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.UserId == userId, ct);
 
-        if (key is null || key.RevokedAt is not null)
-        {
-            return false;
-        }
+        if (key is null || key.RevokedAt is not null) return false;
 
         key.RevokedAt = DateTime.UtcNow;
-        await this.db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("API key revoked: {ApiKeyId} for user {UserId}", apiKeyId, userId);
         return true;
     }
 }
