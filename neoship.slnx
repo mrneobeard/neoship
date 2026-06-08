@@ -19,6 +19,9 @@
   <Folder Name="/apps/api/ServiceDefaults/">
     <Project Path="apps/api/ServiceDefaults/NeoShip.ServiceDefaults.csproj" />
   </Folder>
+  <Folder Name="/apps/api/ApiSvc.Tests/">
+    <Project Path="apps/api/ApiSvc.Tests/NeoShip.ApiSvc.Tests.csproj" />
+  </Folder>
   <Folder Name="/lib/" />
   <Folder Name="/lib/dn/" />
   <Folder Name="/lib/dn/Age/" />

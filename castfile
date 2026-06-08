@@ -27,6 +27,26 @@ tasks:
     uses: dotnet
     run: dotnet build neoship.slnx
 
+  format:dotnet:
+    desc: Format all .NET projects
+    uses: shell
+    run: dotnet format neoship.slnx --verify-no-changes
+
+  test:dotnet:
+    desc: Run all .NET tests
+    uses: shell
+    run: dotnet test neoship.slnx
+
+  test:dotnet:unit:
+    desc: Run unit tests only
+    uses: shell
+    run: dotnet test neoship.slnx --filter-trait Category=Unit
+
+  test:dotnet:integration:
+    desc: Run integration tests only
+    uses: shell
+    run: dotnet test neoship.slnx --filter-trait Category=Integration
+
   build:ui:
     desc: Build UI project
     uses: shell
