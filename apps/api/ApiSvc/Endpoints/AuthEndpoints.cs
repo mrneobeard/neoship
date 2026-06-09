@@ -1,3 +1,5 @@
+using Fido2NetLib;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -16,6 +18,8 @@ public static class AuthEndpoints
 
         group.MapPost("/signup", SignupAsync);
         group.MapPost("/login", LoginAsync);
+        group.MapPost("/passkeys/begin-login", BeginPasskeyLoginAsync);
+        group.MapPost("/passkeys/finish-login", FinishPasskeyLoginAsync);
         group.MapPost("/api-keys/login", LoginWithApiKeyAsync);
         group.MapPost("/logout", LogoutAsync);
 
@@ -72,6 +76,12 @@ public static class AuthEndpoints
 
     public record LoginRequest(string Email, string Password);
 
+    public record BeginPasskeyLoginRequest(string Email);
+
+    public record BeginPasskeyLoginResponse(Guid ChallengeId, string OptionsJson);
+
+    public record FinishPasskeyLoginRequest(Guid ChallengeId, AuthenticatorAssertionRawResponse Response);
+
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> LoginAsync(
         [FromBody] LoginRequest req,
         HttpContext httpContext,
@@ -86,6 +96,54 @@ public static class AuthEndpoints
 
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
             return TypedResults.Unauthorized();
+
+        SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
+
+        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+    }
+
+    private static async Task<Results<Ok<BeginPasskeyLoginResponse>, UnauthorizedHttpResult>> BeginPasskeyLoginAsync(
+        [FromBody] BeginPasskeyLoginRequest req,
+        PasskeyStore passkeys,
+        PasskeyChallengeStore challenges,
+        CancellationToken ct)
+    {
+        var result = await passkeys.BeginLoginAsync(req.Email, ct);
+        if (result is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var (user, options) = result.Value;
+        var challengeId = challenges.StoreLogin(user.Id, options);
+        return TypedResults.Ok(new BeginPasskeyLoginResponse(challengeId, options.ToJson()));
+    }
+
+    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> FinishPasskeyLoginAsync(
+        [FromBody] FinishPasskeyLoginRequest req,
+        HttpContext httpContext,
+        PasskeyStore passkeys,
+        PasskeyChallengeStore challenges,
+        PermissionResolver permissions,
+        SessionStore sessions,
+        CancellationToken ct)
+    {
+        var challenge = challenges.TakeLogin(req.ChallengeId);
+        if (challenge is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var (userId, options) = challenge.Value;
+        var result = await passkeys.FinishLoginAsync(userId, options, req.Response, ct);
+        if (result is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var (user, _) = result.Value;
+        var permissionSet = await permissions.ResolveUserAsync(user.Id, ct);
+        var (session, rawToken) = await sessions.CreateSessionAsync(user.Id, user.OrgId, permissionSet, ct);
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 

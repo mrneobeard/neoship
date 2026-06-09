@@ -116,4 +116,40 @@ public class PasskeyStoreTests
         Assert.True(await store.RevokeAsync(user.Id, factor.Id, TestContext.Current.CancellationToken));
         Assert.Empty(await store.ListAsync(user.Id, TestContext.Current.CancellationToken));
     }
+
+    /// <summary>
+    /// Verifies that passkey login options include registered credentials.
+    /// </summary>
+    [Fact]
+    public async Task BeginLoginAsync_ReturnsAssertionOptionsForRegisteredPasskey()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "login-passkey@example.com", "Login Passkey User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var factor = new UserMfaFactor
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = user.Id,
+            Name = "Laptop",
+            Type = MfaFactorType.Passkey.Id,
+            WebAuthnCredentialId = [1, 2, 3],
+            WebAuthnCredentialIdDigest = PasskeyStore.ComputeCredentialIdDigest([1, 2, 3]),
+            WebAuthnPublicKeyCredentialData = [4, 5, 6],
+            CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            VerifiedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        };
+
+        db.Users.Add(user);
+        db.UserMfaFactors.Add(factor);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var result = await store.BeginLoginAsync(user.Email, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(result);
+        Assert.Equal(user.Id, result.Value.User.Id);
+        Assert.Single(result.Value.Options.AllowCredentials);
+    }
 }

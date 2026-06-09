@@ -51,6 +51,26 @@ public class PasskeyChallengeStoreTests
         Assert.Null(store.TakeRegistration(challengeId, Guid.NewGuid()));
     }
 
+    /// <summary>
+    /// Verifies that login challenges are one-time values.
+    /// </summary>
+    [Fact]
+    public void LoginChallenge_CanBeTakenOnce()
+    {
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var store = new PasskeyChallengeStore(cache);
+        var userId = Guid.NewGuid();
+        var options = CreateAssertionOptions();
+
+        var challengeId = store.StoreLogin(userId, options);
+        var challenge = store.TakeLogin(challengeId);
+
+        Assert.NotNull(challenge);
+        Assert.Equal(userId, challenge.Value.UserId);
+        Assert.Same(options, challenge.Value.Options);
+        Assert.Null(store.TakeLogin(challengeId));
+    }
+
     private static CredentialCreateOptions CreateOptions()
     {
         return new Fido2(new Fido2Configuration
@@ -69,6 +89,20 @@ public class PasskeyChallengeStoreTests
             ExcludeCredentials = [],
             AuthenticatorSelection = AuthenticatorSelection.Default,
             AttestationPreference = Fido2NetLib.Objects.AttestationConveyancePreference.None,
+        });
+    }
+
+    private static AssertionOptions CreateAssertionOptions()
+    {
+        return new Fido2(new Fido2Configuration
+        {
+            ServerDomain = "localhost",
+            ServerName = "NeoShip Tests",
+            Origins = new HashSet<string> { "https://localhost" },
+        }, metadataService: null).GetAssertionOptions(new GetAssertionOptionsParams
+        {
+            AllowedCredentials = [],
+            UserVerification = Fido2NetLib.Objects.UserVerificationRequirement.Preferred,
         });
     }
 }

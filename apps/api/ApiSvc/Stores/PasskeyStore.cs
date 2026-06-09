@@ -87,6 +87,95 @@ public sealed class PasskeyStore
     }
 
     /// <summary>
+    /// Begins passkey login for a user email.
+    /// </summary>
+    /// <param name="email">The user email.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The user and assertion options, or <see langword="null"/>.</returns>
+    public async Task<(User User, AssertionOptions Options)?> BeginLoginAsync(string email, CancellationToken ct = default)
+    {
+        var emailUpcase = email.ToUpperInvariant();
+        var user = await db.Users.FirstOrDefaultAsync(x => x.EmailUpcase == emailUpcase, ct);
+        if (user is null || user.StatusId == UserStatus.Suspended.Id)
+        {
+            return null;
+        }
+
+        var credentials = await db.UserMfaFactors
+            .Where(x => x.UserId == user.Id && x.Type == MfaFactorType.Passkey.Id)
+            .Select(x => new PublicKeyCredentialDescriptor(x.WebAuthnCredentialId))
+            .ToListAsync(ct);
+
+        if (credentials.Count == 0)
+        {
+            return null;
+        }
+
+        var options = fido2.GetAssertionOptions(new GetAssertionOptionsParams
+        {
+            AllowedCredentials = credentials,
+            UserVerification = UserVerificationRequirement.Preferred,
+            Extensions = new AuthenticationExtensionsClientInputs
+            {
+                Extensions = true,
+            },
+        });
+
+        logger.LogInformation("Passkey login started: user={UserId}", user.Id);
+        return (user, options);
+    }
+
+    /// <summary>
+    /// Finishes passkey login and updates credential metadata.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="options">The original assertion options.</param>
+    /// <param name="response">The authenticator assertion response.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The authenticated user and passkey factor, or <see langword="null"/>.</returns>
+    public async Task<(User User, UserMfaFactor Factor)?> FinishLoginAsync(
+        Guid userId,
+        AssertionOptions options,
+        AuthenticatorAssertionRawResponse response,
+        CancellationToken ct = default)
+    {
+        var credentialDigest = ComputeCredentialIdDigest(response.RawId);
+        var factor = await db.UserMfaFactors
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(
+                x => x.UserId == userId
+                    && x.Type == MfaFactorType.Passkey.Id
+                    && x.WebAuthnCredentialIdDigest == credentialDigest,
+                ct);
+
+        if (factor?.User is null || factor.User.StatusId == UserStatus.Suspended.Id)
+        {
+            return null;
+        }
+
+        var expectedUserHandle = Encoding.UTF8.GetBytes(factor.UserId.ToString("N"));
+        var result = await fido2.MakeAssertionAsync(new MakeAssertionParams
+        {
+            AssertionResponse = response,
+            OriginalOptions = options,
+            StoredPublicKey = factor.WebAuthnPublicKeyCredentialData,
+            StoredSignatureCounter = factor.WebAuthnSignCount,
+            IsUserHandleOwnerOfCredentialIdCallback = (args, _) => Task.FromResult(
+                args.CredentialId.SequenceEqual(factor.WebAuthnCredentialId)
+                    && args.UserHandle.SequenceEqual(expectedUserHandle)),
+        }, ct);
+
+        factor.WebAuthnSignCount = result.SignCount;
+        factor.LastUsedAt = DateTime.UtcNow;
+        factor.UpdatedAt = DateTime.UtcNow;
+        factor.User.LastLoginAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Passkey login completed: factor={FactorId} user={UserId}", factor.Id, userId);
+        return (factor.User, factor);
+    }
+
+    /// <summary>
     /// Finishes passkey registration and stores the verified credential.
     /// </summary>
     /// <param name="userId">The user identifier.</param>
