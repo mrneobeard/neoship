@@ -88,21 +88,65 @@ public static class OrgEndpoints
         PermissionResolver permissions,
         string orgSlug,
         PermissionKey permission,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool allowServiceAccount = false)
     {
         var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        if (user is not null)
+        {
+            var userAllowed = await HasOrgPermissionAsync(httpContext, permissions, user.Id, permission, orgSlug, ct);
+            if (!userAllowed)
+            {
+                return (null, TypedResults.Forbid());
+            }
+
+            return (user, null);
+        }
+
+        var serviceAccountKey = await AuthenticateServiceAccountApiKeyAsync(httpContext, ct);
+        if (serviceAccountKey?.ServiceAccount is null)
         {
             return (null, TypedResults.Unauthorized());
         }
 
-        var allowed = await HasOrgPermissionAsync(httpContext, permissions, user.Id, permission, orgSlug, ct);
+        if (!allowServiceAccount)
+        {
+            return (null, TypedResults.Forbid());
+        }
+
+        var allowed = await HasServiceAccountOrgPermissionAsync(permissions, serviceAccountKey.Id, permission, orgSlug, ct);
         if (!allowed)
         {
             return (null, TypedResults.Forbid());
         }
 
-        return (user, null);
+        return (null, null);
+    }
+
+    private static async Task<ServiceAccountApiKey?> AuthenticateServiceAccountApiKeyAsync(HttpContext httpContext, CancellationToken ct)
+    {
+        var token = ReadBearerToken(httpContext.Request);
+        if (token is null)
+        {
+            return null;
+        }
+
+        var serviceAccounts = httpContext.RequestServices.GetRequiredService<ServiceAccountStore>();
+        return await serviceAccounts.AuthenticateApiKeyAsync(token, ct);
+    }
+
+    private static string? ReadBearerToken(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        const string prefix = "Bearer ";
+
+        if (!header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var token = header[prefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
     private static async Task<bool> HasOrgPermissionAsync(
@@ -119,6 +163,16 @@ public static class OrgEndpoints
         }
 
         return await permissions.UserHasAsync(userId, permission, PermissionScopeKind.Organization, orgSlug, ct);
+    }
+
+    private static async Task<bool> HasServiceAccountOrgPermissionAsync(
+        PermissionResolver permissions,
+        Guid apiKeyId,
+        PermissionKey permission,
+        string orgSlug,
+        CancellationToken ct)
+    {
+        return (await permissions.ResolveServiceAccountApiKeyAsync(apiKeyId, ct)).Allows(permission, PermissionScopeKind.Organization, orgSlug);
     }
 
     private static RoleResponse ToRoleResponse(Role role)
@@ -146,7 +200,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct);
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
         {
             return auth.Failure;
@@ -341,7 +395,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct);
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
         {
             return auth.Failure;
@@ -601,7 +655,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct);
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
         {
             return auth.Failure;
@@ -742,7 +796,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct);
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
         {
             return auth.Failure;
@@ -906,7 +960,7 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct);
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
         {
             return auth.Failure;

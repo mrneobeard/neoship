@@ -166,4 +166,42 @@ public class PermissionResolverTests
         Assert.True(permissions.Allows(PermissionKey.Create("auth.sessions", "revoke"), PermissionScopeKind.Organization, "default"));
         Assert.NotNull(plaintextKey);
     }
+
+    [Fact]
+    public async Task ResolveServiceAccountApiKeyAsync_IncludesKeySpecificClaims()
+    {
+        var (db, resolver) = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "sa-owner@example.com", "Service Account Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "deploy-bot",
+            NameUpcase = "DEPLOY-BOT",
+            CreatedBy = user.Id,
+        };
+
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        db.SaveChanges();
+
+        var serviceAccounts = new ServiceAccountStore(db, NullLogger<ServiceAccountStore>.Instance);
+        var (_, apiKey) = serviceAccounts.GenerateApiKey(serviceAccount.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
+
+        db.ServiceAccountApiKeys.Add(apiKey);
+        db.ServiceAccountApiKeyClaims.Add(new ServiceAccountApiKeyClaim
+        {
+            ServiceAccountApiKeyId = apiKey.Id,
+            Type = "org.service_accounts.read",
+            Value = "organization:default",
+        });
+        db.SaveChanges();
+
+        var permissions = await resolver.ResolveServiceAccountApiKeyAsync(apiKey.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(permissions.Allows(PermissionKey.Create("org.service_accounts", "read"), PermissionScopeKind.Organization, "default"));
+    }
 }
