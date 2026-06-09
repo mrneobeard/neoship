@@ -57,49 +57,56 @@ public sealed class SsoTokenValidator : ISsoTokenValidator
             return null;
         }
 
-        var discoveryUrl = provider.IssuerUrl.TrimEnd('/') + "/.well-known/openid-configuration";
-        var configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-            discoveryUrl,
-            new OpenIdConnectConfigurationRetriever(),
-            new HttpDocumentRetriever(this.http) { RequireHttps = true });
-        var configuration = await configurationManager.GetConfigurationAsync(ct);
-
-        var handler = new JsonWebTokenHandler();
-        var result = await handler.ValidateTokenAsync(idToken, new TokenValidationParameters
+        try
         {
-            ValidateIssuer = true,
-            ValidIssuer = configuration.Issuer,
-            ValidateAudience = true,
-            ValidAudience = provider.ClientId,
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.FromMinutes(2),
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKeys = configuration.SigningKeys,
-            ValidAlgorithms = ValidAlgorithms,
-        });
+            var discoveryUrl = provider.IssuerUrl.TrimEnd('/') + "/.well-known/openid-configuration";
+            var configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(
+                discoveryUrl,
+                new OpenIdConnectConfigurationRetriever(),
+                new HttpDocumentRetriever(this.http) { RequireHttps = true });
+            var configuration = await configurationManager.GetConfigurationAsync(ct);
 
-        if (!result.IsValid || result.ClaimsIdentity is null)
+            var handler = new JsonWebTokenHandler();
+            var result = await handler.ValidateTokenAsync(idToken, new TokenValidationParameters
+            {
+                ValidateIssuer = true,
+                ValidIssuer = configuration.Issuer,
+                ValidateAudience = true,
+                ValidAudience = provider.ClientId,
+                ValidateLifetime = true,
+                ClockSkew = TimeSpan.FromMinutes(2),
+                ValidateIssuerSigningKey = true,
+                IssuerSigningKeys = configuration.SigningKeys,
+                ValidAlgorithms = ValidAlgorithms,
+            });
+
+            if (!result.IsValid || result.ClaimsIdentity is null)
+            {
+                return null;
+            }
+
+            var claims = result.ClaimsIdentity.Claims.ToList();
+            if (!string.Equals(FindClaim(claims, JwtRegisteredClaimNames.Nonce), nonce, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            var subject = FindClaim(claims, JwtRegisteredClaimNames.Sub);
+            var email = FindClaim(claims, JwtRegisteredClaimNames.Email);
+            var name = FindClaim(claims, JwtRegisteredClaimNames.Name) ?? email;
+            var emailVerified = string.Equals(FindClaim(claims, "email_verified"), "true", StringComparison.OrdinalIgnoreCase);
+
+            if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email) || !emailVerified)
+            {
+                return null;
+            }
+
+            return new SsoExternalIdentity(subject, email, emailVerified, name);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             return null;
         }
-
-        var claims = result.ClaimsIdentity.Claims.ToList();
-        if (!string.Equals(FindClaim(claims, JwtRegisteredClaimNames.Nonce), nonce, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        var subject = FindClaim(claims, JwtRegisteredClaimNames.Sub);
-        var email = FindClaim(claims, JwtRegisteredClaimNames.Email);
-        var name = FindClaim(claims, JwtRegisteredClaimNames.Name) ?? email;
-        var emailVerified = string.Equals(FindClaim(claims, "email_verified"), "true", StringComparison.OrdinalIgnoreCase);
-
-        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email) || !emailVerified)
-        {
-            return null;
-        }
-
-        return new SsoExternalIdentity(subject, email, emailVerified, name);
     }
 
     private static string? FindClaim(IEnumerable<Claim> claims, string type)
