@@ -44,6 +44,7 @@ Exit criteria:
 ### Phase 2: API Credential API
 
 - list/create/revoke user API keys
+- API key login/logout exchange flow
 - create/list/revoke service account API keys
 - bearer auth middleware for both key types
 - optional encrypted JWT exchange endpoint
@@ -70,15 +71,19 @@ Exit criteria:
 
 ### Phase 4: Access Control API
 
+- module-defined permission registry and core permission constants
 - built-in role seed data
+- custom role creation from registry-backed permissions
 - group CRUD
 - group membership changes
 - claim assignment and evaluation
 - service account direct claims and group/role membership
+- scoped permission model for global, org, and resource access
+- enterprise module can contribute extra permissions and seeded roles without affecting OSS
 
 Exit criteria:
 
-- permission checks are DB-backed
+- permission checks resolve from DB grants plus module-defined permission registry
 - permission cache invalidates correctly
 
 ### Phase 5: Identity Providers
@@ -95,14 +100,56 @@ Exit criteria:
 - provider secrets are encrypted
 - SSO changes are audited
 
+### Phase 6: Observability And Audit
+
+- structured request logging
+- audit event normalization
+- OTel traces for auth/session/key/permission flows
+- OTel metrics for login, session, MFA, API key, passkey, and revocation paths
+- redaction for secrets, tokens, and high-risk identifiers
+
+Exit criteria:
+
+- auth flows are diagnosable without leaking secrets
+- request logs, traces, metrics, and audit rows correlate by request/trace ids
+
 ## Cross-Cutting Work In Parallel
 
 - security hardening
 - audit event normalization
 - logging and redaction
 - OpenTelemetry spans and metrics
+- query shaping contract: filtering, sorting, paging, expanding, and batch limits
 - rate limiting
 - tests
+
+## Libraries To Add
+
+Prefer Microsoft packages or widely used .NET-standard packages with regular releases.
+
+### Likely Additions
+
+- `Microsoft.Extensions.Caching.StackExchangeRedis` for distributed cache
+- `StackExchange.Redis` for Redis connections
+- `Microsoft.AspNetCore.Authentication.JwtBearer` if bearer JWT auth is used directly
+- `Microsoft.IdentityModel.JsonWebTokens` for compact JWT/JWE handling if needed
+- `OpenTelemetry.Instrumentation.EntityFrameworkCore` for DB spans if we want ORM visibility
+- `Fido2NetLib` for WebAuthn/passkey ceremonies if we do not keep passkey logic entirely custom
+
+### Optional Later
+
+- `McMaster.NETCore.Plugins` only if we need runtime plugin loading/unloading instead of compile-time modules
+
+### Usually Already Covered
+
+- `OpenTelemetry.Extensions.Hosting`
+- `OpenTelemetry.Exporter.OpenTelemetryProtocol`
+- `OpenTelemetry.Instrumentation.AspNetCore`
+- `OpenTelemetry.Instrumentation.Http`
+- `OpenTelemetry.Instrumentation.Runtime`
+- `Serilog.AspNetCore`
+- `Serilog.Sinks.Console`
+- `Serilog.Sinks.File`
 
 ## Risks
 
