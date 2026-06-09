@@ -84,6 +84,68 @@ public sealed class RoleStore
     }
 
     /// <summary>
+    /// Updates a role within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="roleId">The role identifier.</param>
+    /// <param name="name">The optional replacement role name.</param>
+    /// <param name="description">The optional replacement role description.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The updated <see cref="Role"/>, or <see langword="null"/>.</returns>
+    public async Task<Role?> UpdateAsync(Guid orgId, Guid roleId, string? name, string? description, CancellationToken ct = default)
+    {
+        var role = await this.GetAsync(orgId, roleId, ct);
+        if (role is null)
+        {
+            return null;
+        }
+
+        if (name is not null)
+        {
+            role.Name = name;
+            role.NameUpcase = name.ToUpperInvariant();
+        }
+
+        if (description is not null)
+        {
+            role.Description = description;
+        }
+
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Role updated: {RoleId} org={OrgId}", role.Id, orgId);
+        return role;
+    }
+
+    /// <summary>
+    /// Deletes a role and its direct assignments within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="roleId">The role identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when deleted; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> DeleteAsync(Guid orgId, Guid roleId, CancellationToken ct = default)
+    {
+        var role = await this.db.Roles
+            .Include(x => x.Claims)
+            .Include(x => x.Users)
+            .Include(x => x.Groups)
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+        if (role is null)
+        {
+            return false;
+        }
+
+        role.Users.Clear();
+        role.Groups.Clear();
+        this.db.RoleClaims.RemoveRange(role.Claims);
+        this.db.Roles.Remove(role);
+        await this.db.SaveChangesAsync(ct);
+
+        this.logger.LogInformation("Role deleted: {RoleId} org={OrgId}", roleId, orgId);
+        return true;
+    }
+
+    /// <summary>
     /// Adds a permission grant to a role.
     /// </summary>
     /// <param name="orgId">The organization identifier.</param>

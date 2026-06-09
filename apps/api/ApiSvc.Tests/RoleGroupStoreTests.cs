@@ -67,6 +67,72 @@ public class RoleGroupStoreTests
         Assert.Single(fetched!.Claims);
     }
 
+    /// <summary>
+    /// Verifies roles can be updated within an organization.
+    /// </summary>
+    [Fact]
+    public async Task RoleStore_CanUpdateRole()
+    {
+        var db = CreateDatabase();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "role-update@example.com", "Role Update")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(creator);
+        db.SaveChanges();
+
+        var role = await roles.CreateAsync(Constants.DefaultOrganizationId, creator.Id, "operators", null, TestContext.Current.CancellationToken);
+        var updated = await roles.UpdateAsync(Constants.DefaultOrganizationId, role.Id, "maintainers", "Maintainers", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(updated);
+        Assert.Equal("maintainers", updated!.Name);
+        Assert.Equal("MAINTAINERS", updated.NameUpcase);
+        Assert.Equal("Maintainers", updated.Description);
+    }
+
+    /// <summary>
+    /// Verifies deleting a role removes claims and direct assignments.
+    /// </summary>
+    [Fact]
+    public async Task RoleStore_CanDeleteRoleWithAssignments()
+    {
+        var db = CreateDatabase();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var groups = new GroupStore(db, NullLogger<GroupStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "role-delete@example.com", "Role Delete")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var user = new User(Guid.NewGuid(), "role-delete-member@example.com", "Role Delete Member")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(creator);
+        db.Users.Add(user);
+        db.SaveChanges();
+
+        var role = await roles.CreateAsync(Constants.DefaultOrganizationId, creator.Id, "temporary", null, TestContext.Current.CancellationToken);
+        var group = await groups.CreateAsync(Constants.DefaultOrganizationId, "ops", null, null, TestContext.Current.CancellationToken);
+
+        Assert.True(await roles.AddClaimAsync(
+            Constants.DefaultOrganizationId,
+            role.Id,
+            new PermissionGrant(PermissionKey.Create("org.roles", "read"), PermissionScopeKind.Organization, "default"),
+            creator.Id,
+            TestContext.Current.CancellationToken));
+        Assert.True(await roles.AttachUserAsync(Constants.DefaultOrganizationId, role.Id, user.Id, TestContext.Current.CancellationToken));
+        Assert.True(await groups.AttachRoleAsync(Constants.DefaultOrganizationId, group.Id, role.Id, TestContext.Current.CancellationToken));
+
+        Assert.True(await roles.DeleteAsync(Constants.DefaultOrganizationId, role.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await roles.GetAsync(Constants.DefaultOrganizationId, role.Id, TestContext.Current.CancellationToken));
+        Assert.Empty(db.RoleClaims);
+    }
+
     [Fact]
     public async Task GroupStore_CanAttachRoleAndMembership()
     {

@@ -15,6 +15,8 @@ public static class OrgEndpoints
 
         group.MapGet("/roles", ListRolesAsync);
         group.MapPost("/roles", CreateRoleAsync);
+        group.MapPatch("/roles/{roleId:guid}", UpdateRoleAsync);
+        group.MapDelete("/roles/{roleId:guid}", DeleteRoleAsync);
         group.MapPost("/roles/{roleId:guid}/claims", AddRoleClaimAsync);
         group.MapDelete("/roles/{roleId:guid}/claims/{claimId:ulong}", RemoveRoleClaimAsync);
         group.MapPost("/roles/{roleId:guid}/users/{userId:guid}", AttachRoleUserAsync);
@@ -69,6 +71,11 @@ public static class OrgEndpoints
     /// Represents a role creation request.
     /// </summary>
     public record CreateRoleRequest(string Name, string? Description);
+
+    /// <summary>
+    /// Represents a role update request.
+    /// </summary>
+    public record UpdateRoleRequest(string? Name, string? Description);
 
     /// <summary>
     /// Represents a role permission grant request.
@@ -244,6 +251,73 @@ public static class OrgEndpoints
         var role = await roles.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
         await audit.RecordAsync("org.roles.create", org.Id, auth.User.Id, "role.create", targetType: "role", targetId: role.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", ToRoleResponse(role));
+    }
+
+    private static async Task<IResult> UpdateRoleAsync(
+        string orgSlug,
+        Guid roleId,
+        [FromBody] UpdateRoleRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var role = await roles.UpdateAsync(org.Id, roleId, req.Name, req.Description, ct);
+        if (role is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.update", org.Id, auth.User!.Id, "role.update", targetType: "role", targetId: role.Id.ToString(), ct: ct);
+        return TypedResults.Ok(ToRoleResponse(role));
+    }
+
+    private static async Task<IResult> DeleteRoleAsync(
+        string orgSlug,
+        Guid roleId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var deleted = await roles.DeleteAsync(org.Id, roleId, ct);
+        if (!deleted)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.delete", org.Id, auth.User!.Id, "role.delete", targetType: "role", targetId: roleId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<IResult> AddRoleClaimAsync(
