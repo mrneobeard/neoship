@@ -973,6 +973,10 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_used_at");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1010,16 +1014,28 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("BLOB")
                         .HasColumnName("web_authn_credential_id");
 
+                    b.Property<string>("WebAuthnCredentialIdDigest")
+                        .HasMaxLength(128)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("web_authn_credential_id_digest");
+
                     b.Property<byte[]>("WebAuthnPublicKeyCredentialData")
                         .IsRequired()
                         .HasColumnType("BLOB")
                         .HasColumnName("web_authn_public_key_credential_data");
+
+                    b.Property<uint>("WebAuthnSignCount")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("web_authn_sign_count");
 
                     b.HasKey("Id")
                         .HasName("pk_user_mfa_factors");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_user_mfa_factors_user_id");
+
+                    b.HasIndex("WebAuthnCredentialIdDigest")
+                        .HasDatabaseName("ix_user_mfa_factors_web_authn_credential_id_digest");
 
                     b.ToTable("user_mfa_factors", (string)null);
                 });

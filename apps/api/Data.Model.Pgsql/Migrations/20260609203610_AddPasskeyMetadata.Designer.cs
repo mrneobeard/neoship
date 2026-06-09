@@ -2,34 +2,37 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NeoShip.Data.Model;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NeoShip.Data.Mssql.Migrations
+namespace NeoShip.Data.Pgsql.Migrations
 {
     [DbContext(typeof(ShipDb))]
-    partial class ShipDbModelSnapshot : ModelSnapshot
+    [Migration("20260609203610_AddPasskeyMetadata")]
+    partial class AddPasskeyMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "10.0.8")
-                .HasAnnotation("Relational:MaxIdentifierLength", 128);
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("GroupRole", b =>
                 {
                     b.Property<Guid>("GroupsId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("groups_id");
 
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.HasKey("GroupsId", "RolesId")
@@ -45,15 +48,13 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<decimal>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("numeric(20,0)")
                         .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("action");
 
                     b.Property<long?>("Asn")
@@ -62,99 +63,99 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)")
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("machine_name");
 
                     b.Property<Guid?>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_type");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("trace_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid?>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -173,38 +174,38 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -220,45 +221,45 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<int>("OrganizationPlanId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("organization_plan_id");
 
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("slug");
 
                     b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.Property<int>("TenantModeId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("tenant_mode_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -271,36 +272,36 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -320,33 +321,31 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<decimal>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("numeric(20,0)")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -365,44 +364,44 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -421,54 +420,54 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)")
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -487,33 +486,31 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<decimal>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("numeric(20,0)")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_api_key_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -529,31 +526,31 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -569,53 +566,53 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("avatar_url");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
 
                     b.Property<string>("LastLoginIp")
                         .HasMaxLength(39)
-                        .HasColumnType("nvarchar(39)")
+                        .HasColumnType("character varying(39)")
                         .HasColumnName("last_login_ip");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.HasKey("Id")
@@ -638,54 +635,54 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -707,30 +704,30 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_api_key_id");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -746,24 +743,22 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<decimal>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("numeric(20,0)")
                         .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -776,62 +771,62 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("email_digest");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("ErasedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("erased_at");
 
                     b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<string>("VerificationTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("verification_token_digest");
 
                     b.Property<DateTime?>("VerificationTokenExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verification_token_expires_at");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verified_at");
 
                     b.HasKey("Id")
@@ -856,56 +851,56 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientId")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("client_id");
 
                     b.Property<byte[]>("ClientSecretEncrypted")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("bytea")
                         .HasColumnName("client_secret_enc");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
                         .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)")
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<int>("ProviderTypeId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("provider_type_id");
 
                     b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -927,7 +922,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<long?>("Asn")
@@ -940,34 +935,34 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)")
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("region");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -983,62 +978,62 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("transports_json");
 
                     b.Property<int>("Type")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<byte[]>("ValueEncrypted")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("bytea")
                         .HasColumnName("value_enc");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verified_at");
 
                     b.Property<byte[]>("WebAuthnCredentialId")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("bytea")
                         .HasColumnName("web_authn_credential_id");
 
                     b.Property<string>("WebAuthnCredentialIdDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("web_authn_credential_id_digest");
 
                     b.Property<byte[]>("WebAuthnPublicKeyCredentialData")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("bytea")
                         .HasColumnName("web_authn_public_key_credential_data");
 
                     b.Property<long>("WebAuthnSignCount")
@@ -1060,58 +1055,58 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("NeoShip.Data.Model.UserPasswordAuth", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int>("FailedAttempts")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("failed_attempts");
 
                     b.Property<string>("HashAlgorithm")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("hash_algorithm");
 
                     b.Property<int>("Iterations")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("iterations");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
 
                     b.Property<DateTime?>("PasswordChangedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("password_changed_at");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("password_hash");
 
                     b.Property<string>("PasswordSalt")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("password_salt");
 
                     b.Property<string>("ResetTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("reset_token_digest");
 
                     b.Property<DateTime?>("ResetTokenExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("reset_token_expires_at");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("UserId")
@@ -1127,79 +1122,79 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("claims_json");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<DateTime?>("MfaVerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("mfa_verified_at");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("revoke_reason");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
-                        .HasColumnType("int")
+                        .HasColumnType("integer")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("token_digest");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1220,11 +1215,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("RoleUser", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("UsersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("users_id");
 
                     b.HasKey("RolesId", "UsersId")
@@ -1239,11 +1234,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("MembersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("members_id");
 
                     b.HasKey("GroupId", "MembersId")
@@ -1258,11 +1253,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("OwnersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("owners_id");
 
                     b.HasKey("Group1Id", "OwnersId")
@@ -1277,11 +1272,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_service_account_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("ServiceAccountMembersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_members_id");
 
                     b.HasKey("GroupId", "ServiceAccountMembersId")
@@ -1296,11 +1291,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_service_account_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("ServiceAccountOwnersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_owners_id");
 
                     b.HasKey("Group1Id", "ServiceAccountOwnersId")
@@ -1315,11 +1310,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("service_account_api_key_roles", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_api_key_id");
 
                     b.HasKey("RolesId", "ServiceAccountApiKeyId")
@@ -1442,7 +1437,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasForeignKey("ServiceAccountApiKeyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_service_account_api_key_claims_service_account_api_keys_service_account_api_key_id");
+                        .HasConstraintName("fk_service_account_api_key_claims_service_account_api_keys_ser");
 
                     b.Navigation("ServiceAccountApiKey");
                 });
@@ -1637,7 +1632,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasForeignKey("ServiceAccountMembersId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_group_service_account_members_service_accounts_service_account_members_id");
+                        .HasConstraintName("fk_group_service_account_members_service_accounts_service_acco");
                 });
 
             modelBuilder.Entity("group_service_account_owners", b =>
@@ -1654,7 +1649,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasForeignKey("ServiceAccountOwnersId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_group_service_account_owners_service_accounts_service_account_owners_id");
+                        .HasConstraintName("fk_group_service_account_owners_service_accounts_service_accou");
                 });
 
             modelBuilder.Entity("service_account_api_key_roles", b =>
@@ -1671,7 +1666,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasForeignKey("ServiceAccountApiKeyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_service_account_api_key_roles_service_account_api_keys_service_account_api_key_id");
+                        .HasConstraintName("fk_service_account_api_key_roles_service_account_api_keys_serv");
                 });
 
             modelBuilder.Entity("NeoShip.Data.Model.Role", b =>

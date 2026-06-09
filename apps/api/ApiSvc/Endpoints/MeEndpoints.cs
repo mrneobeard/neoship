@@ -34,6 +34,10 @@ public static class MeEndpoints
         group.MapPost("/mfa/recovery-codes/regenerate", RegenerateRecoveryCodesAsync);
         group.MapDelete("/mfa/recovery-codes", RevokeRecoveryCodesAsync);
 
+        group.MapGet("/passkeys", GetPasskeysAsync);
+        group.MapPost("/passkeys/begin-registration", BeginPasskeyRegistrationAsync);
+        group.MapPost("/passkeys/{factorId:guid}/revoke", RevokePasskeyAsync);
+
         return group;
     }
 
@@ -261,6 +265,10 @@ public static class MeEndpoints
 
     private sealed record RegenerateRecoveryCodesResponse(IReadOnlyList<string> Codes);
 
+    private sealed record PasskeyResponse(Guid Id, string Name, DateTime CreatedAt, DateTime? LastUsedAt);
+
+    private sealed record BeginPasskeyRegistrationResponse(string OptionsJson);
+
     private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
@@ -347,5 +355,56 @@ public static class MeEndpoints
 
         await mfa.RevokeRecoveryCodesAsync(user.Id, ct);
         return TypedResults.Ok();
+    }
+
+    private static async Task<Results<Ok<List<PasskeyResponse>>, UnauthorizedHttpResult>> GetPasskeysAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        PasskeyStore passkeys,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var factors = await passkeys.ListAsync(user.Id, ct);
+        var response = factors.Select(x => new PasskeyResponse(x.Id, x.Name, x.CreatedAt, x.LastUsedAt)).ToList();
+
+        return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<BeginPasskeyRegistrationResponse>, UnauthorizedHttpResult>> BeginPasskeyRegistrationAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        PasskeyStore passkeys,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var options = await passkeys.BeginRegistrationAsync(user, ct);
+        return TypedResults.Ok(new BeginPasskeyRegistrationResponse(options.ToJson()));
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokePasskeyAsync(
+        Guid factorId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PasskeyStore passkeys,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var revoked = await passkeys.RevokeAsync(user.Id, factorId, ct);
+        return revoked ? TypedResults.Ok() : TypedResults.NotFound();
     }
 }

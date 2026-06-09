@@ -112,6 +112,7 @@ public class ShipDb : DbContext
         modelBuilder.Entity<UserMfaFactor>(f =>
         {
             f.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId);
+            f.HasIndex(x => x.WebAuthnCredentialIdDigest);
         });
 
         // User -> UserIdentityProvider

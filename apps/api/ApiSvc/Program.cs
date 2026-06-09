@@ -60,6 +60,7 @@ builder.Services.AddScoped<GroupStore>();
 builder.Services.AddScoped<OrganizationStore>();
 builder.Services.AddScoped<IdentityProviderStore>();
 builder.Services.AddScoped<MfaStore>();
+builder.Services.AddScoped<PasskeyStore>();
 
 var app = builder.Build();
 

@@ -2,34 +2,32 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NeoShip.Data.Model;
 
 #nullable disable
 
-namespace NeoShip.Data.Mssql.Migrations
+namespace NeoShip.Data.Sqlite.Migrations
 {
     [DbContext(typeof(ShipDb))]
-    partial class ShipDbModelSnapshot : ModelSnapshot
+    [Migration("20260609203558_AddPasskeyMetadata")]
+    partial class AddPasskeyMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.8")
-                .HasAnnotation("Relational:MaxIdentifierLength", 128);
-
-            SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.8");
 
             modelBuilder.Entity("GroupRole", b =>
                 {
                     b.Property<Guid>("GroupsId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("groups_id");
 
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("roles_id");
 
                     b.HasKey("GroupsId", "RolesId")
@@ -43,118 +41,116 @@ namespace NeoShip.Data.Mssql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.AuditEvent", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<ulong>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("action");
 
-                    b.Property<long?>("Asn")
-                        .HasColumnType("bigint")
+                    b.Property<uint?>("Asn")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("asn");
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("machine_name");
 
                     b.Property<Guid?>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("risk_flags_json");
 
-                    b.Property<int>("RiskLevel")
-                        .HasColumnType("int")
+                    b.Property<ushort>("RiskLevel")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("target_type");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("trace_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid?>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -173,38 +169,38 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -220,45 +216,45 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
-                    b.Property<int>("OrganizationPlanId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("OrganizationPlanId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("organization_plan_id");
 
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("slug");
 
-                    b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("StatusId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status_id");
 
-                    b.Property<int>("TenantModeId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("TenantModeId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("tenant_mode_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -271,36 +267,36 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_by");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -318,35 +314,33 @@ namespace NeoShip.Data.Mssql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<ulong>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_by");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -365,44 +359,44 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -421,54 +415,54 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -485,35 +479,33 @@ namespace NeoShip.Data.Mssql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.ServiceAccountApiKeyClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<ulong>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_api_key_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -529,31 +521,31 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -569,53 +561,53 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("avatar_url");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_login_at");
 
                     b.Property<string>("LastLoginIp")
                         .HasMaxLength(39)
-                        .HasColumnType("nvarchar(39)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_login_ip");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
-                    b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("StatusId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status_id");
 
                     b.HasKey("Id")
@@ -638,54 +630,54 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("key_digest");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -702,35 +694,33 @@ namespace NeoShip.Data.Mssql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.UserApiKeyClaim", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<uint>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
-
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_api_key_id");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -744,26 +734,24 @@ namespace NeoShip.Data.Mssql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.UserClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<ulong>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(20,0)")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -776,62 +764,62 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email_digest");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("ErasedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("erased_at");
 
-                    b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("StatusId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status_id");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.Property<string>("VerificationTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("verification_token_digest");
 
                     b.Property<DateTime?>("VerificationTokenExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("verification_token_expires_at");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("verified_at");
 
                     b.HasKey("Id")
@@ -853,59 +841,57 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientId")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("client_id");
 
                     b.Property<byte[]>("ClientSecretEncrypted")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("BLOB")
                         .HasColumnName("client_secret_enc");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
                         .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
-                    b.Property<int>("ProviderTypeId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("ProviderTypeId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("provider_type_id");
 
-                    b.Property<int>("StatusId")
-                        .HasColumnType("int")
+                    b.Property<ushort>("StatusId")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("status_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -927,47 +913,47 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
-                    b.Property<long?>("Asn")
-                        .HasColumnType("bigint")
+                    b.Property<uint?>("Asn")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("asn");
 
-                    b.Property<long>("Count")
-                        .HasColumnType("bigint")
+                    b.Property<uint>("Count")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("count");
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("nvarchar(2)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("country_code");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("region");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -983,66 +969,66 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("transports_json");
 
-                    b.Property<int>("Type")
-                        .HasColumnType("int")
+                    b.Property<ushort>("Type")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.Property<byte[]>("ValueEncrypted")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("BLOB")
                         .HasColumnName("value_enc");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("verified_at");
 
                     b.Property<byte[]>("WebAuthnCredentialId")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("BLOB")
                         .HasColumnName("web_authn_credential_id");
 
                     b.Property<string>("WebAuthnCredentialIdDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("web_authn_credential_id_digest");
 
                     b.Property<byte[]>("WebAuthnPublicKeyCredentialData")
                         .IsRequired()
-                        .HasColumnType("varbinary(max)")
+                        .HasColumnType("BLOB")
                         .HasColumnName("web_authn_public_key_credential_data");
 
-                    b.Property<long>("WebAuthnSignCount")
-                        .HasColumnType("bigint")
+                    b.Property<uint>("WebAuthnSignCount")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("web_authn_sign_count");
 
                     b.HasKey("Id")
@@ -1060,58 +1046,58 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("NeoShip.Data.Model.UserPasswordAuth", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<int>("FailedAttempts")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("failed_attempts");
 
                     b.Property<string>("HashAlgorithm")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("hash_algorithm");
 
                     b.Property<int>("Iterations")
-                        .HasColumnType("int")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("iterations");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("locked_until");
 
                     b.Property<DateTime?>("PasswordChangedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("password_changed_at");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("password_hash");
 
                     b.Property<string>("PasswordSalt")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("password_salt");
 
                     b.Property<string>("ResetTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("reset_token_digest");
 
                     b.Property<DateTime?>("ResetTokenExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("reset_token_expires_at");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.HasKey("UserId")
@@ -1127,79 +1113,79 @@ namespace NeoShip.Data.Mssql.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("nvarchar(max)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("claims_json");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("nvarchar(46)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("last_used_at");
 
                     b.Property<DateTime?>("MfaVerifiedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("mfa_verified_at");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("revoke_reason");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("nvarchar(1024)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("risk_flags_json");
 
-                    b.Property<int>("RiskLevel")
-                        .HasColumnType("int")
+                    b.Property<ushort>("RiskLevel")
+                        .HasColumnType("INTEGER")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("token_digest");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2")
+                        .HasColumnType("TEXT")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(512)
-                        .HasColumnType("nvarchar(512)")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1220,11 +1206,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("RoleUser", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("UsersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("users_id");
 
                     b.HasKey("RolesId", "UsersId")
@@ -1239,11 +1225,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("MembersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("members_id");
 
                     b.HasKey("GroupId", "MembersId")
@@ -1258,11 +1244,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("OwnersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("owners_id");
 
                     b.HasKey("Group1Id", "OwnersId")
@@ -1277,11 +1263,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_service_account_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("ServiceAccountMembersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_members_id");
 
                     b.HasKey("GroupId", "ServiceAccountMembersId")
@@ -1296,11 +1282,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("group_service_account_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("ServiceAccountOwnersId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_owners_id");
 
                     b.HasKey("Group1Id", "ServiceAccountOwnersId")
@@ -1315,11 +1301,11 @@ namespace NeoShip.Data.Mssql.Migrations
             modelBuilder.Entity("service_account_api_key_roles", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("uniqueidentifier")
+                        .HasColumnType("TEXT")
                         .HasColumnName("service_account_api_key_id");
 
                     b.HasKey("RolesId", "ServiceAccountApiKeyId")

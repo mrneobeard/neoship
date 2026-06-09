@@ -27,6 +27,22 @@ public class UserMfaFactor
 
     public byte[] WebAuthnCredentialId { get; set; } = [];
 
+    /// <summary>
+    /// Gets or sets the digest used to look up the WebAuthn credential identifier.
+    /// </summary>
+    [StringLength(128)]
+    public string? WebAuthnCredentialIdDigest { get; set; }
+
+    /// <summary>
+    /// Gets or sets the WebAuthn signature counter from the authenticator.
+    /// </summary>
+    public uint WebAuthnSignCount { get; set; } = 0;
+
+    /// <summary>
+    /// Gets or sets the last time this MFA factor was successfully used.
+    /// </summary>
+    public DateTime? LastUsedAt { get; set; }
+
     public DateTime? VerifiedAt { get; set; }
 
     [StringLength(1024)]

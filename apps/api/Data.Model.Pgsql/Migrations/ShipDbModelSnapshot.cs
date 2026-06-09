@@ -982,6 +982,10 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1019,16 +1023,28 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("bytea")
                         .HasColumnName("web_authn_credential_id");
 
+                    b.Property<string>("WebAuthnCredentialIdDigest")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("web_authn_credential_id_digest");
+
                     b.Property<byte[]>("WebAuthnPublicKeyCredentialData")
                         .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("web_authn_public_key_credential_data");
+
+                    b.Property<long>("WebAuthnSignCount")
+                        .HasColumnType("bigint")
+                        .HasColumnName("web_authn_sign_count");
 
                     b.HasKey("Id")
                         .HasName("pk_user_mfa_factors");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_user_mfa_factors_user_id");
+
+                    b.HasIndex("WebAuthnCredentialIdDigest")
+                        .HasDatabaseName("ix_user_mfa_factors_web_authn_credential_id_digest");
 
                     b.ToTable("user_mfa_factors", (string)null);
                 });
