@@ -119,7 +119,7 @@ Exit criteria:
 - audit event normalization
 - logging and redaction
 - OpenTelemetry spans and metrics
-- query shaping contract: filtering, sorting, paging, expanding, and batch limits
+- API/query contracts: language-neutral envelopes, errors, filtering, sorting, paging, expanding, and batch limits
 - rate limiting
 - tests
 
@@ -176,3 +176,20 @@ Encrypted JWT can help with delegated access, but should not become the durable 
 3. define API contracts for signup/login/reset/session/profile
 4. implement auth middleware and session handling
 5. implement core auth endpoints and tests
+
+## After Identity
+
+Do not start deployment-platform feature work until identity, tenants, and authorization are stable enough to protect privileged operations.
+
+Next work is tracked in:
+
+- `index.md`
+- `post-identity-index.md`
+- `post-identity-feature-tickets.md`
+
+First follow-on slice:
+
+1. audit and activity foundation
+2. jobs and long-running operations foundation
+3. secrets, configs, and variables foundation
+4. import/export primitive

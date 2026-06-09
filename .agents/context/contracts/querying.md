@@ -2,99 +2,328 @@
 
 ## Purpose
 
-Define one horizontal rule set for list/detail endpoints across identity APIs.
+Define one horizontal query contract for list, detail, search, expand, and batch APIs.
 
-Goal: keep responses small by default, support useful querying, and avoid expensive or leaky payloads.
+This contract must line up with `api-contract.md`. Query behavior must be predictable and implementable in any language without LINQ, OData, GraphQL, RSQL, or framework-specific query objects.
 
 ## Default Shape
 
-- list endpoints return compact summary objects by default
-- detail endpoints return full object data, but still omit secrets unless explicitly requested and safe
-- related data is opt-in via `expand`
-- server-side filtering, sorting, and paging are required for any collection that can grow beyond a handful of rows
+- list endpoints return compact resource objects by default
+- detail endpoints return fuller resource objects but still omit secrets
+- related data is opt-in through `expand`
+- server-side filtering, sorting, and paging are required for any collection that can grow
+- all collection responses use `data`, `pagination`, and `meta` from `api-contract.md`
+
+Example:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "limit": 50,
+    "nextCursor": null,
+    "previousCursor": null,
+    "hasMore": false
+  },
+  "meta": {
+    "requestId": "req_...",
+    "traceId": "...",
+    "serverTime": "2026-05-28T12:00:00Z"
+  }
+}
+```
+
+## Query Parameters
+
+Standard list parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `filter[name]` | Allowlisted filter by stable public field name. |
+| `filter[createdAt.gte]` | Allowlisted operator filter. |
+| `sort` | Comma-separated allowlisted sort fields. Prefix field with `-` for descending. |
+| `limit` | Page size. Default `50`, maximum `200` unless endpoint lowers it. |
+| `cursor` | Opaque cursor returned by a previous response. |
+| `expand` | Comma-separated allowlisted related data. |
+| `q` | Endpoint-defined search string. Must be rate limited. |
+
+Rules:
+
+- unknown query parameters return `validation_failed`
+- unknown filters return `validation_failed`
+- unknown sort fields return `validation_failed`
+- unknown expands return `validation_failed`
+- unsupported operators return `validation_failed`
+- query parameter names are case-sensitive
+- public query names are stable domain names, not database column names
+- endpoints document their filter, sort, expand, and search allowlists
 
 ## Filtering
 
-- use `filter[...]` for query filters
-- only expose filters that are indexed or cheap to evaluate
-- support equality first, then prefix/contains only when justified
-- do not expose ad hoc arbitrary query expressions
-- filter names should match stable domain names, not database column names
+Use `filter[...]` for structured filters.
 
-Examples:
+Equality:
 
-- `filter[name]=admin`
-- `filter[status]=active`
-- `filter[orgId]=...`
+```text
+GET /api/v1/orgs/acme/roles?filter[name]=admin
+```
+
+Multiple exact values:
+
+```text
+GET /api/v1/orgs/acme/memberships?filter[status]=active,invited
+```
+
+Range operators:
+
+```text
+GET /api/v1/orgs/acme/audit-events?filter[createdAt.gte]=2026-01-01T00:00:00Z&filter[createdAt.lt]=2026-02-01T00:00:00Z
+```
+
+Supported operators:
+
+| Operator | Meaning |
+| --- | --- |
+| no operator | Equal to one value or any comma-separated value. |
+| `.ne` | Not equal. Use sparingly. |
+| `.gt` | Greater than. |
+| `.gte` | Greater than or equal. |
+| `.lt` | Less than. |
+| `.lte` | Less than or equal. |
+| `.prefix` | Prefix match on indexed normalized field. |
+
+Rules:
+
+- expose only filters backed by indexes or cheap bounded evaluation
+- do not expose arbitrary expressions
+- do not expose raw contains filters on large text fields by default
+- do not expose cross-tenant filters that can bypass route tenant context
+- list filters must include tenant scope internally for tenant resources
+- every referenced id is validated within the resolved tenant
+
+## Search
+
+Use `q` only for endpoint-defined text search.
+
+Example:
+
+```text
+GET /api/v1/orgs/acme/groups?q=deploy
+```
+
+Rules:
+
+- `q` is not a general SQL or expression language
+- minimum search length is 2 characters unless endpoint documents another value
+- maximum search length is 120 characters unless endpoint documents another value
+- search uses normalized shadow fields where practical
+- search/list filters use stricter rate limits than basic reads
 
 ## Sorting
 
-- use `sort` with stable field names
-- default sort should be deterministic
-- allow only allowlisted fields
-- sort should be backed by an index when practical
-- if a field is expensive to sort on, do not expose it
+Use `sort` with comma-separated stable field names.
 
-Examples:
+Ascending:
 
-- `sort=name`
-- `sort=-createdAt`
+```text
+GET /api/v1/orgs/acme/roles?sort=name
+```
 
-## Paging
+Descending:
 
-- all list endpoints must support paging once the collection can grow
-- default page size: 50
-- maximum page size: 100 unless a resource explicitly lowers it
-- prefer cursor paging for mutable or large collections
-- use offset paging only when the collection is small and stable
-- return enough paging metadata for the client to continue
+```text
+GET /api/v1/orgs/acme/audit-events?sort=-createdAt
+```
+
+Multiple fields:
+
+```text
+GET /api/v1/orgs/acme/memberships?sort=status,-createdAt
+```
+
+Rules:
+
+- default sort is deterministic
+- allow only documented fields
+- mutable list defaults should use `-createdAt,-id` or equivalent stable ordering
+- if a client sort does not include a unique tie-breaker, the server appends one internally
+- expensive sort fields are not exposed
+- sorting never changes tenant isolation
+
+## Pagination
+
+Use cursor pagination for mutable or large collections.
+
+Request:
+
+```text
+GET /api/v1/orgs/acme/audit-events?limit=50&cursor=opaque-cursor
+```
+
+Response:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "limit": 50,
+    "nextCursor": "opaque-next-cursor",
+    "previousCursor": null,
+    "hasMore": true
+  }
+}
+```
+
+Rules:
+
+- default `limit` is `50`
+- maximum `limit` is `200` unless endpoint lowers it
+- cursors are opaque and client-stored only
+- cursors may encode normalized filter, sort, limit, tenant, and last item position
+- cursor payloads must be signed or otherwise tamper-resistant if they contain state
+- cursor contents are not public contract and may change
+- offset paging is allowed only for small stable admin lists when documented
+- total counts are omitted by default because they can be expensive
 
 ## Expanding
 
-- use `expand` for related objects
-- expansion must be allowlisted per resource
-- default to shallow expansion only
-- do not expand secrets or large child collections by default
-- avoid nested expand chains unless a resource explicitly permits them
+Use `expand` for related data.
 
-Examples:
+Example:
 
-- `expand=claims`
-- `expand=members`
-- `expand=roles,claims`
+```text
+GET /api/v1/orgs/acme/roles?expand=claims
+```
+
+Multiple expands:
+
+```text
+GET /api/v1/orgs/acme/groups?expand=members,roles
+```
+
+Rules:
+
+- expansions are allowlisted per resource
+- default expansion is shallow
+- do not expand secrets, token plaintext, token hashes, session tokens, ciphertext, or large unbounded child collections
+- avoid nested expand chains unless explicitly documented
+- expanded collections must be bounded or represented as summaries with links
+- expanded data obeys the same authorization and tenant checks as direct endpoints
+
+## Response Metadata
+
+All query responses include `meta.requestId` and `meta.serverTime`. They should include `meta.traceId` when available.
+
+Endpoints may include normalized query echo in `meta.query`.
+
+```json
+{
+  "meta": {
+    "requestId": "req_...",
+    "traceId": "...",
+    "serverTime": "2026-05-28T12:00:00Z",
+    "query": {
+      "filter": { "status": "active" },
+      "sort": ["name"],
+      "expand": ["claims"],
+      "limit": 50,
+      "cursor": null
+    }
+  }
+}
+```
+
+Rules:
+
+- query echo is normalized, not a raw query string dump
+- secrets and bearer values are never echoed
+- unknown params rejected by validation do not need a query echo
+
+## Validation Errors
+
+Invalid query requests use the standard error envelope.
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "Validation failed.",
+    "details": {
+      "fields": {
+        "sort": ["Unsupported sort field: emailHash."],
+        "filter[status]": ["Unsupported value: archived."]
+      }
+    }
+  },
+  "meta": {
+    "requestId": "req_...",
+    "serverTime": "2026-05-28T12:00:00Z"
+  }
+}
+```
 
 ## Batch Processing
 
-- use explicit batch endpoints only when needed
-- batch requests must have strict item limits
-- default batch size limit: 25 for writes, 100 for reads
-- batch mutations must be partial-failure aware or explicitly all-or-nothing
+Use explicit batch endpoints only when needed.
+
+Rules:
+
+- default batch write limit is `25` items
+- default batch read limit is `100` items
+- bulk operations over `100` items should be async jobs
+- batch mutations require permission for every target item
+- batch mutations require tenant validation for every referenced id
 - batch mutating endpoints should require `Idempotency-Key` when retries are likely
-- return per-item results for partial success
+- batch endpoints support dry-run when the operation can make broad changes
+- partial success returns per-item results using the batch envelope in `api-contract.md`
+- batch-level errors are only for invalid batch requests, not per-item failures
 
 ## Rate Limiting
 
-- list endpoints with `expand` or expensive filters should be rate limited more aggressively
-- mutating endpoints should always be rate limited
-- batch endpoints should have their own stricter limits
-- auth-sensitive endpoints should be protected more aggressively than read-only endpoints
+Rate limit dimensions come from `api-contract.md`.
+
+Rules:
+
+- list endpoints with `q`, `expand`, or expensive filters use stricter limits
+- mutating endpoints are always rate limited
+- batch endpoints have stricter limits than single-resource endpoints
+- auth-sensitive endpoints are stricter than read-only endpoints
+- high-risk operations such as token creation or secret reveal have endpoint-specific limits
 
 ## Payload Budget
 
-- do not return large nested graphs without explicit expand
-- do not include raw secrets, tokens, or hashes in list responses
-- avoid returning entire claim sets unless explicitly requested
-- prefer counts, summaries, and links for large collections
+- list responses are compact by default
+- detail responses stay bounded
+- use relationship summaries and links for large related collections
+- do not return large nested graphs without explicit expansion
+- do not include raw secrets, tokens, hashes, ciphertext, or encrypted blobs
+- avoid returning full claim sets in lists unless explicitly expanded and authorized
+- prefer async exports for large reports
 
 ## Caching
 
-- cache list queries only when they have stable filters and clear invalidation rules
+- cache list queries only when filters are stable and invalidation rules are clear
 - do not cache highly personalized or highly expanded payloads for long
-- cache keys must include filter, sort, paging, and expand parameters when used
+- cache keys include normalized filter, search, sort, limit, cursor, expand, tenant, actor, and authorization version
+- invalidate relevant query caches on role, group, membership, session, API key, service account, and permission changes
 
-## Implementation Rules
+## Endpoint Contract Checklist
 
-- every new list endpoint should define its paging and sort defaults in the endpoint contract
-- every new expand target must be documented and allowlisted
-- every new batch endpoint must document max item count and retry semantics
-- if a query can become expensive, add a rate limit and consider an alternate subresource endpoint
+Every new list endpoint documents:
+
+- default sort
+- supported filters and operators
+- supported sort fields
+- supported expansions
+- default and maximum `limit`
+- whether `q` is supported
+- rate limit category
+- response resource type and compact/detail fields
+
+Every new batch endpoint documents:
+
+- max item count
+- dry-run support
+- partial success or all-or-nothing behavior
+- idempotency behavior
+- async threshold

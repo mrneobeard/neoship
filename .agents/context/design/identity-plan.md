@@ -51,7 +51,8 @@ Current identity-related model classes:
 
 - Keep `UserSession` for browser auth and current-session tracking.
 - `UserSession` should remain the web/UI source of truth.
-- `ClaimsJson` should stay narrow. Do not store full resolved authorization state there.
+- `ClaimsJson` should stay narrow, but it can hold a session claim snapshot.
+- Do not store full resolved authorization state there unless the token format is JWE and the snapshot is intentional.
 
 ### API Keys, JWT, And Basic Auth
 
@@ -60,20 +61,25 @@ Current identity-related model classes:
 - Recommendation:
   - Browser UI: `UserSession` cookie.
   - API clients: bearer API key or service account API key.
-  - Internal/service delegation: short-lived encrypted JWT.
+  - Internal/service delegation: short-lived encrypted JWT or session-backed JWT.
   - Basic auth: disabled by default; if enabled, TLS-only and limited to non-browser API use.
-- Do not move primary authorization state into JWT claims. Resolve current roles/claims from DB or cache.
+- Do not move primary authorization state into JWT claims unless the JWT is encrypted and intentionally carries a narrow snapshot.
+- Resolve current roles/claims from DB or cache.
 
 ### MFA And Passkeys
 
 - Keep `UserMfaFactor` as the canonical factor store.
 - Use factor type `passkey` and `webauthn_security_key` for WebAuthn.
 - Add sign count, attestation metadata, and last-used metadata if missing.
+- Passkeys are for browser or native client auth and step-up, not general server-to-server API auth.
 
 ### Roles, Groups, Claims
 
 - Keep `Role`, `Group`, `RoleClaim`, `UserClaim`, `ServiceAccountClaim`, `UserApiKeyClaim`, and `ServiceAccountApiKeyClaim`.
+- Define permissions as code/module constants first, not as a central permission table.
 - Standardize claim naming to permission-style values such as `deployments.create`.
+- Store roles, groups, memberships, and grants in DB.
+- Let modules/plugins contribute extra permission definitions and seeded roles.
 - `GroupRole.cs` is empty today. Fill it or replace the implicit collection-only mapping with explicit join entities.
 
 ### Identity Providers

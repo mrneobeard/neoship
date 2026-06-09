@@ -5,10 +5,11 @@
 - REST/JSON
 - `/api/v1` prefix
 - camelCase payloads
-- OpenAPI generated from source-controlled definitions
+- OpenAPI 3.1 generated from source-controlled definitions
 - org-scoped routes use `/api/v1/orgs/{orgSlug}/...`
 
-Use the shared response style already described in the research contract.
+Use `api-contract.md` for response envelopes, error envelopes, HTTP semantics, idempotency, async operations, concurrency, and compatibility rules.
+Use `querying.md` for filter, search, sort, pagination, expand, batch, and query validation rules.
 
 ## Authentication Shapes
 
@@ -99,6 +100,8 @@ Conform public names to canonical C# types where practical.
 - use cursor pagination for mutable lists
 - use `filter[...]` and `sort`
 - use `Idempotency-Key` on mutating create-style endpoints where retries are likely
+- list responses use the `pagination` envelope from `api-contract.md`
+- public payloads are language-neutral JSON, not framework-specific result shapes
 
 ## Error Codes
 
@@ -137,8 +140,16 @@ If JWT exchange exists:
 
 - JWT is short-lived only
 - refresh happens by re-auth or API key exchange, not long-lived refresh tokens unless separately designed
-- scopes on the JWT cannot exceed scopes on the originating key or actor
+- if JWT is not JWE, it should be session-backed and resolved through session state or cache
+- if JWT is JWE, it may carry a narrow role/claim snapshot, but still expires quickly and remains revocation-aware
+- scopes on the JWT cannot exceed scopes on the originating key, session, or actor
 - encrypted JWT must still map back to current DB actor state for sensitive operations
+
+## Passkey Use
+
+- passkeys are for browser or native client login and step-up
+- passkey assertions can start an auth flow or mint a session/token
+- do not treat passkeys as a generic direct bearer credential for server-to-server API calls
 
 ## Acceptance Rules
 

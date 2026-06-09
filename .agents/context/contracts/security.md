@@ -20,6 +20,7 @@
 - bearer user API key
 - bearer service account API key
 - optional short-lived encrypted JWT access token
+- passkey-backed login may mint a session or exchange token, but not a standing machine credential
 
 ### Basic Auth
 
@@ -36,6 +37,8 @@
 JWT is optional and secondary, not the primary source of authorization.
 
 - prefer encrypted JWT for delegated API access
+- if not using JWE, treat JWT as a session-backed access token and resolve claims from session state or cache
+- if using JWE, embedded role/claim data is allowed only as a short-lived snapshot
 - short TTL only: 5-15 minutes
 - exact audience required
 - tenant-bound
@@ -52,6 +55,7 @@ Allowed claims:
 - `org_id`
 - `scp`
 - `amr`
+- session id when session-backed JWT is used
 
 Disallowed claims:
 
@@ -109,6 +113,7 @@ Disallowed claims:
 
 - permission values use `resource.action`
 - resolve current permissions from DB or short-lived cache
+- cache may include session claims as a snapshot, but DB remains source of truth
 - do not trust JWT alone for human authorization state
 - service accounts can receive direct claims and role/group-derived claims
 

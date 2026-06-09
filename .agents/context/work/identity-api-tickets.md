@@ -228,14 +228,18 @@ Scope:
 
 Tasks:
 
+- define a module-backed permission registry
 - seed built-in roles
 - finalize claim vocabulary
 - implement group membership changes
 - resolve permissions from user, group, service account, and API key claims
+- support custom roles built from registry-defined permissions
+- allow enterprise modules to add extra permissions and seeded roles
 
 Acceptance:
 
 - permission checks are consistent and cache invalidation works
+- OSS and enterprise permission catalogs can coexist without schema changes
 
 ## ID-014 Identity Providers
 

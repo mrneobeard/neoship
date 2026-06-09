@@ -6,12 +6,19 @@ Use cache for speed, not as the source of truth.
 
 Canonical truth remains the database model in `apps/api/Data.Model`.
 
+## Cache Backends
+
+- default backend for single-node/dev: in-memory cache
+- default backend for distributed installs: Redis
+- prefer Redis when cache state must survive process restarts or scale out
+
 ## Cacheable Reads
 
 ### Session Lookup
 
 - cache by session token digest
-- TTL: 1-5 minutes
+- cache resolved session claims with the session entry
+- TTL: 5 minutes
 - invalidate on revoke, expiry, password reset-all, or user suspension
 
 ### API Key Lookup
