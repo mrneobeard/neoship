@@ -158,6 +158,7 @@ public class SsoStoreTests
         var link = await db.UserExternalIdentities.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(userId, link.UserId);
         Assert.Equal("subject", link.Subject);
+        Assert.NotEmpty(link.SubjectDigest);
         Assert.NotNull(link.LastUsedAt);
         Assert.Null(await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken));
     }
@@ -197,7 +198,7 @@ public class SsoStoreTests
             UserId = linkedUserId,
             ProviderId = 10,
             Subject = "subject",
-            SubjectUpcase = "SUBJECT",
+            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
             Email = "linked-user@example.com",
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);

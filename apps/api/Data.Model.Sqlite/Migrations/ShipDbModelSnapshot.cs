@@ -868,11 +868,11 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("subject");
 
-                    b.Property<string>("SubjectUpcase")
+                    b.Property<string>("SubjectDigest")
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("TEXT")
-                        .HasColumnName("subject_upcase");
+                        .HasColumnName("subject_digest");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("TEXT")
@@ -887,9 +887,9 @@ namespace NeoShip.Data.Sqlite.Migrations
                     b.HasIndex("UserId", "ProviderId")
                         .HasDatabaseName("ix_user_external_identities_user_id_provider_id");
 
-                    b.HasIndex("OrgId", "ProviderId", "SubjectUpcase")
+                    b.HasIndex("OrgId", "ProviderId", "SubjectDigest")
                         .IsUnique()
-                        .HasDatabaseName("ix_user_external_identities_org_id_provider_id_subject_upcase");
+                        .HasDatabaseName("ix_user_external_identities_org_id_provider_id_subject_digest");
 
                     b.ToTable("user_external_identities", (string)null);
                 });

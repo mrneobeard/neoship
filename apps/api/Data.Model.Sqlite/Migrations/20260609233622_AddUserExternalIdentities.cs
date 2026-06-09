@@ -20,7 +20,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                     user_id = table.Column<Guid>(type: "TEXT", nullable: false),
                     provider_id = table.Column<long>(type: "INTEGER", nullable: false),
                     subject = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
-                    subject_upcase = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
+                    subject_digest = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
                     email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
                     created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
                     last_used_at = table.Column<DateTime>(type: "TEXT", nullable: true)
@@ -49,9 +49,9 @@ namespace NeoShip.Data.Sqlite.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "ix_user_external_identities_org_id_provider_id_subject_upcase",
+                name: "ix_user_external_identities_org_id_provider_id_subject_digest",
                 table: "user_external_identities",
-                columns: new[] { "org_id", "provider_id", "subject_upcase" },
+                columns: new[] { "org_id", "provider_id", "subject_digest" },
                 unique: true);
 
             migrationBuilder.CreateIndex(

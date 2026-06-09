@@ -60,11 +60,11 @@ public class UserExternalIdentity
     public string Subject { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the normalized provider subject identifier.
+    /// Gets or sets the lookup digest for the exact provider subject identifier.
     /// </summary>
     [StringLength(512)]
     [Required]
-    public string SubjectUpcase { get; set; } = string.Empty;
+    public string SubjectDigest { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the last verified email received from the provider.

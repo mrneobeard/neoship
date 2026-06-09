@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
@@ -123,12 +124,12 @@ public sealed class SsoStore
             return null;
         }
 
-        var subjectUpcase = externalIdentity.Subject.ToUpperInvariant();
+        var subjectDigest = ComputeSubjectDigest(externalIdentity.Subject);
         var link = await this.db.UserExternalIdentities
             .Include(x => x.User)
             .FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
                 && x.ProviderId == provider.Id
-                && x.SubjectUpcase == subjectUpcase, ct);
+                && x.SubjectDigest == subjectDigest, ct);
 
         var emailUpcase = externalIdentity.Email.ToUpperInvariant();
         var user = link?.User is { StatusId: var status } linkedUser && status == UserStatus.Active.Id
@@ -150,7 +151,7 @@ public sealed class SsoStore
                 UserId = user.Id,
                 ProviderId = provider.Id,
                 Subject = externalIdentity.Subject,
-                SubjectUpcase = subjectUpcase,
+                SubjectDigest = subjectDigest,
                 Email = externalIdentity.Email,
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = DateTime.UtcNow,
@@ -206,6 +207,11 @@ public sealed class SsoStore
     }
 
     private static string Pair(string key, string value) => $"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}";
+
+    private static string ComputeSubjectDigest(string subject)
+    {
+        return TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes(subject));
+    }
 }
 
 /// <summary>

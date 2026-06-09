@@ -883,11 +883,11 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("nvarchar(512)")
                         .HasColumnName("subject");
 
-                    b.Property<string>("SubjectUpcase")
+                    b.Property<string>("SubjectDigest")
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)")
-                        .HasColumnName("subject_upcase");
+                        .HasColumnName("subject_digest");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier")
@@ -902,9 +902,9 @@ namespace NeoShip.Data.Mssql.Migrations
                     b.HasIndex("UserId", "ProviderId")
                         .HasDatabaseName("ix_user_external_identities_user_id_provider_id");
 
-                    b.HasIndex("OrgId", "ProviderId", "SubjectUpcase")
+                    b.HasIndex("OrgId", "ProviderId", "SubjectDigest")
                         .IsUnique()
-                        .HasDatabaseName("ix_user_external_identities_org_id_provider_id_subject_upcase");
+                        .HasDatabaseName("ix_user_external_identities_org_id_provider_id_subject_digest");
 
                     b.ToTable("user_external_identities", (string)null);
                 });

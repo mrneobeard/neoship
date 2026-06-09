@@ -78,7 +78,7 @@ public class ShipDb : DbContext
 
         modelBuilder.Entity<UserExternalIdentity>(p =>
         {
-            p.HasIndex(x => new { x.OrgId, x.ProviderId, x.SubjectUpcase }).IsUnique();
+            p.HasIndex(x => new { x.OrgId, x.ProviderId, x.SubjectDigest }).IsUnique();
             p.HasIndex(x => new { x.UserId, x.ProviderId });
         });
 
