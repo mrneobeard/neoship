@@ -111,6 +111,40 @@ public class MigrationTests
     }
 
     [Fact]
+    public async Task ServiceAccountApiKey_CanBeAuthenticated()
+    {
+        var (db, ctx) = CreateDatabase();
+        var auth = CreateAuthStore(db, ctx);
+
+        var (_, user, _, _) = await auth.SignupAsync(
+            "service@example.com", "Service User", "password123",
+            Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+
+        var serviceAccounts = new ServiceAccountStore(db, NullLogger<ServiceAccountStore>.Instance);
+        var serviceAccount = await serviceAccounts.CreateAsync(
+            Constants.DefaultOrganizationId,
+            user!.Id,
+            "deploy-bot",
+            "deploy bot",
+            TestContext.Current.CancellationToken);
+
+        var (plaintextKey, apiKey) = serviceAccounts.GenerateApiKey(
+            serviceAccount.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
+
+        db.ServiceAccountApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var authenticated = await serviceAccounts.AuthenticateApiKeyAsync(
+            plaintextKey, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(authenticated);
+        Assert.NotNull(authenticated!.ServiceAccount);
+        Assert.Equal(serviceAccount.Id, authenticated.ServiceAccountId);
+    }
+
+    [Fact]
     public async Task Login_WithValidCredentials_ReturnsSuccess()
     {
         var (db, ctx) = CreateDatabase();

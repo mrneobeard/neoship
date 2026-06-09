@@ -106,6 +106,62 @@ public class ServiceAccountStore
         return (plaintextKey, apiKey);
     }
 
+    /// <summary>
+    /// Authenticates a service account API key.
+    /// </summary>
+    /// <param name="rawKey">The plaintext API key.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching key with its service account loaded when valid; otherwise <see langword="null"/>.</returns>
+    public async Task<ServiceAccountApiKey?> AuthenticateApiKeyAsync(string rawKey, CancellationToken ct = default)
+    {
+        if (!TryDecodeApiKey(rawKey, out var keyBytes))
+        {
+            return null;
+        }
+
+        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+
+        var key = await db.ServiceAccountApiKeys
+            .Include(k => k.ServiceAccount)
+            .FirstOrDefaultAsync(k => k.KeyDigest == digest
+                && k.DeletedAt == null
+                && k.RevokedAt == null
+                && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow), ct);
+
+        if (key is null || key.ServiceAccount is null)
+        {
+            return null;
+        }
+
+        logger.LogInformation("Service account API key authenticated: {ApiKeyId} for service account {ServiceAccountId}", key.Id, key.ServiceAccountId);
+        return key;
+    }
+
+    private static bool TryDecodeApiKey(string rawKey, out byte[] keyBytes)
+    {
+        keyBytes = [];
+
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            return false;
+        }
+
+        if (!rawKey.StartsWith("nssa_", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            keyBytes = Convert.FromBase64String(rawKey[5..]);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     public async Task<List<ServiceAccountApiKey>> ListApiKeysAsync(
         Guid serviceAccountId, CancellationToken ct = default)
     {
