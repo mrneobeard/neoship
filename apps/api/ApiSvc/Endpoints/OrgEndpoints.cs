@@ -56,6 +56,7 @@ public static class OrgEndpoints
 
         group.MapGet("/identity-providers", ListIdentityProvidersAsync);
         group.MapPost("/identity-providers", CreateIdentityProviderAsync);
+        group.MapGet("/identity-providers/{providerId:long}", GetIdentityProviderAsync);
         group.MapPatch("/identity-providers/{providerId:long}", UpdateIdentityProviderAsync);
         group.MapPost("/identity-providers/{providerId:long}/enable", EnableIdentityProviderAsync);
         group.MapPost("/identity-providers/{providerId:long}/disable", DisableIdentityProviderAsync);
@@ -1553,6 +1554,37 @@ public static class OrgEndpoints
         await audit.RecordAsync("org.identity_providers.create", org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
 
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", ToIdentityProviderResponse(provider));
+    }
+
+    private static async Task<IResult> GetIdentityProviderAsync(
+        string orgSlug,
+        long providerId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var provider = await providers.GetAsync(org.Id, providerId, ct);
+        if (provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(ToIdentityProviderResponse(provider));
     }
 
     private static async Task<IResult> UpdateIdentityProviderAsync(

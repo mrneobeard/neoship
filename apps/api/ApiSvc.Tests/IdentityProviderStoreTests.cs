@@ -92,4 +92,45 @@ public class IdentityProviderStoreTests
         Assert.Equal(UserIdentityProviderStatus.Active.Id, enabled!.StatusId);
         Assert.Single(providers);
     }
+
+    /// <summary>
+    /// Verifies single identity provider reads are scoped to the owning organization.
+    /// </summary>
+    [Fact]
+    public async Task IdentityProviderStore_GetAsync_RejectsWrongOrganization()
+    {
+        await using var db = CreateDatabase();
+        var otherOrgId = Guid.NewGuid();
+        var store = new IdentityProviderStore(db, NullLogger<IdentityProviderStore>.Instance);
+        var createdBy = Guid.NewGuid();
+        db.Orgs.Add(new Organization
+        {
+            Id = otherOrgId,
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = OrganizationStatus.Active.Id,
+            TenantModeId = TenantMode.None.Id,
+            OrganizationPlanId = 1,
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        db.Users.Add(new User(createdBy, "idp-read@example.com", "IDP Read")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var provider = await store.CreateAsync(
+            Constants.DefaultOrganizationId,
+            createdBy,
+            "Acme OIDC",
+            UserIdentityProviderType.OIDC,
+            "https://idp.example.com",
+            "client-id",
+            "{}",
+            TestContext.Current.CancellationToken);
+
+        Assert.Null(await store.GetAsync(otherOrgId, provider.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await store.GetAsync(Constants.DefaultOrganizationId, provider.Id, TestContext.Current.CancellationToken));
+    }
 }
