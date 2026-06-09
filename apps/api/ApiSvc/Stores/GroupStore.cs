@@ -155,6 +155,54 @@ public sealed class GroupStore
     }
 
     /// <summary>
+    /// Adds a service account to a group.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when added; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> AddServiceAccountAsync(Guid orgId, Guid groupId, Guid serviceAccountId, CancellationToken ct = default)
+    {
+        var group = await this.GetAsync(orgId, groupId, ct);
+        var serviceAccount = await this.db.ServiceAccounts.FirstOrDefaultAsync(x => x.Id == serviceAccountId && x.OrgId == orgId, ct);
+        if (group is null || serviceAccount is null)
+        {
+            return false;
+        }
+
+        group.ServiceAccountMembers.Add(serviceAccount);
+        await this.db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a service account from a group.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when removed; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> RemoveServiceAccountAsync(Guid orgId, Guid groupId, Guid serviceAccountId, CancellationToken ct = default)
+    {
+        var group = await this.GetAsync(orgId, groupId, ct);
+        var serviceAccount = await this.db.ServiceAccounts.FirstOrDefaultAsync(x => x.Id == serviceAccountId && x.OrgId == orgId, ct);
+        if (group is null || serviceAccount is null)
+        {
+            return false;
+        }
+
+        if (!group.ServiceAccountMembers.Remove(serviceAccount))
+        {
+            return false;
+        }
+
+        await this.db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
     /// Detaches a role from a group.
     /// </summary>
     /// <param name="orgId">The organization identifier.</param>

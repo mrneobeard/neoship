@@ -13,6 +13,20 @@ public static class OrgEndpoints
     {
         var group = routes.MapGroup("/api/v1/orgs/{orgSlug}");
 
+        group.MapGet("/roles", ListRolesAsync);
+        group.MapPost("/roles", CreateRoleAsync);
+        group.MapPost("/roles/{roleId:guid}/claims", AddRoleClaimAsync);
+        group.MapDelete("/roles/{roleId:guid}/claims/{claimId:ulong}", RemoveRoleClaimAsync);
+
+        group.MapGet("/groups", ListGroupsAsync);
+        group.MapPost("/groups", CreateGroupAsync);
+        group.MapPost("/groups/{groupId:guid}/members/users/{userId:guid}", AddGroupUserAsync);
+        group.MapDelete("/groups/{groupId:guid}/members/users/{userId:guid}", RemoveGroupUserAsync);
+        group.MapPost("/groups/{groupId:guid}/members/service-accounts/{serviceAccountId:guid}", AddGroupServiceAccountAsync);
+        group.MapDelete("/groups/{groupId:guid}/members/service-accounts/{serviceAccountId:guid}", RemoveGroupServiceAccountAsync);
+        group.MapPost("/groups/{groupId:guid}/roles/{roleId:guid}", AttachGroupRoleAsync);
+        group.MapDelete("/groups/{groupId:guid}/roles/{roleId:guid}", DetachGroupRoleAsync);
+
         group.MapGet("/service-accounts", ListServiceAccountsAsync);
         group.MapPost("/service-accounts", CreateServiceAccountAsync);
         group.MapPatch("/service-accounts/{serviceAccountId:guid}", UpdateServiceAccountAsync);
@@ -25,9 +39,456 @@ public static class OrgEndpoints
         return group;
     }
 
+    /// <summary>
+    /// Represents a claim summary on a role.
+    /// </summary>
+    public record RoleClaimResponse(ulong Id, string Type, string Value);
+
+    /// <summary>
+    /// Represents a role response.
+    /// </summary>
+    public record RoleResponse(Guid Id, string Name, string? Description, List<RoleClaimResponse> Claims);
+
+    /// <summary>
+    /// Represents a role creation request.
+    /// </summary>
+    public record CreateRoleRequest(string Name, string? Description);
+
+    /// <summary>
+    /// Represents a role permission grant request.
+    /// </summary>
+    public record AddRoleClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
+
+    /// <summary>
+    /// Represents a group response.
+    /// </summary>
+    public record GroupResponse(Guid Id, string Name, string? Email, string? Description, int MemberCount, int ServiceAccountMemberCount, int RoleCount);
+
+    /// <summary>
+    /// Represents a group creation request.
+    /// </summary>
+    public record CreateGroupRequest(string Name, string? Email, string? Description);
+
     private static async Task<Organization?> ResolveOrgAsync(string orgSlug, ShipDb db, CancellationToken ct)
     {
         return await db.Orgs.FirstOrDefaultAsync(o => o.Slug == orgSlug, ct);
+    }
+
+    private static async Task<(User? User, IResult? Failure)> RequireOrgPermissionAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        string orgSlug,
+        PermissionKey permission,
+        CancellationToken ct)
+    {
+        var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return (null, TypedResults.Unauthorized());
+        }
+
+        var allowed = await permissions.UserHasAsync(user.Id, permission, PermissionScopeKind.Organization, orgSlug, ct);
+        if (!allowed)
+        {
+            return (null, TypedResults.Forbid());
+        }
+
+        return (user, null);
+    }
+
+    private static RoleResponse ToRoleResponse(Role role)
+        => new(
+            role.Id,
+            role.Name,
+            role.Description,
+            role.Claims.Select(c => new RoleClaimResponse(c.Id, c.Type, c.Value)).ToList());
+
+    private static GroupResponse ToGroupResponse(Group group)
+        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count);
+
+    private static async Task<IResult> ListRolesAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var list = await roles.ListAsync(org.Id, ct);
+        return TypedResults.Ok(list.Select(ToRoleResponse).ToList());
+    }
+
+    private static async Task<IResult> CreateRoleAsync(
+        string orgSlug,
+        [FromBody] CreateRoleRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var role = await roles.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
+        await audit.RecordAsync("org.roles.create", org.Id, auth.User.Id, "role.create", targetType: "role", targetId: role.Id.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", ToRoleResponse(role));
+    }
+
+    private static async Task<IResult> AddRoleClaimAsync(
+        string orgSlug,
+        Guid roleId,
+        [FromBody] AddRoleClaimRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        if (!PermissionKey.TryParse(req.Permission, out var key))
+        {
+            return TypedResults.BadRequest("Invalid permission key.");
+        }
+
+        var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
+        var added = await roles.AddClaimAsync(org.Id, roleId, grant, auth.User!.Id, ct);
+        if (!added)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.claim.add", org.Id, auth.User.Id, "role.claim.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> RemoveRoleClaimAsync(
+        string orgSlug,
+        Guid roleId,
+        ulong claimId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var removed = await roles.RemoveClaimAsync(org.Id, roleId, claimId, ct);
+        if (!removed)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.claim.remove", org.Id, auth.User!.Id, "role.claim.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> ListGroupsAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var list = await groups.ListAsync(org.Id, ct);
+        return TypedResults.Ok(list.Select(ToGroupResponse).ToList());
+    }
+
+    private static async Task<IResult> CreateGroupAsync(
+        string orgSlug,
+        [FromBody] CreateGroupRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var group = await groups.CreateAsync(org.Id, req.Name, req.Email, req.Description, ct);
+        await audit.RecordAsync("org.groups.create", org.Id, auth.User!.Id, "group.create", targetType: "group", targetId: group.Id.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", ToGroupResponse(group));
+    }
+
+    private static async Task<IResult> AddGroupUserAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid userId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.AddUserAsync(org.Id, groupId, userId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.member.add", org.Id, auth.User!.Id, "group.member.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> RemoveGroupUserAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid userId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.RemoveUserAsync(org.Id, groupId, userId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.member.remove", org.Id, auth.User!.Id, "group.member.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> AddGroupServiceAccountAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.AddServiceAccountAsync(org.Id, groupId, serviceAccountId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.service_account.add", org.Id, auth.User!.Id, "group.service_account.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> RemoveGroupServiceAccountAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.RemoveServiceAccountAsync(org.Id, groupId, serviceAccountId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.service_account.remove", org.Id, auth.User!.Id, "group.service_account.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> AttachGroupRoleAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid roleId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.AttachRoleAsync(org.Id, groupId, roleId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.role.add", org.Id, auth.User!.Id, "group.role.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> DetachGroupRoleAsync(
+        string orgSlug,
+        Guid groupId,
+        Guid roleId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = await groups.DetachRoleAsync(org.Id, groupId, roleId, ct);
+        if (!ok)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.role.remove", org.Id, auth.User!.Id, "group.role.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     public record ServiceAccountResponse(

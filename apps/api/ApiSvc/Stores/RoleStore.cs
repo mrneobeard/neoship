@@ -101,12 +101,18 @@ public sealed class RoleStore
         }
 
         var (type, value) = this.codec.Encode(grant);
+        if (!this.codec.TryDecode(type, value, out var normalizedGrant))
+        {
+            return false;
+        }
+
+        var (normalizedType, normalizedValue) = this.codec.Encode(normalizedGrant);
         role.Claims.Add(new RoleClaim
         {
             Id = 0,
             RoleId = roleId,
-            Type = type,
-            Value = value,
+            Type = normalizedType,
+            Value = normalizedValue,
             CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow,
         });
