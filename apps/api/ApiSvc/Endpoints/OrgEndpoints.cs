@@ -1464,12 +1464,14 @@ public static class OrgEndpoints
         string ProviderType,
         string? IssuerUrl,
         string? ClientId,
+        string? ClientSecret,
         string? MetadataJson);
 
     public record UpdateIdentityProviderRequest(
         string? Name,
         string? IssuerUrl,
         string? ClientId,
+        string? ClientSecret,
         string? MetadataJson);
 
     private static IdentityProviderResponse ToIdentityProviderResponse(UserIdentityProvider provider)
@@ -1550,7 +1552,7 @@ public static class OrgEndpoints
             return TypedResults.BadRequest("Invalid identity provider request.");
         }
 
-        var provider = await providers.CreateAsync(org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl, req.ClientId, req.MetadataJson, ct);
+        var provider = await providers.CreateAsync(org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         await audit.RecordAsync("org.identity_providers.create", org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
 
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", ToIdentityProviderResponse(provider));
@@ -1611,7 +1613,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.MetadataJson, ct);
+        var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         if (provider is null)
         {
             return TypedResults.NotFound();

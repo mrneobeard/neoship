@@ -16,16 +16,19 @@ namespace NeoShip.ApiSvc.Stores;
 public sealed class IdentityProviderStore
 {
     private readonly ShipDb db;
+    private readonly IdentityProviderSecretProtector secrets;
     private readonly ILogger<IdentityProviderStore> logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="IdentityProviderStore"/> class.
     /// </summary>
     /// <param name="db">The database context.</param>
+    /// <param name="secrets">The client secret protector.</param>
     /// <param name="logger">The identity provider store logger.</param>
-    public IdentityProviderStore(ShipDb db, ILogger<IdentityProviderStore> logger)
+    public IdentityProviderStore(ShipDb db, IdentityProviderSecretProtector secrets, ILogger<IdentityProviderStore> logger)
     {
         this.db = db;
+        this.secrets = secrets;
         this.logger = logger;
     }
 
@@ -66,6 +69,7 @@ public sealed class IdentityProviderStore
     /// <param name="providerType">The provider type.</param>
     /// <param name="issuerUrl">The issuer URL.</param>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="clientSecret">The optional plaintext client secret.</param>
     /// <param name="metadataJson">The provider metadata JSON.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The created provider configuration.</returns>
@@ -76,6 +80,7 @@ public sealed class IdentityProviderStore
         UserIdentityProviderType providerType,
         string? issuerUrl,
         string? clientId,
+        string? clientSecret,
         string? metadataJson,
         CancellationToken ct = default)
     {
@@ -88,6 +93,7 @@ public sealed class IdentityProviderStore
             StatusId = UserIdentityProviderStatus.Inactive.Id,
             IssuerUrl = issuerUrl,
             ClientId = clientId,
+            ClientSecretEncrypted = this.secrets.Encrypt(clientSecret),
             MetadataJson = metadataJson,
             CreatedAt = DateTime.UtcNow,
         };
@@ -106,6 +112,7 @@ public sealed class IdentityProviderStore
     /// <param name="name">The provider name.</param>
     /// <param name="issuerUrl">The issuer URL.</param>
     /// <param name="clientId">The client identifier.</param>
+    /// <param name="clientSecret">The optional plaintext client secret.</param>
     /// <param name="metadataJson">The provider metadata JSON.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated provider configuration, or <see langword="null"/>.</returns>
@@ -115,6 +122,7 @@ public sealed class IdentityProviderStore
         string? name,
         string? issuerUrl,
         string? clientId,
+        string? clientSecret,
         string? metadataJson,
         CancellationToken ct = default)
     {
@@ -137,6 +145,11 @@ public sealed class IdentityProviderStore
         if (clientId is not null)
         {
             provider.ClientId = clientId;
+        }
+
+        if (clientSecret is not null)
+        {
+            provider.ClientSecretEncrypted = this.secrets.Encrypt(clientSecret);
         }
 
         if (metadataJson is not null)
