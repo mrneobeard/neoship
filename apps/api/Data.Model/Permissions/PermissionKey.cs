@@ -76,6 +76,26 @@ public readonly record struct PermissionKey
     }
 
     /// <summary>
+    /// Tries to parse a permission key from text.
+    /// </summary>
+    /// <param name="value">The text to parse.</param>
+    /// <param name="key">The parsed permission key.</param>
+    /// <returns><see langword="true"/> when the value parses; otherwise <see langword="false"/>.</returns>
+    public static bool TryParse(string value, out PermissionKey key)
+    {
+        try
+        {
+            key = Parse(value);
+            return true;
+        }
+        catch (FormatException)
+        {
+            key = default;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Returns the canonical `resource.action` text form.
     /// </summary>
     /// <returns>The canonical permission key text.</returns>
