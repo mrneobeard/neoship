@@ -18,6 +18,7 @@ public static class AuthEndpoints
 
         group.MapPost("/signup", SignupAsync);
         group.MapPost("/login", LoginAsync);
+        group.MapGet("/sso/{orgSlug}/begin", BeginSsoAsync);
         group.MapPost("/passkeys/begin-login", BeginPasskeyLoginAsync);
         group.MapPost("/passkeys/finish-login", FinishPasskeyLoginAsync);
         group.MapPost("/api-keys/login", LoginWithApiKeyAsync);
@@ -76,6 +77,8 @@ public static class AuthEndpoints
 
     public record LoginRequest(string Email, string Password);
 
+    public record BeginSsoResponse(long ProviderId, string AuthorizationUrl, string State, DateTime ExpiresAt);
+
     public record BeginPasskeyLoginRequest(string Email);
 
     public record BeginPasskeyLoginResponse(Guid ChallengeId, string OptionsJson);
@@ -117,6 +120,23 @@ public static class AuthEndpoints
         var (user, options) = result.Value;
         var challengeId = challenges.StoreLogin(user.Id, options);
         return TypedResults.Ok(new BeginPasskeyLoginResponse(challengeId, options.ToJson()));
+    }
+
+    private static async Task<Results<Ok<BeginSsoResponse>, NotFound>> BeginSsoAsync(
+        string orgSlug,
+        [FromQuery] long? providerId,
+        HttpContext httpContext,
+        SsoStore sso,
+        CancellationToken ct)
+    {
+        var redirectUri = $"{httpContext.Request.Scheme}://{httpContext.Request.Host}/api/v1/auth/sso/callback";
+        var result = await sso.BeginOidcAsync(orgSlug, providerId, redirectUri, ct);
+        if (result is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(new BeginSsoResponse(result.ProviderId, result.AuthorizationUrl, result.State, result.ExpiresAt));
     }
 
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> FinishPasskeyLoginAsync(

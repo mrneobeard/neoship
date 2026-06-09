@@ -1,0 +1,127 @@
+using System.Text.Json;
+
+using Microsoft.EntityFrameworkCore;
+
+using NeoShip.Data.Model;
+
+namespace NeoShip.ApiSvc.Stores;
+
+/// <summary>
+/// Builds SSO authorization requests.
+/// </summary>
+/// <remarks>
+/// Example:
+/// <code>
+/// var begin = await store.BeginOidcAsync("default", null, redirectUri, ct);
+/// </code>
+/// </remarks>
+public sealed class SsoStore
+{
+    private readonly ShipDb db;
+    private readonly SsoChallengeStore challenges;
+
+    /// <summary>
+    /// Initializes a new <see cref="SsoStore"/> instance.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="challenges">The SSO challenge store.</param>
+    public SsoStore(ShipDb db, SsoChallengeStore challenges)
+    {
+        this.db = db;
+        this.challenges = challenges;
+    }
+
+    /// <summary>
+    /// Begins an OIDC authorization flow.
+    /// </summary>
+    /// <param name="orgSlug">The organization slug.</param>
+    /// <param name="providerId">The optional provider identifier.</param>
+    /// <param name="redirectUri">The callback redirect URI.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The SSO begin result, or <see langword="null"/>.</returns>
+    public async Task<SsoBeginResult?> BeginOidcAsync(string orgSlug, long? providerId, string redirectUri, CancellationToken ct = default)
+    {
+        var org = await this.db.Orgs.FirstOrDefaultAsync(x => x.Slug == orgSlug, ct);
+        if (org is null)
+        {
+            return null;
+        }
+
+        var query = this.db.UserIdentityProviders
+            .Where(x => x.OrgId == org.Id
+                && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
+                && x.StatusId == UserIdentityProviderStatus.Active.Id);
+
+        if (providerId.HasValue)
+        {
+            query = query.Where(x => x.Id == providerId.Value);
+        }
+
+        var provider = await query.OrderBy(x => x.Name).FirstOrDefaultAsync(ct);
+        if (provider is null || string.IsNullOrWhiteSpace(provider.ClientId))
+        {
+            return null;
+        }
+
+        var authorizationEndpoint = TryReadAuthorizationEndpoint(provider.MetadataJson);
+        if (authorizationEndpoint is null)
+        {
+            return null;
+        }
+
+        var nonce = SsoChallengeStore.CreateToken();
+        var challenge = this.challenges.Create(org.Id, provider.Id, redirectUri, nonce);
+        var authorizationUrl = BuildAuthorizationUrl(authorizationEndpoint, provider.ClientId, redirectUri, challenge.State, nonce);
+
+        return new SsoBeginResult(provider.Id, authorizationUrl, challenge.State, challenge.ExpiresAt);
+    }
+
+    private static string? TryReadAuthorizationEndpoint(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metadataJson);
+            if (!doc.RootElement.TryGetProperty("authorization_endpoint", out var element))
+            {
+                return null;
+            }
+
+            var value = element.GetString();
+            return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps ? uri.ToString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string BuildAuthorizationUrl(string authorizationEndpoint, string clientId, string redirectUri, string state, string nonce)
+    {
+        var separator = authorizationEndpoint.Contains('?', StringComparison.Ordinal) ? '&' : '?';
+        return authorizationEndpoint + separator + string.Join('&', new[]
+        {
+            Pair("client_id", clientId),
+            Pair("redirect_uri", redirectUri),
+            Pair("response_type", "code"),
+            Pair("scope", "openid profile email"),
+            Pair("state", state),
+            Pair("nonce", nonce),
+        });
+    }
+
+    private static string Pair(string key, string value) => $"{Uri.EscapeDataString(key)}={Uri.EscapeDataString(value)}";
+}
+
+/// <summary>
+/// Represents an SSO begin result.
+/// </summary>
+/// <param name="ProviderId">The identity provider identifier.</param>
+/// <param name="AuthorizationUrl">The provider authorization URL.</param>
+/// <param name="State">The state token.</param>
+/// <param name="ExpiresAt">The state expiry time.</param>
+public sealed record SsoBeginResult(long ProviderId, string AuthorizationUrl, string State, DateTime ExpiresAt);
