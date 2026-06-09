@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Microsoft.EntityFrameworkCore;
 
 using NeoShip.Data.Model;
@@ -189,6 +191,11 @@ public sealed class IdentityProviderStore
             return null;
         }
 
+        if (active && !HasValidActiveConfiguration(provider))
+        {
+            throw new ArgumentException("Identity provider configuration is incomplete or invalid.", nameof(active));
+        }
+
         provider.StatusId = active ? UserIdentityProviderStatus.Active.Id : UserIdentityProviderStatus.Inactive.Id;
         provider.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
@@ -199,5 +206,43 @@ public sealed class IdentityProviderStore
     private static bool IsValidIssuerUrl(string? issuerUrl)
     {
         return issuerUrl is null || (Uri.TryCreate(issuerUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static bool HasValidActiveConfiguration(UserIdentityProvider provider)
+    {
+        if (provider.ProviderTypeId != UserIdentityProviderType.OIDC.Id)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(provider.ClientId)
+            && IsValidIssuerUrl(provider.IssuerUrl)
+            && Uri.TryCreate(provider.IssuerUrl, UriKind.Absolute, out _)
+            && HasHttpsMetadataEndpoint(provider.MetadataJson, "authorization_endpoint")
+            && HasHttpsMetadataEndpoint(provider.MetadataJson, "token_endpoint");
+    }
+
+    private static bool HasHttpsMetadataEndpoint(string? metadataJson, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metadataJson);
+            if (!doc.RootElement.TryGetProperty(propertyName, out var element))
+            {
+                return false;
+            }
+
+            var value = element.GetString();
+            return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 }

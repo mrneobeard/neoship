@@ -1683,7 +1683,16 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var provider = await providers.SetActiveAsync(org.Id, providerId, active, ct);
+        UserIdentityProvider? provider;
+        try
+        {
+            provider = await providers.SetActiveAsync(org.Id, providerId, active, ct);
+        }
+        catch (ArgumentException)
+        {
+            return TypedResults.BadRequest("Invalid identity provider request.");
+        }
+
         if (provider is null)
         {
             return TypedResults.NotFound();

@@ -82,7 +82,7 @@ public class IdentityProviderStoreTests
             "https://idp.example.com",
             "client-id",
             "client-secret",
-            "{}",
+            "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\",\"token_endpoint\":\"https://idp.example.com/oauth2/token\"}",
             TestContext.Current.CancellationToken);
 
         Assert.Equal(UserIdentityProviderStatus.Inactive.Id, provider.StatusId);
@@ -212,5 +212,54 @@ public class IdentityProviderStoreTests
             null,
             null,
             TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies OIDC providers require complete HTTPS metadata before activation.
+    /// </summary>
+    [Fact]
+    public async Task IdentityProviderStore_RejectsIncompleteOidcActivation()
+    {
+        await using var db = CreateDatabase();
+        var store = CreateStore(db);
+        var createdBy = Guid.NewGuid();
+        db.Users.Add(new User(createdBy, "idp-enable@example.com", "IDP Enable")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var incomplete = await store.CreateAsync(
+            Constants.DefaultOrganizationId,
+            createdBy,
+            "Incomplete OIDC",
+            UserIdentityProviderType.OIDC,
+            "https://idp.example.com",
+            "client-id",
+            null,
+            "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\"}",
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SetActiveAsync(
+            Constants.DefaultOrganizationId,
+            incomplete.Id,
+            active: true,
+            TestContext.Current.CancellationToken));
+
+        var complete = await store.UpdateAsync(
+            Constants.DefaultOrganizationId,
+            incomplete.Id,
+            null,
+            null,
+            null,
+            null,
+            "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\",\"token_endpoint\":\"https://idp.example.com/oauth2/token\"}",
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(complete);
+        var enabled = await store.SetActiveAsync(Constants.DefaultOrganizationId, complete!.Id, active: true, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(enabled);
+        Assert.Equal(UserIdentityProviderStatus.Active.Id, enabled!.StatusId);
     }
 }
