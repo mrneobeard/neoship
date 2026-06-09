@@ -31,7 +31,7 @@ public static class OrgEndpoints
     }
 
     public record ServiceAccountResponse(
-        Guid Id, string Name, string Description, DateTime CreatedAt, DateTime? UpdatedAt);
+        Guid Id, string Name, string? Description, DateTime CreatedAt, DateTime? UpdatedAt);
 
     private static async Task<Results<Ok<List<ServiceAccountResponse>>, NotFound>> ListServiceAccountsAsync(
         string orgSlug,
