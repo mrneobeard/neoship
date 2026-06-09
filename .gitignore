@@ -1,1 +1,31 @@
-node_modules
+node_modules/
+
+# .NET
+/bin/
+obj/
+TestResults/
+
+# Frontend build and test output
+dist/
+build/
+coverage/
+playwright-report/
+.svelte-kit/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# opencode local dependency cache
+.opencode/.gitignore
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+.opencode/bun.lock
+
+# Local editor state
+.idea/
+
+# OS/editor noise
+.DS_Store
+*.swp
