@@ -31,6 +31,7 @@ public static class OrgEndpoints
 
         group.MapGet("/service-accounts", ListServiceAccountsAsync);
         group.MapPost("/service-accounts", CreateServiceAccountAsync);
+        group.MapGet("/service-accounts/{serviceAccountId:guid}", GetServiceAccountAsync);
         group.MapPatch("/service-accounts/{serviceAccountId:guid}", UpdateServiceAccountAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/disable", DisableServiceAccountAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/enable", EnableServiceAccountAsync);
@@ -678,6 +679,37 @@ public static class OrgEndpoints
     }
 
     public record CreateServiceAccountRequest(string Name, string? Description);
+
+    private static async Task<IResult> GetServiceAccountAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
+        if (sa is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
+    }
 
     private static async Task<IResult> CreateServiceAccountAsync(
         string orgSlug,

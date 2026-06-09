@@ -167,4 +167,35 @@ public class ServiceAccountStoreTests
         Assert.Null(accounts[0].DeletedAt);
         Assert.NotNull(accounts[0].UpdatedAt);
     }
+
+    /// <summary>
+    /// Verifies single service account reads exclude disabled accounts.
+    /// </summary>
+    [Fact]
+    public async Task GetAsync_ExcludesDisabledServiceAccounts()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "sa-get-tests@example.com", "Service Account Get Tester")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "disabled-bot",
+            NameUpcase = "DISABLED-BOT",
+            CreatedBy = user.Id,
+            DeletedAt = DateTime.UtcNow,
+        };
+
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = CreateStore(db);
+        var found = await store.GetAsync(Constants.DefaultOrganizationId, serviceAccount.Id, TestContext.Current.CancellationToken);
+
+        Assert.Null(found);
+    }
 }
