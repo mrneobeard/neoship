@@ -32,6 +32,64 @@ public class ApiKeyStore
         return (plaintextKey, apiKey);
     }
 
+    /// <summary>
+    /// Authenticates a user API key and updates its last-used timestamp.
+    /// </summary>
+    /// <param name="rawKey">The plaintext API key.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching API key with its user loaded when valid; otherwise <see langword="null"/>.</returns>
+    public async Task<UserApiKey?> AuthenticateUserApiKeyAsync(string rawKey, CancellationToken ct = default)
+    {
+        if (!TryDecodeUserKey(rawKey, out var keyBytes))
+        {
+            return null;
+        }
+
+        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+
+        var key = await db.UserApiKeys
+            .Include(k => k.User)
+            .FirstOrDefaultAsync(k => k.KeyDigest == digest
+                && k.DeletedAt == null
+                && k.RevokedAt == null
+                && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow), ct);
+
+        if (key is null || key.User is null)
+        {
+            return null;
+        }
+
+        key.LastUsedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("API key authenticated: {ApiKeyId} for user {UserId}", key.Id, key.UserId);
+        return key;
+    }
+
+    private static bool TryDecodeUserKey(string rawKey, out byte[] keyBytes)
+    {
+        keyBytes = [];
+
+        if (string.IsNullOrWhiteSpace(rawKey))
+        {
+            return false;
+        }
+
+        if (!rawKey.StartsWith("nsu_", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            keyBytes = Convert.FromBase64String(rawKey[4..]);
+            return true;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
     public async Task<List<UserApiKey>> ListUserApiKeysAsync(Guid userId, CancellationToken ct = default)
     {
         return await db.UserApiKeys

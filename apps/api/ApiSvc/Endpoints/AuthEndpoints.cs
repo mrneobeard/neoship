@@ -16,6 +16,7 @@ public static class AuthEndpoints
 
         group.MapPost("/signup", SignupAsync);
         group.MapPost("/login", LoginAsync);
+        group.MapPost("/api-keys/login", LoginWithApiKeyAsync);
         group.MapPost("/logout", LogoutAsync);
 
         group.MapPost("/password-reset/request", RequestPasswordResetAsync);
@@ -79,6 +80,31 @@ public static class AuthEndpoints
     {
         var (result, user, session, rawToken) = await auth.LoginAsync(
             req.Email, req.Password, Constants.DefaultOrganizationId, ct);
+
+        if (result == LoginResult.AccountLocked)
+            return TypedResults.StatusCode(423);
+
+        if (result != LoginResult.Success || user is null || session is null || rawToken is null)
+            return TypedResults.Unauthorized();
+
+        SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
+
+        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+    }
+
+    /// <summary>
+    /// Represents an API key login request.
+    /// </summary>
+    /// <param name="ApiKey">The plaintext API key.</param>
+    public record ApiKeyLoginRequest(string ApiKey);
+
+    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> LoginWithApiKeyAsync(
+        [FromBody] ApiKeyLoginRequest req,
+        HttpContext httpContext,
+        AuthStore auth,
+        CancellationToken ct)
+    {
+        var (result, user, session, rawToken) = await auth.LoginWithUserApiKeyAsync(req.ApiKey, ct);
 
         if (result == LoginResult.AccountLocked)
             return TypedResults.StatusCode(423);

@@ -44,7 +44,8 @@ public class MigrationTests
         var tokens = new TokenStore();
         var sessions = new SessionStore(db, tokens, ctx, NullLogger<SessionStore>.Instance);
         var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
-        return new AuthStore(db, passwords, sessions, audit, ctx, NullLogger<AuthStore>.Instance);
+        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
+        return new AuthStore(db, passwords, sessions, audit, apiKeys, ctx, NullLogger<AuthStore>.Instance);
     }
 
     [Fact]
@@ -78,6 +79,35 @@ public class MigrationTests
         Assert.NotNull(user);
         Assert.NotNull(rawToken);
         Assert.Equal("new@example.com", user.Email);
+    }
+
+    [Fact]
+    public async Task ApiKeyLogin_CreatesSessionAndReturnsSuccess()
+    {
+        var (db, ctx) = CreateDatabase();
+        var auth = CreateAuthStore(db, ctx);
+        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
+
+        var (_, user, _, _) = await auth.SignupAsync(
+            "apikey@example.com", "Api Key User", "password123",
+            Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+
+        var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
+            user!.Id, "cli", null, "[]", DateTime.UtcNow.AddHours(1));
+
+        db.UserApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (result, loggedInUser, session, rawToken) = await auth.LoginWithUserApiKeyAsync(
+            plaintextKey, TestContext.Current.CancellationToken);
+
+        Assert.Equal(LoginResult.Success, result);
+        Assert.NotNull(loggedInUser);
+        Assert.NotNull(session);
+        Assert.NotNull(rawToken);
+        Assert.Equal(user.Id, loggedInUser!.Id);
     }
 
     [Fact]

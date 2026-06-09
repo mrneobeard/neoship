@@ -27,17 +27,29 @@ public class AuthStore
     private readonly PasswordStore passwords;
     private readonly SessionStore sessions;
     private readonly AuditStore audit;
+    private readonly ApiKeyStore apiKeys;
 
     private readonly RequestContext requestContext;
     private readonly ILogger<AuthStore> logger;
     private static readonly ActivitySource activitySource = new(OTelConstants.ActivitySourceName);
 
-    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, RequestContext requestContext, ILogger<AuthStore> logger)
+    /// <summary>
+    /// Initializes a new <see cref="AuthStore"/> instance.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="passwords">The password helper.</param>
+    /// <param name="sessions">The session store.</param>
+    /// <param name="audit">The audit store.</param>
+    /// <param name="apiKeys">The API key store.</param>
+    /// <param name="requestContext">The request context.</param>
+    /// <param name="logger">The logger.</param>
+    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, RequestContext requestContext, ILogger<AuthStore> logger)
     {
         this.db = db;
         this.passwords = passwords;
         this.sessions = sessions;
         this.audit = audit;
+        this.apiKeys = apiKeys;
         this.requestContext = requestContext;
         this.logger = logger;
     }
@@ -205,6 +217,52 @@ public class AuthStore
         activity?.SetTag(OTelConstants.AuthResult, "success");
         activity?.SetTag(OTelConstants.UserId, user.Id.ToString());
         await this.audit.RecordAsync("auth.login.success", orgId, user.Id, "login", ct: ct);
+
+        return (LoginResult.Success, user, session, rawToken);
+    }
+
+    /// <summary>
+    /// Logs in a user with a plaintext API key and creates a session.
+    /// </summary>
+    /// <param name="rawKey">The plaintext API key.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The login result, authenticated user, session, and session token.</returns>
+    public async Task<(LoginResult Result, User? User, UserSession? Session, string? RawToken)> LoginWithUserApiKeyAsync(
+        string rawKey,
+        CancellationToken ct = default)
+    {
+        using var activity = activitySource.StartActivity("auth.api_key_login", ActivityKind.Internal);
+        activity?.SetTag(OTelConstants.AuthAction, "api_key_login");
+
+        var apiKey = await this.apiKeys.AuthenticateUserApiKeyAsync(rawKey, ct);
+        if (apiKey is null || apiKey.User is null)
+        {
+            activity?.SetTag(OTelConstants.AuthResult, "invalid_api_key");
+            await this.audit.RecordAsync("auth.api_key_login.failed", null, null, "api_key_login",
+                dataJson: "{\"reason\":\"invalid_api_key\"}", ct: ct);
+            return (LoginResult.InvalidCredentials, null, null, null);
+        }
+
+        var user = apiKey.User;
+
+        if (user.StatusId == UserStatus.Suspended.Id)
+        {
+            activity?.SetTag(OTelConstants.AuthResult, "account_suspended");
+            await this.audit.RecordAsync("auth.api_key_login.failed", user.OrgId, user.Id, "api_key_login",
+                dataJson: "{\"reason\":\"account_suspended\"}", ct: ct);
+            return (LoginResult.AccountSuspended, null, null, null);
+        }
+
+        var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, user.OrgId, ct);
+
+        this.requestContext.UserId = user.Id;
+        this.requestContext.OrgId = user.OrgId;
+        this.requestContext.SessionId = session.Id;
+
+        this.logger.LogInformation("User API key login: {UserId} key={ApiKeyId}", user.Id, apiKey.Id);
+        activity?.SetTag(OTelConstants.AuthResult, "success");
+        activity?.SetTag(OTelConstants.UserId, user.Id.ToString());
+        await this.audit.RecordAsync("auth.api_key_login.success", user.OrgId, user.Id, "api_key_login", ct: ct);
 
         return (LoginResult.Success, user, session, rawToken);
     }
