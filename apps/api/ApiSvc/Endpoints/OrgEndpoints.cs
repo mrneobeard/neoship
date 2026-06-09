@@ -1455,6 +1455,7 @@ public static class OrgEndpoints
         string Status,
         string? IssuerUrl,
         string? ClientId,
+        bool HasClientSecret,
         string? MetadataJson,
         DateTime CreatedAt,
         DateTime? UpdatedAt);
@@ -1482,6 +1483,7 @@ public static class OrgEndpoints
             provider.Status.Name,
             provider.IssuerUrl,
             provider.ClientId,
+            provider.ClientSecretEncrypted.Length > 0,
             provider.MetadataJson,
             provider.CreatedAt,
             provider.UpdatedAt);
