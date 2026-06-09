@@ -30,7 +30,12 @@ tasks:
   format:dotnet:
     desc: Format all .NET projects
     uses: shell
-    run: dotnet format neoship.slnx --verify-no-changes
+    run: ./scripts/dotnet-format-lf.sh neoship.slnx --verify-no-changes
+
+  format:dotnet:write:
+    desc: Format all .NET projects and normalize LF endings
+    uses: shell
+    run: ./scripts/dotnet-format-lf.sh neoship.slnx
 
   test:dotnet:
     desc: Run all .NET tests

@@ -1,8 +1,9 @@
-0root = true
+root = true
 
 # All files
 [*]
 indent_style = space
+end_of_line = lf
 
 # Xml files
 [*.xml]
@@ -31,7 +32,7 @@ indent_size = 4
 tab_width = 4
 
 # New line preferences
-end_of_line = crlf
+end_of_line = lf
 insert_final_newline = false
 
 #### .NET Coding Conventions ####

@@ -1,0 +1,41 @@
+# Normalize text files to LF in the repository and working tree.
+* text=auto eol=lf
+
+# Source code and project files.
+*.cs text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+*.slnx text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.svelte text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+
+# Documentation and config files.
+*.md text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.toml text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.xml text eol=lf
+
+# Windows command scripts require CRLF for maximum compatibility.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.pdb binary

@@ -100,7 +100,7 @@ public static partial class Env
     /// </remarks>
     public static string? Get(string variable, EnvironmentVariableTarget target = EnvironmentVariableTarget.Process)
         => Environment.GetEnvironmentVariable(variable, target);
-    
+
     public static string GetOrDefault(string variable, string defaultValue, EnvironmentVariableTarget target = EnvironmentVariableTarget.Process)
         => Environment.GetEnvironmentVariable(variable, target) ?? defaultValue;
 
@@ -370,7 +370,7 @@ public static partial class Env
     /// </remarks>
     public static string[] SplitPath(EnvironmentVariableTarget target = EnvironmentVariableTarget.Process)
         => SplitPath(Get(OperatingSystem.IsWindows() ? "Path" : "PATH", target) ?? string.Empty);
-    
+
     public static bool TryGet(string variable, out string value, EnvironmentVariableTarget target = EnvironmentVariableTarget.Process)
     {
         var result = Environment.GetEnvironmentVariable(variable, target);

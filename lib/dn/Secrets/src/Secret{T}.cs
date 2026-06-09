@@ -8,9 +8,9 @@ namespace NeoBeard.Secrets;
 /// <summary>
 /// Stores sensitive byte or character data in an encrypted pinned buffer. Based on the spec in a thread
 /// in the .NET designs repo: https://github.com/dotnet/designs/pull/147#issuecomment-825326105
-/// 
+///
 /// The primary use case is for storing sensitive data in memory, such as passwords, API keys, and other sensitive information
-/// and avoid logging it, making additional copies of the data in memory. 
+/// and avoid logging it, making additional copies of the data in memory.
 /// </summary>
 /// <typeparam name="T">The element type. Only <see cref="byte"/> and <see cref="char"/> are supported.</typeparam>
 /// <remarks>

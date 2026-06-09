@@ -400,7 +400,7 @@ public sealed class Blake3 : HashAlgorithm
                 var words = Compress(this.inputChainingValue, this.blockWords, outputBlock, this.blockLength, this.flags | Root);
                 for (var i = 0; i < 16; i++)
                 {
-                 
+
                     BinaryPrimitives.WriteUInt32LittleEndian(block[(i * sizeof(uint)) ..], words[i]);
                 }
 
