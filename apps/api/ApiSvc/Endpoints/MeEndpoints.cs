@@ -11,6 +11,11 @@ namespace NeoShip.ApiSvc.Endpoints;
 
 public static class MeEndpoints
 {
+    /// <summary>
+    /// The HTTP context item key that stores the authenticated user API key identifier.
+    /// </summary>
+    public const string UserApiKeyItemKey = "neoship.user_api_key_id";
+
     public static RouteGroupBuilder MapMeEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/v1/me");
@@ -26,22 +31,57 @@ public static class MeEndpoints
         return group;
     }
 
+    /// <summary>
+    /// Authenticates a user from a session cookie or bearer user API key.
+    /// </summary>
+    /// <param name="httpContext">The HTTP context.</param>
+    /// <param name="sessions">The session store.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The authenticated <see cref="User"/>, or <see langword="null"/>.</returns>
     public static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionStore sessions, CancellationToken ct)
     {
         var rawToken = httpContext.Request.Cookies[AuthEndpoints.SessionCookieName];
-        if (rawToken is null)
+        if (rawToken is not null)
+        {
+            var session = await sessions.ValidateSessionAsync(rawToken, ct);
+            if (session is not null)
+            {
+                return await httpContext.RequestServices.GetRequiredService<ShipDb>()
+                    .Users.FirstOrDefaultAsync(u => u.Id == session.UserId, ct);
+            }
+
+            return null;
+        }
+
+        var bearerToken = ReadBearerToken(httpContext.Request);
+        if (bearerToken is null)
         {
             return null;
         }
 
-        var session = await sessions.ValidateSessionAsync(rawToken, ct);
-        if (session is null)
+        var apiKeys = httpContext.RequestServices.GetRequiredService<ApiKeyStore>();
+        var apiKey = await apiKeys.AuthenticateUserApiKeyAsync(bearerToken, ct);
+        if (apiKey?.User is null)
         {
             return null;
         }
 
-        return await httpContext.RequestServices.GetRequiredService<ShipDb>()
-            .Users.FirstOrDefaultAsync(u => u.Id == session.UserId, ct);
+        httpContext.Items[UserApiKeyItemKey] = apiKey.Id;
+        return apiKey.User;
+    }
+
+    private static string? ReadBearerToken(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        const string prefix = "Bearer ";
+
+        if (!header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var token = header[prefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
     public record UserResponse(Guid Id, string Email, string Name, string? AvatarUrl);

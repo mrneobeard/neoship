@@ -90,13 +90,29 @@ public static class OrgEndpoints
             return (null, TypedResults.Unauthorized());
         }
 
-        var allowed = await permissions.UserHasAsync(user.Id, permission, PermissionScopeKind.Organization, orgSlug, ct);
+        var allowed = await HasOrgPermissionAsync(httpContext, permissions, user.Id, permission, orgSlug, ct);
         if (!allowed)
         {
             return (null, TypedResults.Forbid());
         }
 
         return (user, null);
+    }
+
+    private static async Task<bool> HasOrgPermissionAsync(
+        HttpContext httpContext,
+        PermissionResolver permissions,
+        Guid userId,
+        PermissionKey permission,
+        string orgSlug,
+        CancellationToken ct)
+    {
+        if (httpContext.Items.TryGetValue(MeEndpoints.UserApiKeyItemKey, out var value) && value is Guid apiKeyId)
+        {
+            return (await permissions.ResolveUserApiKeyAsync(apiKeyId, ct)).Allows(permission, PermissionScopeKind.Organization, orgSlug);
+        }
+
+        return await permissions.UserHasAsync(userId, permission, PermissionScopeKind.Organization, orgSlug, ct);
     }
 
     private static RoleResponse ToRoleResponse(Role role)
