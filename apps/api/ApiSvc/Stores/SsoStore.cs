@@ -168,6 +168,55 @@ public sealed class SsoStore
         return user;
     }
 
+    /// <summary>
+    /// Lists external identities linked to a user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The linked external identities.</returns>
+    public async Task<List<UserExternalIdentity>> ListExternalIdentitiesAsync(Guid userId, CancellationToken ct = default)
+    {
+        return await this.db.UserExternalIdentities
+            .Include(x => x.Provider)
+            .Where(x => x.UserId == userId)
+            .OrderBy(x => x.ProviderId)
+            .ThenBy(x => x.Email)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Unlinks an external identity if policy and lockout safety allow it.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="externalIdentityId">The external identity identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The unlink result.</returns>
+    public async Task<SsoExternalIdentityUnlinkResult> UnlinkExternalIdentityAsync(Guid userId, Guid externalIdentityId, CancellationToken ct = default)
+    {
+        var link = await this.db.UserExternalIdentities
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(x => x.Id == externalIdentityId && x.UserId == userId, ct);
+        if (link?.User is null)
+        {
+            return SsoExternalIdentityUnlinkResult.NotFound;
+        }
+
+        var org = await this.db.Orgs.FirstOrDefaultAsync(x => x.Id == link.OrgId, ct);
+        if (org is null || !org.AllowSelfServiceExternalIdentityUnlink)
+        {
+            return SsoExternalIdentityUnlinkResult.PolicyDenied;
+        }
+
+        if (!await HasAlternativeSignInMethodAsync(link.User, externalIdentityId, org, ct))
+        {
+            return SsoExternalIdentityUnlinkResult.LastMethod;
+        }
+
+        this.db.UserExternalIdentities.Remove(link);
+        await this.db.SaveChangesAsync(ct);
+        return SsoExternalIdentityUnlinkResult.Success;
+    }
+
     private static string? TryReadAuthorizationEndpoint(string? metadataJson)
     {
         if (string.IsNullOrWhiteSpace(metadataJson))
@@ -212,6 +261,30 @@ public sealed class SsoStore
     {
         return TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes(subject));
     }
+
+    private async Task<bool> HasAlternativeSignInMethodAsync(User user, Guid excludingExternalIdentityId, Organization org, CancellationToken ct)
+    {
+        if (org.AllowPasswordAuth && await this.db.UserPasswordAuths.AnyAsync(x => x.UserId == user.Id && x.PasswordHash != string.Empty, ct))
+        {
+            return true;
+        }
+
+        if (org.AllowPasskeyAuth && await this.db.UserMfaFactors.AnyAsync(x => x.UserId == user.Id
+            && x.Type == MfaFactorType.Passkey.Id
+            && x.VerifiedAt != null, ct))
+        {
+            return true;
+        }
+
+        return await this.db.UserExternalIdentities
+            .Include(x => x.Provider)
+            .AnyAsync(x => x.UserId == user.Id
+                && x.Id != excludingExternalIdentityId
+                && x.Provider != null
+                && x.Provider.StatusId == UserIdentityProviderStatus.Active.Id
+                && ((org.AllowOidcSso && x.Provider.ProviderTypeId == UserIdentityProviderType.OIDC.Id)
+                    || (org.AllowSamlSso && x.Provider.ProviderTypeId == UserIdentityProviderType.SAML.Id)), ct);
+    }
 }
 
 /// <summary>
@@ -222,3 +295,29 @@ public sealed class SsoStore
 /// <param name="State">The state token.</param>
 /// <param name="ExpiresAt">The state expiry time.</param>
 public sealed record SsoBeginResult(long ProviderId, string AuthorizationUrl, string State, DateTime ExpiresAt);
+
+/// <summary>
+/// Represents the result of unlinking an external identity.
+/// </summary>
+public enum SsoExternalIdentityUnlinkResult
+{
+    /// <summary>
+    /// The external identity was unlinked.
+    /// </summary>
+    Success,
+
+    /// <summary>
+    /// The external identity was not found.
+    /// </summary>
+    NotFound,
+
+    /// <summary>
+    /// Organization policy denied self-service unlinking.
+    /// </summary>
+    PolicyDenied,
+
+    /// <summary>
+    /// Unlinking would remove the user's last usable sign-in method.
+    /// </summary>
+    LastMethod,
+}

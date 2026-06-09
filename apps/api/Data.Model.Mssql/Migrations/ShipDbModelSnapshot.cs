@@ -223,6 +223,26 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AllowOidcSso")
+                        .HasColumnType("bit")
+                        .HasColumnName("allow_oidc_sso");
+
+                    b.Property<bool>("AllowPasskeyAuth")
+                        .HasColumnType("bit")
+                        .HasColumnName("allow_passkey_auth");
+
+                    b.Property<bool>("AllowPasswordAuth")
+                        .HasColumnType("bit")
+                        .HasColumnName("allow_password_auth");
+
+                    b.Property<bool>("AllowSamlSso")
+                        .HasColumnType("bit")
+                        .HasColumnName("allow_saml_sso");
+
+                    b.Property<bool>("AllowSelfServiceExternalIdentityUnlink")
+                        .HasColumnType("bit")
+                        .HasColumnName("allow_self_service_external_identity_unlink");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
@@ -242,6 +262,10 @@ namespace NeoShip.Data.Mssql.Migrations
                     b.Property<int>("OrganizationPlanId")
                         .HasColumnType("int")
                         .HasColumnName("organization_plan_id");
+
+                    b.Property<bool>("RequireSso")
+                        .HasColumnType("bit")
+                        .HasColumnName("require_sso");
 
                     b.Property<string>("Slug")
                         .IsRequired()

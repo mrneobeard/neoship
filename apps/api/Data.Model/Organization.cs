@@ -43,4 +43,34 @@ public class Organization
     public DateTime  CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether password sign-in is allowed.
+    /// </summary>
+    public bool AllowPasswordAuth { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether passkey sign-in is allowed.
+    /// </summary>
+    public bool AllowPasskeyAuth { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether OIDC SSO sign-in is allowed.
+    /// </summary>
+    public bool AllowOidcSso { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether SAML SSO sign-in is allowed.
+    /// </summary>
+    public bool AllowSamlSso { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether SSO is required for the organization.
+    /// </summary>
+    public bool RequireSso { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether users may unlink external identities themselves.
+    /// </summary>
+    public bool AllowSelfServiceExternalIdentityUnlink { get; set; } = true;
 }

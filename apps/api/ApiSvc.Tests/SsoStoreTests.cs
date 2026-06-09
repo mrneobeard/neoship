@@ -219,6 +219,135 @@ public class SsoStoreTests
         Assert.NotNull(link.LastUsedAt);
     }
 
+    [Fact]
+    public async Task UnlinkExternalIdentityAsync_RejectsLastSignInMethod()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var linkId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "unlink-user@example.com", "Unlink User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        db.UserExternalIdentities.Add(new UserExternalIdentity
+        {
+            Id = linkId,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            ProviderId = 10,
+            Subject = "subject",
+            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(SsoExternalIdentityUnlinkResult.LastMethod, result);
+        Assert.NotNull(await db.UserExternalIdentities.FindAsync([linkId], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task UnlinkExternalIdentityAsync_AllowsWhenPasswordExists()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var linkId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "unlink-password@example.com", "Unlink Password")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserPasswordAuths.Add(new UserPasswordAuth
+        {
+            UserId = userId,
+            PasswordHash = "hash",
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        db.UserExternalIdentities.Add(new UserExternalIdentity
+        {
+            Id = linkId,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            ProviderId = 10,
+            Subject = "subject",
+            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(SsoExternalIdentityUnlinkResult.Success, result);
+        Assert.Null(await db.UserExternalIdentities.FindAsync([linkId], TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task UnlinkExternalIdentityAsync_RespectsOrganizationPolicy()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var userId = Guid.NewGuid();
+        var linkId = Guid.NewGuid();
+        var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
+        org.AllowSelfServiceExternalIdentityUnlink = false;
+        db.Users.Add(new User(userId, "unlink-policy@example.com", "Unlink Policy")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserPasswordAuths.Add(new UserPasswordAuth
+        {
+            UserId = userId,
+            PasswordHash = "hash",
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        db.UserExternalIdentities.Add(new UserExternalIdentity
+        {
+            Id = linkId,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            ProviderId = 10,
+            Subject = "subject",
+            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(SsoExternalIdentityUnlinkResult.PolicyDenied, result);
+        Assert.NotNull(await db.UserExternalIdentities.FindAsync([linkId], TestContext.Current.CancellationToken));
+    }
+
     /// <summary>
     /// Verifies OIDC finish rejects unverified email identities.
     /// </summary>

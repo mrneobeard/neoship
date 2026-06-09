@@ -30,6 +30,9 @@ public static class MeEndpoints
         group.MapPost("/api-keys", CreateApiKeyAsync);
         group.MapPost("/api-keys/{apiKeyId:guid}/revoke", RevokeApiKeyAsync);
 
+        group.MapGet("/external-identities", GetExternalIdentitiesAsync);
+        group.MapDelete("/external-identities/{externalIdentityId:guid}", UnlinkExternalIdentityAsync);
+
         group.MapPost("/mfa/totp/start", StartTotpAsync);
         group.MapPost("/mfa/totp/confirm", ConfirmTotpAsync);
         group.MapPost("/mfa/totp/disable", DisableTotpAsync);
@@ -274,6 +277,8 @@ public static class MeEndpoints
 
     private sealed record FinishPasskeyRegistrationRequest(Guid ChallengeId, string? Name, AuthenticatorAttestationRawResponse Response);
 
+    private sealed record ExternalIdentityResponse(Guid Id, long ProviderId, string? ProviderName, string Subject, string? Email, DateTime CreatedAt, DateTime? LastUsedAt);
+
     private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
@@ -378,6 +383,52 @@ public static class MeEndpoints
         var response = factors.Select(x => new PasskeyResponse(x.Id, x.Name, x.CreatedAt, x.LastUsedAt)).ToList();
 
         return TypedResults.Ok(response);
+    }
+
+    private static async Task<Results<Ok<List<ExternalIdentityResponse>>, UnauthorizedHttpResult>> GetExternalIdentitiesAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        SsoStore sso,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var identities = await sso.ListExternalIdentitiesAsync(user.Id, ct);
+        return TypedResults.Ok(identities.Select(x => new ExternalIdentityResponse(
+            x.Id,
+            x.ProviderId,
+            x.Provider?.Name,
+            x.Subject,
+            x.Email,
+            x.CreatedAt,
+            x.LastUsedAt)).ToList());
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound, ForbidHttpResult, Conflict<string>>> UnlinkExternalIdentityAsync(
+        Guid externalIdentityId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        SsoStore sso,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var result = await sso.UnlinkExternalIdentityAsync(user.Id, externalIdentityId, ct);
+        return result switch
+        {
+            SsoExternalIdentityUnlinkResult.Success => TypedResults.Ok(),
+            SsoExternalIdentityUnlinkResult.NotFound => TypedResults.NotFound(),
+            SsoExternalIdentityUnlinkResult.PolicyDenied => TypedResults.Forbid(),
+            _ => TypedResults.Conflict("Configure another sign-in method before unlinking this identity."),
+        };
     }
 
     private static async Task<Results<Ok<BeginPasskeyRegistrationResponse>, UnauthorizedHttpResult>> BeginPasskeyRegistrationAsync(

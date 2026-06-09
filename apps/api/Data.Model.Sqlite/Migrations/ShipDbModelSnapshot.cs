@@ -216,6 +216,26 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("id");
 
+                    b.Property<bool>("AllowOidcSso")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_oidc_sso");
+
+                    b.Property<bool>("AllowPasskeyAuth")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_passkey_auth");
+
+                    b.Property<bool>("AllowPasswordAuth")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_password_auth");
+
+                    b.Property<bool>("AllowSamlSso")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_saml_sso");
+
+                    b.Property<bool>("AllowSelfServiceExternalIdentityUnlink")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("allow_self_service_external_identity_unlink");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
@@ -235,6 +255,10 @@ namespace NeoShip.Data.Sqlite.Migrations
                     b.Property<ushort>("OrganizationPlanId")
                         .HasColumnType("INTEGER")
                         .HasColumnName("organization_plan_id");
+
+                    b.Property<bool>("RequireSso")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("require_sso");
 
                     b.Property<string>("Slug")
                         .IsRequired()
