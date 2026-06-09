@@ -94,6 +94,41 @@ public class RoleGroupStoreTests
     }
 
     /// <summary>
+    /// Verifies single role reads are scoped to the owning organization.
+    /// </summary>
+    [Fact]
+    public async Task RoleStore_GetAsync_RejectsWrongOrganization()
+    {
+        var db = CreateDatabase();
+        var otherOrgId = Guid.NewGuid();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "role-get@example.com", "Role Get")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Orgs.Add(new Organization
+        {
+            Id = otherOrgId,
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = 1,
+            TenantModeId = 0,
+            OrganizationPlanId = 1,
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        db.Users.Add(creator);
+        db.SaveChanges();
+
+        var role = await roles.CreateAsync(Constants.DefaultOrganizationId, creator.Id, "readers", null, TestContext.Current.CancellationToken);
+
+        Assert.Null(await roles.GetAsync(otherOrgId, role.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await roles.GetAsync(Constants.DefaultOrganizationId, role.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Verifies deleting a role removes claims and direct assignments.
     /// </summary>
     [Fact]
@@ -184,6 +219,35 @@ public class RoleGroupStoreTests
         Assert.Equal("ops@example.com", updated.Email);
         Assert.Equal("OPS@EXAMPLE.COM", updated.EmailUpcase);
         Assert.Equal("Operations", updated.Description);
+    }
+
+    /// <summary>
+    /// Verifies single group reads are scoped to the owning organization.
+    /// </summary>
+    [Fact]
+    public async Task GroupStore_GetAsync_RejectsWrongOrganization()
+    {
+        var db = CreateDatabase();
+        var otherOrgId = Guid.NewGuid();
+        var groups = new GroupStore(db, NullLogger<GroupStore>.Instance);
+
+        db.Orgs.Add(new Organization
+        {
+            Id = otherOrgId,
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = 1,
+            TenantModeId = 0,
+            OrganizationPlanId = 1,
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        db.SaveChanges();
+
+        var group = await groups.CreateAsync(Constants.DefaultOrganizationId, "readers", null, null, TestContext.Current.CancellationToken);
+
+        Assert.Null(await groups.GetAsync(otherOrgId, group.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await groups.GetAsync(Constants.DefaultOrganizationId, group.Id, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

@@ -17,6 +17,7 @@ public static class OrgEndpoints
 
         group.MapGet("/roles", ListRolesAsync);
         group.MapPost("/roles", CreateRoleAsync);
+        group.MapGet("/roles/{roleId:guid}", GetRoleAsync);
         group.MapPatch("/roles/{roleId:guid}", UpdateRoleAsync);
         group.MapDelete("/roles/{roleId:guid}", DeleteRoleAsync);
         group.MapPost("/roles/{roleId:guid}/claims", AddRoleClaimAsync);
@@ -26,6 +27,7 @@ public static class OrgEndpoints
 
         group.MapGet("/groups", ListGroupsAsync);
         group.MapPost("/groups", CreateGroupAsync);
+        group.MapGet("/groups/{groupId:guid}", GetGroupAsync);
         group.MapPatch("/groups/{groupId:guid}", UpdateGroupAsync);
         group.MapDelete("/groups/{groupId:guid}", DeleteGroupAsync);
         group.MapPost("/groups/{groupId:guid}/members/users/{userId:guid}", AddGroupUserAsync);
@@ -305,6 +307,37 @@ public static class OrgEndpoints
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", ToRoleResponse(role));
     }
 
+    private static async Task<IResult> GetRoleAsync(
+        string orgSlug,
+        Guid roleId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var role = await roles.GetAsync(org.Id, roleId, ct);
+        if (role is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(ToRoleResponse(role));
+    }
+
     private static async Task<IResult> UpdateRoleAsync(
         string orgSlug,
         Guid roleId,
@@ -565,6 +598,37 @@ public static class OrgEndpoints
         var group = await groups.CreateAsync(org.Id, req.Name, req.Email, req.Description, ct);
         await audit.RecordAsync("org.groups.create", org.Id, auth.User!.Id, "group.create", targetType: "group", targetId: group.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", ToGroupResponse(group));
+    }
+
+    private static async Task<IResult> GetGroupAsync(
+        string orgSlug,
+        Guid groupId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var group = await groups.GetAsync(org.Id, groupId, ct);
+        if (group is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(ToGroupResponse(group));
     }
 
     private static async Task<IResult> UpdateGroupAsync(
