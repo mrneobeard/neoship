@@ -1,4 +1,5 @@
 
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NeoShip.Data.Model;
@@ -14,6 +15,7 @@ public class UserMfaFactor
     /// <summary>
     /// Gets or sets the name which is the device label.
     /// </summary>
+    [StringLength(128)]
     public string Name { get; set; } = string.Empty;
 
     public ushort Type { get; set; } = 1;
@@ -27,6 +29,7 @@ public class UserMfaFactor
 
     public DateTime? VerifiedAt { get; set; }
 
+    [StringLength(1024)]
     public string? TransportsJson { get; set; } = null;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

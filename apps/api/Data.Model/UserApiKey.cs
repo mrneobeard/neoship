@@ -34,10 +34,13 @@ public class UserApiKey
     [StringLength(64)]
     public string Name { get; set; } = string.Empty;
 
+    [StringLength(256)]
     public string? Description { get; set; } = null;
 
+    [StringLength(1024)]
     public string KeyDigest { get; set; } = string.Empty;
 
+    [StringLength(1024)]
     public string ScopesJson { get; set; } = string.Empty;
 
     public DateTime? ExpiresAt { get; set; } = null;

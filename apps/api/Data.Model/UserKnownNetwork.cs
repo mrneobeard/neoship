@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace NeoShip.Data.Model;
 
 /// <summary>
@@ -10,12 +12,16 @@ public class UserKnownNetwork
 
     public Guid UserId { get; set; } = Guid.Empty;
 
+    [StringLength(46)]
     public string? IpAddress { get; set; } = null;
 
+    [StringLength(128)]
     public string? IpDigest { get; set; } = null;
 
+    [StringLength(2)]
     public string? CountryCode { get; set; } = null;
 
+    [StringLength(128)]
     public string? Region { get; set; } = null;
 
     public uint? Asn { get; set; } = null;

@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NeoShip.Data.Model;
@@ -10,6 +11,7 @@ public class UserIdentityProvider
 
     public Guid OrgId { get; set; }
 
+    [StringLength(128)]
     public string Name { get; set; } = string.Empty;
 
     public ushort ProviderTypeId { get; set; }
@@ -30,14 +32,17 @@ public class UserIdentityProvider
         set => this.StatusId = value;
     }
 
+    [StringLength(2048)]
     public string? IssuerUrl { get; set; }
 
+    [StringLength(256)]
     public string? ClientId { get; set; }
 
     [Column("client_secret_enc")]
 
     public byte[] ClientSecretEncrypted { get; set; } = [];
 
+    [StringLength(4096)]
     public string? MetadataJson { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

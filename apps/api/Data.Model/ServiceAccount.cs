@@ -8,13 +8,15 @@ public class ServiceAccount
     public Guid Id { get; set; } = Guid.Empty;
 
     [StringLength(64)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
     [StringLength(64)]
+    [Required]
     public string NameUpcase { get; set; } = string.Empty;
 
     [StringLength(256)]
-    public string Description { get; set; } = string.Empty;
+    public string? Description { get; set; }
 
     public Guid OrgId { get; set; } = Guid.Empty;
 
@@ -35,7 +37,7 @@ public class ServiceAccount
 
 public readonly struct ServiceAccountStatus
 {
-    internal ServiceAccountStatus(ushort id, string name)
+    private ServiceAccountStatus(ushort id, string name)
     {
         this.Id = id;
         this.Name = name;

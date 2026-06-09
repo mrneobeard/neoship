@@ -19,10 +19,6 @@ public class UserPasswordAuth
 
     public int Iterations { get; set; } = 4;
 
-    public int MemoryKib { get; set; } = 65536;
-
-    public int Parallelism { get; set; } = 4;
-
     public int FailedAttempts { get; set; } = 0;
 
     public DateTime? LockedUntil { get; set; } = null;

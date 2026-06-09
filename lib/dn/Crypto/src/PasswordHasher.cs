@@ -698,7 +698,6 @@ namespace NeoBeard.Crypto
                 PasswordPbkdf2Algorithm.SHA1 => HashAlgorithmName.SHA1,
                 PasswordPbkdf2Algorithm.SHA384 => HashAlgorithmName.SHA384,
                 PasswordPbkdf2Algorithm.SHA512 => HashAlgorithmName.SHA512,
-                PasswordPbkdf2Algorithm.SHA256 => HashAlgorithmName.SHA256,
                 _ => HashAlgorithmName.SHA256,
             };
         }

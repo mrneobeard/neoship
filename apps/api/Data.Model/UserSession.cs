@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace NeoShip.Data.Model;
@@ -16,18 +17,21 @@ public class UserSession
     [ForeignKey(nameof(UserId))]
     public User? User { get; set; }
 
+    [StringLength(512)]
     public string TokenDigest { get; set; } = string.Empty;
 
+    [StringLength(46)]
     public string? IpAddress { get; set; } = string.Empty;
 
-    public string? IpHash { get; set; } = null;
+    [StringLength(128)]
+    public string? IpDigest { get; set; } = null;
 
-    public string? IpPrefix { get; set; } = null;
-
+    [StringLength(512)]
     public string? UserAgent { get; set; } = null;
 
     public ushort RiskLevel { get; set; } = 0;
 
+    [StringLength(1024)]
     public string? RiskFlagsJson { get; set; } = null;
 
     public DateTime LastUsedAt { get; set; } = DateTime.UtcNow;
@@ -38,11 +42,13 @@ public class UserSession
 
     public DateTime? RevokedAt { get; set; } = null;
 
+    [StringLength(512)]
     public string? RevokeReason { get; set; } = null;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; } = null;
 
+    [StringLength(4096)]
     public string? ClaimsJson { get; set; } = null;
 }

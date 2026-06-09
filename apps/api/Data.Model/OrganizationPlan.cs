@@ -14,7 +14,7 @@ public class OrganizationPlan
         this.Name = name;
     }
 
-    public ushort Id { get; set; } = 0;
+    public ushort Id { get; set; }
 
     public string Name { get; set; } = string.Empty;
 

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace NeoShip.Data.Model;
 
 public class ServiceAccountApiKey
@@ -8,12 +10,19 @@ public class ServiceAccountApiKey
 
     public ServiceAccount? ServiceAccount { get; set; }
 
+    [StringLength(64)]
+    [Required]
     public string Name { get; set; } = string.Empty;
 
+    [StringLength(512)]
     public string? Description { get; set; } = null;
 
+    [StringLength(1024)]
+    [Required]
     public string KeyDigest { get; set; } = string.Empty;
 
+    [StringLength(2048)]
+    [Required]
     public string ScopesJson { get; set; } = string.Empty;
 
     public DateTime? ExpiresAt { get; set; } = null;
