@@ -49,6 +49,7 @@ builder.Services.AddScoped<ServiceAccountStore>();
 builder.Services.AddScoped<RoleStore>();
 builder.Services.AddScoped<GroupStore>();
 builder.Services.AddScoped<OrganizationStore>();
+builder.Services.AddScoped<IdentityProviderStore>();
 
 var app = builder.Build();
 

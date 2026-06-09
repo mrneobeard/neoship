@@ -38,6 +38,12 @@ public static class OrgEndpoints
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
 
+        group.MapGet("/identity-providers", ListIdentityProvidersAsync);
+        group.MapPost("/identity-providers", CreateIdentityProviderAsync);
+        group.MapPatch("/identity-providers/{providerId:long}", UpdateIdentityProviderAsync);
+        group.MapPost("/identity-providers/{providerId:long}/enable", EnableIdentityProviderAsync);
+        group.MapPost("/identity-providers/{providerId:long}/disable", DisableIdentityProviderAsync);
+
         return group;
     }
 
@@ -834,5 +840,206 @@ public static class OrgEndpoints
         await audit.RecordAsync("org.service_accounts.api_key.revoke", org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
 
         return TypedResults.Ok();
+    }
+
+    public record IdentityProviderResponse(
+        long Id,
+        string Name,
+        string ProviderType,
+        string Status,
+        string? IssuerUrl,
+        string? ClientId,
+        string? MetadataJson,
+        DateTime CreatedAt,
+        DateTime? UpdatedAt);
+
+    public record CreateIdentityProviderRequest(
+        string Name,
+        string ProviderType,
+        string? IssuerUrl,
+        string? ClientId,
+        string? MetadataJson);
+
+    public record UpdateIdentityProviderRequest(
+        string? Name,
+        string? IssuerUrl,
+        string? ClientId,
+        string? MetadataJson);
+
+    private static IdentityProviderResponse ToIdentityProviderResponse(UserIdentityProvider provider)
+        => new(
+            provider.Id,
+            provider.Name,
+            provider.ProviderType.Name,
+            provider.Status.Name,
+            provider.IssuerUrl,
+            provider.ClientId,
+            provider.MetadataJson,
+            provider.CreatedAt,
+            provider.UpdatedAt);
+
+    private static bool TryParseProviderType(string value, out UserIdentityProviderType providerType)
+    {
+        providerType = value.Trim().ToLowerInvariant() switch
+        {
+            "oidc" => UserIdentityProviderType.OIDC,
+            "saml" => UserIdentityProviderType.SAML,
+            "oauth2" => UserIdentityProviderType.OAUTH2,
+            _ => UserIdentityProviderType.Unknown,
+        };
+
+        return providerType.Id != UserIdentityProviderType.Unknown.Id;
+    }
+
+    private static async Task<IResult> ListIdentityProvidersAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var list = await providers.ListAsync(org.Id, ct);
+        return TypedResults.Ok(list.Select(ToIdentityProviderResponse).ToList());
+    }
+
+    private static async Task<IResult> CreateIdentityProviderAsync(
+        string orgSlug,
+        [FromBody] CreateIdentityProviderRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        if (string.IsNullOrWhiteSpace(req.Name) || !TryParseProviderType(req.ProviderType, out var providerType))
+        {
+            return TypedResults.BadRequest("Invalid identity provider request.");
+        }
+
+        var provider = await providers.CreateAsync(org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl, req.ClientId, req.MetadataJson, ct);
+        await audit.RecordAsync("org.identity_providers.create", org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
+
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", ToIdentityProviderResponse(provider));
+    }
+
+    private static async Task<IResult> UpdateIdentityProviderAsync(
+        string orgSlug,
+        long providerId,
+        [FromBody] UpdateIdentityProviderRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.MetadataJson, ct);
+        if (provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.identity_providers.update", org.Id, auth.User!.Id, "identity_provider.update", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
+        return TypedResults.Ok(ToIdentityProviderResponse(provider));
+    }
+
+    private static async Task<IResult> EnableIdentityProviderAsync(
+        string orgSlug,
+        long providerId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        AuditStore audit,
+        CancellationToken ct)
+        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: true, httpContext, sessions, permissions, db, providers, audit, ct);
+
+    private static async Task<IResult> DisableIdentityProviderAsync(
+        string orgSlug,
+        long providerId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        AuditStore audit,
+        CancellationToken ct)
+        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: false, httpContext, sessions, permissions, db, providers, audit, ct);
+
+    private static async Task<IResult> SetIdentityProviderActiveAsync(
+        string orgSlug,
+        long providerId,
+        bool active,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        IdentityProviderStore providers,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var provider = await providers.SetActiveAsync(org.Id, providerId, active, ct);
+        if (provider is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var action = active ? "identity_provider.enable" : "identity_provider.disable";
+        await audit.RecordAsync($"org.identity_providers.{(active ? "enable" : "disable")}", org.Id, auth.User!.Id, action, targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
+        return TypedResults.Ok(ToIdentityProviderResponse(provider));
     }
 }
