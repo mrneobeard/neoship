@@ -494,8 +494,11 @@ public static class OrgEndpoints
     public record ServiceAccountResponse(
         Guid Id, string Name, string? Description, DateTime CreatedAt, DateTime? UpdatedAt);
 
-    private static async Task<Results<Ok<List<ServiceAccountResponse>>, NotFound>> ListServiceAccountsAsync(
+    private static async Task<IResult> ListServiceAccountsAsync(
         string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
         CancellationToken ct)
@@ -504,6 +507,12 @@ public static class OrgEndpoints
         if (org is null)
         {
             return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
         }
 
         var accounts = await store.ListAsync(org.Id, ct);
@@ -517,13 +526,15 @@ public static class OrgEndpoints
 
     public record CreateServiceAccountRequest(string Name, string? Description);
 
-    private static async Task<Results<Created<ServiceAccountResponse>, NotFound>> CreateServiceAccountAsync(
+    private static async Task<IResult> CreateServiceAccountAsync(
         string orgSlug,
         [FromBody] CreateServiceAccountRequest req,
         HttpContext httpContext,
         SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
+        AuditStore audit,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -532,10 +543,14 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
-        var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
-        var createdBy = user?.Id ?? Guid.Empty;
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
 
-        var sa = await store.CreateAsync(org.Id, createdBy, req.Name, req.Description, ct);
+        var sa = await store.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
+        await audit.RecordAsync("org.service_accounts.create", org.Id, auth.User.Id, "service_account.create", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
 
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{sa.Id}",
@@ -544,18 +559,28 @@ public static class OrgEndpoints
 
     public record UpdateServiceAccountRequest(string? Name, string? Description);
 
-    private static async Task<Results<Ok<ServiceAccountResponse>, NotFound>> UpdateServiceAccountAsync(
+    private static async Task<IResult> UpdateServiceAccountAsync(
         string orgSlug,
         Guid serviceAccountId,
         [FromBody] UpdateServiceAccountRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
+        AuditStore audit,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
             return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
         }
 
         var sa = await store.UpdateAsync(org.Id, serviceAccountId, req.Name, req.Description, ct);
@@ -564,14 +589,20 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
+        await audit.RecordAsync("org.service_accounts.update", org.Id, auth.User!.Id, "service_account.update", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
+
         return TypedResults.Ok(new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
     }
 
-    private static async Task<Results<Ok, NotFound>> DisableServiceAccountAsync(
+    private static async Task<IResult> DisableServiceAccountAsync(
         string orgSlug,
         Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
+        AuditStore audit,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -580,11 +611,19 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
         var success = await store.DisableAsync(org.Id, serviceAccountId, ct);
         if (!success)
         {
             return TypedResults.NotFound();
         }
+
+        await audit.RecordAsync("org.service_accounts.disable", org.Id, auth.User!.Id, "service_account.disable", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
         return TypedResults.Ok();
     }
@@ -595,9 +634,12 @@ public static class OrgEndpoints
     public record CreateServiceAccountApiKeyResponse(
         Guid Id, string Name, string PlaintextKey, DateTime CreatedAt);
 
-    private static async Task<Results<Ok<List<ServiceAccountApiKeyResponse>>, NotFound>> ListServiceAccountApiKeysAsync(
+    private static async Task<IResult> ListServiceAccountApiKeysAsync(
         string orgSlug,
         Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
         CancellationToken ct)
@@ -606,6 +648,12 @@ public static class OrgEndpoints
         if (org is null)
         {
             return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
         }
 
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
@@ -625,18 +673,28 @@ public static class OrgEndpoints
 
     public record CreateServiceAccountApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
 
-    private static async Task<Results<Created<CreateServiceAccountApiKeyResponse>, NotFound>> CreateServiceAccountApiKeyAsync(
+    private static async Task<IResult> CreateServiceAccountApiKeyAsync(
         string orgSlug,
         Guid serviceAccountId,
         [FromBody] CreateServiceAccountApiKeyRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
+        AuditStore audit,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
             return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
         }
 
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
@@ -650,18 +708,23 @@ public static class OrgEndpoints
 
         db.ServiceAccountApiKeys.Add(apiKey);
         await db.SaveChangesAsync(ct);
+        await audit.RecordAsync("org.service_accounts.api_key.create", org.Id, auth.User!.Id, "service_account.api_key.create", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{apiKey.Id}",
             new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
     }
 
-    private static async Task<Results<Ok, NotFound>> RevokeServiceAccountApiKeyAsync(
+    private static async Task<IResult> RevokeServiceAccountApiKeyAsync(
         string orgSlug,
         Guid serviceAccountId,
         Guid apiKeyId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
         ShipDb db,
         ServiceAccountStore store,
+        AuditStore audit,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -670,11 +733,19 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
         var success = await store.RevokeApiKeyAsync(apiKeyId, serviceAccountId, ct);
         if (!success)
         {
             return TypedResults.NotFound();
         }
+
+        await audit.RecordAsync("org.service_accounts.api_key.revoke", org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
 
         return TypedResults.Ok();
     }
