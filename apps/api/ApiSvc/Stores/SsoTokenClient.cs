@@ -68,21 +68,32 @@ public sealed class SsoTokenClient : ISsoTokenClient
             form.Add(new KeyValuePair<string, string>("client_secret", clientSecret));
         }
 
-        using var response = await this.http.PostAsync(tokenEndpoint, new FormUrlEncodedContent(form), ct);
-        if (!response.IsSuccessStatusCode)
+        try
+        {
+            using var response = await this.http.PostAsync(tokenEndpoint, new FormUrlEncodedContent(form), ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            if (!doc.RootElement.TryGetProperty("id_token", out var idTokenElement))
+            {
+                return null;
+            }
+
+            var idToken = idTokenElement.GetString();
+            return string.IsNullOrWhiteSpace(idToken) ? null : new SsoTokenResponse(idToken);
+        }
+        catch (HttpRequestException)
         {
             return null;
         }
-
-        await using var stream = await response.Content.ReadAsStreamAsync(ct);
-        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-        if (!doc.RootElement.TryGetProperty("id_token", out var idTokenElement))
+        catch (JsonException)
         {
             return null;
         }
-
-        var idToken = idTokenElement.GetString();
-        return string.IsNullOrWhiteSpace(idToken) ? null : new SsoTokenResponse(idToken);
     }
 
     private static Uri? TryReadTokenEndpoint(string? metadataJson)
