@@ -834,6 +834,66 @@ namespace NeoShip.Data.Sqlite.Migrations
                     b.ToTable("user_emails", (string)null);
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.UserExternalIdentity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("email");
+
+                    b.Property<DateTime?>("LastUsedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("org_id");
+
+                    b.Property<long>("ProviderId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("provider_id");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject");
+
+                    b.Property<string>("SubjectUpcase")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("subject_upcase");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_external_identities");
+
+                    b.HasIndex("ProviderId")
+                        .HasDatabaseName("ix_user_external_identities_provider_id");
+
+                    b.HasIndex("UserId", "ProviderId")
+                        .HasDatabaseName("ix_user_external_identities_user_id_provider_id");
+
+                    b.HasIndex("OrgId", "ProviderId", "SubjectUpcase")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_external_identities_org_id_provider_id_subject_upcase");
+
+                    b.ToTable("user_external_identities", (string)null);
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.UserIdentityProvider", b =>
                 {
                     b.Property<long>("Id")
@@ -1486,6 +1546,36 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_user_emails_users_user_id");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("NeoShip.Data.Model.UserExternalIdentity", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_external_identities_orgs_org_id");
+
+                    b.HasOne("NeoShip.Data.Model.UserIdentityProvider", "Provider")
+                        .WithMany()
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_external_identities_user_identity_providers_provider_id");
+
+                    b.HasOne("NeoShip.Data.Model.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_external_identities_users_user_id");
+
+                    b.Navigation("Org");
+
+                    b.Navigation("Provider");
 
                     b.Navigation("User");
                 });

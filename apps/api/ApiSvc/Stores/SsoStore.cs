@@ -123,13 +123,43 @@ public sealed class SsoStore
             return null;
         }
 
+        var subjectUpcase = externalIdentity.Subject.ToUpperInvariant();
+        var link = await this.db.UserExternalIdentities
+            .Include(x => x.User)
+            .FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
+                && x.ProviderId == provider.Id
+                && x.SubjectUpcase == subjectUpcase, ct);
+
         var emailUpcase = externalIdentity.Email.ToUpperInvariant();
-        var user = await this.db.Users.FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
-            && x.EmailUpcase == emailUpcase
-            && x.StatusId == UserStatus.Active.Id, ct);
+        var user = link?.User is { StatusId: var status } linkedUser && status == UserStatus.Active.Id
+            ? linkedUser
+            : await this.db.Users.FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
+                && x.EmailUpcase == emailUpcase
+                && x.StatusId == UserStatus.Active.Id, ct);
         if (user is null)
         {
             return null;
+        }
+
+        if (link is null)
+        {
+            this.db.UserExternalIdentities.Add(new UserExternalIdentity
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = challenge.OrgId,
+                UserId = user.Id,
+                ProviderId = provider.Id,
+                Subject = externalIdentity.Subject,
+                SubjectUpcase = subjectUpcase,
+                Email = externalIdentity.Email,
+                CreatedAt = DateTime.UtcNow,
+                LastUsedAt = DateTime.UtcNow,
+            });
+        }
+        else
+        {
+            link.Email = externalIdentity.Email;
+            link.LastUsedAt = DateTime.UtcNow;
         }
 
         user.LastLoginAt = DateTime.UtcNow;

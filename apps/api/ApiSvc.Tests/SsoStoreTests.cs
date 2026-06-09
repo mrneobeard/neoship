@@ -155,7 +155,67 @@ public class SsoStoreTests
         Assert.NotNull(user);
         Assert.Equal(userId, user!.Id);
         Assert.NotNull(user.LastLoginAt);
+        var link = await db.UserExternalIdentities.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(userId, link.UserId);
+        Assert.Equal("subject", link.Subject);
+        Assert.NotNull(link.LastUsedAt);
         Assert.Null(await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies OIDC finish prefers an existing external identity link over email matching.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_UsesExistingSubjectLink()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var linkedUserId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        db.Users.Add(new User(linkedUserId, "linked-user@example.com", "Linked User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.Users.Add(new User(otherUserId, "new-email@example.com", "Other User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = linkedUserId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        db.UserExternalIdentities.Add(new UserExternalIdentity
+        {
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = linkedUserId,
+            ProviderId = 10,
+            Subject = "subject",
+            SubjectUpcase = "SUBJECT",
+            Email = "linked-user@example.com",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "new-email@example.com", true, "SSO User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+        Assert.Equal(linkedUserId, user!.Id);
+        var link = await db.UserExternalIdentities.SingleAsync(TestContext.Current.CancellationToken);
+        Assert.Equal("new-email@example.com", link.Email);
+        Assert.NotNull(link.LastUsedAt);
     }
 
     /// <summary>

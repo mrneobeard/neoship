@@ -23,6 +23,8 @@ public class ShipDb : DbContext
 
     public DbSet<UserIdentityProvider> UserIdentityProviders => Set<UserIdentityProvider>();
 
+    public DbSet<UserExternalIdentity> UserExternalIdentities => Set<UserExternalIdentity>();
+
     public DbSet<UserApiKey> UserApiKeys => Set<UserApiKey>();
 
     public DbSet<UserApiKeyClaim> UserApiKeyClaims => Set<UserApiKeyClaim>();
@@ -74,6 +76,12 @@ public class ShipDb : DbContext
             p.HasIndex(x => new { x.ProviderTypeId, x.OrgId });
         });
 
+        modelBuilder.Entity<UserExternalIdentity>(p =>
+        {
+            p.HasIndex(x => new { x.OrgId, x.ProviderId, x.SubjectUpcase }).IsUnique();
+            p.HasIndex(x => new { x.UserId, x.ProviderId });
+        });
+
         modelBuilder.Entity<UserApiKey>(k =>
         {
             k.HasIndex(x => x.KeyDigest);
@@ -119,6 +127,13 @@ public class ShipDb : DbContext
         modelBuilder.Entity<UserIdentityProvider>(p =>
         {
             p.HasOne<User>().WithMany().HasForeignKey(x => x.UserId);
+        });
+
+        modelBuilder.Entity<UserExternalIdentity>(p =>
+        {
+            p.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
+            p.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            p.HasOne(x => x.Provider).WithMany().HasForeignKey(x => x.ProviderId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // User -> UserSession
