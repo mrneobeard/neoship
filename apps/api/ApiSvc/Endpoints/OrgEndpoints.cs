@@ -1501,6 +1501,11 @@ public static class OrgEndpoints
         return providerType.Id != UserIdentityProviderType.Unknown.Id;
     }
 
+    private static bool IsValidIssuerUrl(string? issuerUrl)
+    {
+        return issuerUrl is null || (Uri.TryCreate(issuerUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
+    }
+
     private static async Task<IResult> ListIdentityProvidersAsync(
         string orgSlug,
         HttpContext httpContext,
@@ -1549,7 +1554,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (string.IsNullOrWhiteSpace(req.Name) || !TryParseProviderType(req.ProviderType, out var providerType))
+        if (string.IsNullOrWhiteSpace(req.Name) || !TryParseProviderType(req.ProviderType, out var providerType) || !IsValidIssuerUrl(req.IssuerUrl))
         {
             return TypedResults.BadRequest("Invalid identity provider request.");
         }
@@ -1613,6 +1618,11 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        if (!IsValidIssuerUrl(req.IssuerUrl))
+        {
+            return TypedResults.BadRequest("Invalid identity provider request.");
         }
 
         var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);

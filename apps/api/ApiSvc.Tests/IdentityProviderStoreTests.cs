@@ -165,4 +165,52 @@ public class IdentityProviderStoreTests
         Assert.Throws<InvalidOperationException>(() => protector.Encrypt("client-secret"));
         Assert.Empty(protector.Encrypt(null));
     }
+
+    /// <summary>
+    /// Verifies identity provider issuer URLs must use HTTPS.
+    /// </summary>
+    [Fact]
+    public async Task IdentityProviderStore_RejectsNonHttpsIssuerUrl()
+    {
+        await using var db = CreateDatabase();
+        var store = CreateStore(db);
+        var createdBy = Guid.NewGuid();
+        db.Users.Add(new User(createdBy, "idp-issuer@example.com", "IDP Issuer")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+            Constants.DefaultOrganizationId,
+            createdBy,
+            "Insecure OIDC",
+            UserIdentityProviderType.OIDC,
+            "http://idp.example.com",
+            "client-id",
+            null,
+            "{}",
+            TestContext.Current.CancellationToken));
+
+        var provider = await store.CreateAsync(
+            Constants.DefaultOrganizationId,
+            createdBy,
+            "Acme OIDC",
+            UserIdentityProviderType.OIDC,
+            "https://idp.example.com",
+            "client-id",
+            null,
+            "{}",
+            TestContext.Current.CancellationToken);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.UpdateAsync(
+            Constants.DefaultOrganizationId,
+            provider.Id,
+            null,
+            "http://idp.example.com",
+            null,
+            null,
+            null,
+            TestContext.Current.CancellationToken));
+    }
 }

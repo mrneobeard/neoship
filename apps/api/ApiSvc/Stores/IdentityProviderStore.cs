@@ -84,6 +84,11 @@ public sealed class IdentityProviderStore
         string? metadataJson,
         CancellationToken ct = default)
     {
+        if (!IsValidIssuerUrl(issuerUrl))
+        {
+            throw new ArgumentException("Identity provider issuer URL must be HTTPS.", nameof(issuerUrl));
+        }
+
         var provider = new UserIdentityProvider
         {
             OrgId = orgId,
@@ -130,6 +135,11 @@ public sealed class IdentityProviderStore
         if (provider is null)
         {
             return null;
+        }
+
+        if (!IsValidIssuerUrl(issuerUrl))
+        {
+            throw new ArgumentException("Identity provider issuer URL must be HTTPS.", nameof(issuerUrl));
         }
 
         if (!string.IsNullOrWhiteSpace(name))
@@ -184,5 +194,10 @@ public sealed class IdentityProviderStore
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Identity provider status changed: {ProviderId} org={OrgId} active={Active}", provider.Id, orgId, active);
         return provider;
+    }
+
+    private static bool IsValidIssuerUrl(string? issuerUrl)
+    {
+        return issuerUrl is null || (Uri.TryCreate(issuerUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
     }
 }
