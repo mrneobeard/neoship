@@ -276,4 +276,119 @@ public class ServiceAccountStore
         logger.LogInformation("Service account claim removed: serviceAccount={ServiceAccountId} claim={ClaimId}", serviceAccountId, claimId);
         return true;
     }
+
+    /// <summary>
+    /// Lists direct permission claims for a service account API key.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="apiKeyId">The API key identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The direct API key claims, or <see langword="null"/>.</returns>
+    public async Task<List<ServiceAccountApiKeyClaim>?> ListApiKeyClaimsAsync(Guid orgId, Guid serviceAccountId, Guid apiKeyId, CancellationToken ct = default)
+    {
+        var exists = await db.ServiceAccountApiKeys
+            .Include(x => x.ServiceAccount)
+            .AnyAsync(x => x.Id == apiKeyId
+                && x.ServiceAccountId == serviceAccountId
+                && x.ServiceAccount != null
+                && x.ServiceAccount.OrgId == orgId
+                && x.ServiceAccount.DeletedAt == null
+                && x.RevokedAt == null
+                && x.DeletedAt == null, ct);
+
+        if (!exists)
+        {
+            return null;
+        }
+
+        return await db.ServiceAccountApiKeyClaims
+            .Where(x => x.ServiceAccountApiKeyId == apiKeyId)
+            .OrderBy(x => x.Type)
+            .ThenBy(x => x.Value)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Adds a direct permission claim to a service account API key.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="apiKeyId">The API key identifier.</param>
+    /// <param name="grant">The permission grant.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The created <see cref="ServiceAccountApiKeyClaim"/>, or <see langword="null"/>.</returns>
+    public async Task<ServiceAccountApiKeyClaim?> AddApiKeyClaimAsync(Guid orgId, Guid serviceAccountId, Guid apiKeyId, PermissionGrant grant, CancellationToken ct = default)
+    {
+        var exists = await db.ServiceAccountApiKeys
+            .Include(x => x.ServiceAccount)
+            .AnyAsync(x => x.Id == apiKeyId
+                && x.ServiceAccountId == serviceAccountId
+                && x.ServiceAccount != null
+                && x.ServiceAccount.OrgId == orgId
+                && x.ServiceAccount.DeletedAt == null
+                && x.RevokedAt == null
+                && x.DeletedAt == null, ct);
+
+        if (!exists)
+        {
+            return null;
+        }
+
+        var (type, value) = this.codec.Encode(grant);
+        if (!this.codec.TryDecode(type, value, out var normalizedGrant))
+        {
+            return null;
+        }
+
+        var (normalizedType, normalizedValue) = this.codec.Encode(normalizedGrant);
+        var claim = new ServiceAccountApiKeyClaim
+        {
+            Id = 0,
+            ServiceAccountApiKeyId = apiKeyId,
+            Type = normalizedType,
+            Value = normalizedValue,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        db.ServiceAccountApiKeyClaims.Add(claim);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Service account API key claim added: apiKey={ApiKeyId} claim={ClaimId}", apiKeyId, claim.Id);
+        return claim;
+    }
+
+    /// <summary>
+    /// Removes a direct permission claim from a service account API key.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="apiKeyId">The API key identifier.</param>
+    /// <param name="claimId">The claim identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when removed; otherwise, <see langword="false"/>.</returns>
+    public async Task<bool> RemoveApiKeyClaimAsync(Guid orgId, Guid serviceAccountId, Guid apiKeyId, ulong claimId, CancellationToken ct = default)
+    {
+        var claim = await db.ServiceAccountApiKeyClaims
+            .Include(x => x.ServiceAccountApiKey)
+            .ThenInclude(x => x!.ServiceAccount)
+            .FirstOrDefaultAsync(x => x.Id == claimId
+                && x.ServiceAccountApiKeyId == apiKeyId
+                && x.ServiceAccountApiKey != null
+                && x.ServiceAccountApiKey.ServiceAccountId == serviceAccountId
+                && x.ServiceAccountApiKey.ServiceAccount != null
+                && x.ServiceAccountApiKey.ServiceAccount.OrgId == orgId
+                && x.ServiceAccountApiKey.ServiceAccount.DeletedAt == null, ct);
+
+        if (claim is null)
+        {
+            return false;
+        }
+
+        db.ServiceAccountApiKeyClaims.Remove(claim);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Service account API key claim removed: apiKey={ApiKeyId} claim={ClaimId}", apiKeyId, claimId);
+        return true;
+    }
 }

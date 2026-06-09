@@ -37,6 +37,9 @@ public static class OrgEndpoints
         group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
+        group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", ListServiceAccountApiKeyClaimsAsync);
+        group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", AddServiceAccountApiKeyClaimAsync);
+        group.MapDelete("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims/{claimId:ulong}", RemoveServiceAccountApiKeyClaimAsync);
         group.MapGet("/service-accounts/{serviceAccountId:guid}/claims", ListServiceAccountClaimsAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/claims", AddServiceAccountClaimAsync);
         group.MapDelete("/service-accounts/{serviceAccountId:guid}/claims/{claimId:guid}", RemoveServiceAccountClaimAsync);
@@ -784,6 +787,10 @@ public static class OrgEndpoints
 
     public record AddServiceAccountClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
 
+    public record ServiceAccountApiKeyClaimResponse(ulong Id, string Type, string Value);
+
+    public record AddServiceAccountApiKeyClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
+
     public record CreateServiceAccountApiKeyResponse(
         Guid Id, string Name, string PlaintextKey, DateTime CreatedAt);
 
@@ -900,6 +907,114 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.service_accounts.api_key.revoke", org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
 
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> ListServiceAccountApiKeyClaimsAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        Guid apiKeyId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var claims = await store.ListApiKeyClaimsAsync(org.Id, serviceAccountId, apiKeyId, ct);
+        if (claims is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        return TypedResults.Ok(claims.Select(x => new ServiceAccountApiKeyClaimResponse(x.Id, x.Type, x.Value)).ToList());
+    }
+
+    private static async Task<IResult> AddServiceAccountApiKeyClaimAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        Guid apiKeyId,
+        [FromBody] AddServiceAccountApiKeyClaimRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        if (!PermissionKey.TryParse(req.Permission, out var key))
+        {
+            return TypedResults.BadRequest("Invalid permission key.");
+        }
+
+        var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
+        var claim = await store.AddApiKeyClaimAsync(org.Id, serviceAccountId, apiKeyId, grant, ct);
+        if (claim is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.service_accounts.api_key.claim.add", org.Id, auth.User!.Id, "service_account.api_key.claim.add", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Ok(new ServiceAccountApiKeyClaimResponse(claim.Id, claim.Type, claim.Value));
+    }
+
+    private static async Task<IResult> RemoveServiceAccountApiKeyClaimAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        Guid apiKeyId,
+        ulong claimId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var removed = await store.RemoveApiKeyClaimAsync(org.Id, serviceAccountId, apiKeyId, claimId, ct);
+        if (!removed)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.service_accounts.api_key.claim.remove", org.Id, auth.User!.Id, "service_account.api_key.claim.remove", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 
