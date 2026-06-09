@@ -17,6 +17,8 @@ public static class OrgEndpoints
         group.MapPost("/roles", CreateRoleAsync);
         group.MapPost("/roles/{roleId:guid}/claims", AddRoleClaimAsync);
         group.MapDelete("/roles/{roleId:guid}/claims/{claimId:ulong}", RemoveRoleClaimAsync);
+        group.MapPost("/roles/{roleId:guid}/users/{userId:guid}", AttachRoleUserAsync);
+        group.MapDelete("/roles/{roleId:guid}/users/{userId:guid}", DetachRoleUserAsync);
 
         group.MapGet("/groups", ListGroupsAsync);
         group.MapPost("/groups", CreateGroupAsync);
@@ -231,6 +233,74 @@ public static class OrgEndpoints
         }
 
         await audit.RecordAsync("org.roles.claim.remove", org.Id, auth.User!.Id, "role.claim.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> AttachRoleUserAsync(
+        string orgSlug,
+        Guid roleId,
+        Guid userId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var attached = await roles.AttachUserAsync(org.Id, roleId, userId, ct);
+        if (!attached)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.user.add", org.Id, auth.User!.Id, "role.user.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> DetachRoleUserAsync(
+        string orgSlug,
+        Guid roleId,
+        Guid userId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        RoleStore roles,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var detached = await roles.DetachUserAsync(org.Id, roleId, userId, ct);
+        if (!detached)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.roles.user.remove", org.Id, auth.User!.Id, "role.user.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 

@@ -147,4 +147,66 @@ public sealed class RoleStore
         await this.db.SaveChangesAsync(ct);
         return true;
     }
+
+    /// <summary>
+    /// Attaches a role to a user in the same organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="roleId">The role identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when attached; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> AttachUserAsync(Guid orgId, Guid roleId, Guid userId, CancellationToken ct = default)
+    {
+        var role = await this.db.Roles
+            .Include(x => x.Users)
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+
+        var user = await this.db.Users.FirstOrDefaultAsync(x => x.Id == userId && x.OrgId == orgId, ct);
+        if (role is null || user is null)
+        {
+            return false;
+        }
+
+        if (role.Users.Any(x => x.Id == userId))
+        {
+            return true;
+        }
+
+        role.Users.Add(user);
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Role attached to user: role={RoleId} user={UserId} org={OrgId}", roleId, userId, orgId);
+        return true;
+    }
+
+    /// <summary>
+    /// Detaches a role from a user in the same organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="roleId">The role identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when detached; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> DetachUserAsync(Guid orgId, Guid roleId, Guid userId, CancellationToken ct = default)
+    {
+        var role = await this.db.Roles
+            .Include(x => x.Users)
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+
+        if (role is null)
+        {
+            return false;
+        }
+
+        var user = role.Users.FirstOrDefault(x => x.Id == userId && x.OrgId == orgId);
+        if (user is null)
+        {
+            return false;
+        }
+
+        role.Users.Remove(user);
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Role detached from user: role={RoleId} user={UserId} org={OrgId}", roleId, userId, orgId);
+        return true;
+    }
 }

@@ -99,4 +99,34 @@ public class RoleGroupStoreTests
         Assert.Single(fetched!.Members);
         Assert.Single(fetched.Roles);
     }
+
+    /// <summary>
+    /// Verifies that roles can be attached to and detached from users directly.
+    /// </summary>
+
+    [Fact]
+    public async Task RoleStore_CanAttachAndDetachUser()
+    {
+        var db = CreateDatabase();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "creator3@example.com", "Creator Three")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        var user = new User(Guid.NewGuid(), "direct-member@example.com", "Direct Member")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(creator);
+        db.Users.Add(user);
+        db.SaveChanges();
+
+        var role = await roles.CreateAsync(Constants.DefaultOrganizationId, creator.Id, "operators", null, TestContext.Current.CancellationToken);
+
+        Assert.True(await roles.AttachUserAsync(Constants.DefaultOrganizationId, role.Id, user.Id, TestContext.Current.CancellationToken));
+        Assert.True(await roles.DetachUserAsync(Constants.DefaultOrganizationId, role.Id, user.Id, TestContext.Current.CancellationToken));
+    }
 }
