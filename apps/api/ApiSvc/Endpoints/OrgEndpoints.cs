@@ -966,7 +966,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var success = await store.RevokeApiKeyAsync(apiKeyId, serviceAccountId, ct);
+        var success = await store.RevokeApiKeyAsync(org.Id, apiKeyId, serviceAccountId, ct);
         if (!success)
         {
             return TypedResults.NotFound();

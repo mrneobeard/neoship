@@ -200,10 +200,22 @@ public class ServiceAccountStore
             .ToListAsync(ct);
     }
 
-    public async Task<bool> RevokeApiKeyAsync(Guid apiKeyId, Guid serviceAccountId, CancellationToken ct = default)
+    /// <summary>
+    /// Revokes a service account API key within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="apiKeyId">The API key identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when revoked; otherwise, <see langword="false"/>.</returns>
+    public async Task<bool> RevokeApiKeyAsync(Guid orgId, Guid apiKeyId, Guid serviceAccountId, CancellationToken ct = default)
     {
         var key = await db.ServiceAccountApiKeys
-            .FirstOrDefaultAsync(k => k.Id == apiKeyId && k.ServiceAccountId == serviceAccountId, ct);
+            .Include(k => k.ServiceAccount)
+            .FirstOrDefaultAsync(k => k.Id == apiKeyId
+                && k.ServiceAccountId == serviceAccountId
+                && k.ServiceAccount != null
+                && k.ServiceAccount.OrgId == orgId, ct);
 
         if (key is null || key.RevokedAt is not null) return false;
 

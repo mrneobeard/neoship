@@ -233,4 +233,49 @@ public class ServiceAccountStoreTests
         Assert.True(await store.DisableAsync(Constants.DefaultOrganizationId, serviceAccount.Id, TestContext.Current.CancellationToken));
         Assert.Null(await store.AuthenticateApiKeyAsync(plaintextKey, TestContext.Current.CancellationToken));
     }
+
+    /// <summary>
+    /// Verifies service account API key revoke is scoped to the owning organization.
+    /// </summary>
+    [Fact]
+    public async Task RevokeApiKeyAsync_RejectsWrongOrganization()
+    {
+        await using var db = CreateDatabase();
+        var otherOrgId = Guid.NewGuid();
+        var user = new User(Guid.NewGuid(), "sa-revoke-tests@example.com", "Service Account Revoke Tester")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "revoke-bot",
+            NameUpcase = "REVOKE-BOT",
+            CreatedBy = user.Id,
+        };
+
+        db.Orgs.Add(new Organization
+        {
+            Id = otherOrgId,
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = OrganizationStatus.Active.Id,
+            TenantModeId = TenantMode.None.Id,
+            OrganizationPlanId = 1,
+            CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        });
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = CreateStore(db);
+        var (_, apiKey) = store.GenerateApiKey(serviceAccount.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
+        db.ServiceAccountApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.False(await store.RevokeApiKeyAsync(otherOrgId, apiKey.Id, serviceAccount.Id, TestContext.Current.CancellationToken));
+        Assert.True(await store.RevokeApiKeyAsync(Constants.DefaultOrganizationId, apiKey.Id, serviceAccount.Id, TestContext.Current.CancellationToken));
+    }
 }
