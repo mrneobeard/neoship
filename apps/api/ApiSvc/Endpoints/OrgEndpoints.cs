@@ -24,6 +24,8 @@ public static class OrgEndpoints
 
         group.MapGet("/groups", ListGroupsAsync);
         group.MapPost("/groups", CreateGroupAsync);
+        group.MapPatch("/groups/{groupId:guid}", UpdateGroupAsync);
+        group.MapDelete("/groups/{groupId:guid}", DeleteGroupAsync);
         group.MapPost("/groups/{groupId:guid}/members/users/{userId:guid}", AddGroupUserAsync);
         group.MapDelete("/groups/{groupId:guid}/members/users/{userId:guid}", RemoveGroupUserAsync);
         group.MapPost("/groups/{groupId:guid}/members/service-accounts/{serviceAccountId:guid}", AddGroupServiceAccountAsync);
@@ -91,6 +93,11 @@ public static class OrgEndpoints
     /// Represents a group creation request.
     /// </summary>
     public record CreateGroupRequest(string Name, string? Email, string? Description);
+
+    /// <summary>
+    /// Represents a group update request.
+    /// </summary>
+    public record UpdateGroupRequest(string? Name, string? Email, string? Description);
 
     private static async Task<Organization?> ResolveOrgAsync(string orgSlug, ShipDb db, CancellationToken ct)
     {
@@ -513,6 +520,73 @@ public static class OrgEndpoints
         var group = await groups.CreateAsync(org.Id, req.Name, req.Email, req.Description, ct);
         await audit.RecordAsync("org.groups.create", org.Id, auth.User!.Id, "group.create", targetType: "group", targetId: group.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", ToGroupResponse(group));
+    }
+
+    private static async Task<IResult> UpdateGroupAsync(
+        string orgSlug,
+        Guid groupId,
+        [FromBody] UpdateGroupRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var group = await groups.UpdateAsync(org.Id, groupId, req.Name, req.Email, req.Description, ct);
+        if (group is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.update", org.Id, auth.User!.Id, "group.update", targetType: "group", targetId: group.Id.ToString(), ct: ct);
+        return TypedResults.Ok(ToGroupResponse(group));
+    }
+
+    private static async Task<IResult> DeleteGroupAsync(
+        string orgSlug,
+        Guid groupId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        GroupStore groups,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var deleted = await groups.DeleteAsync(org.Id, groupId, ct);
+        if (!deleted)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.groups.delete", org.Id, auth.User!.Id, "group.delete", targetType: "group", targetId: groupId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<IResult> AddGroupUserAsync(

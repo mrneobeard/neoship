@@ -85,6 +85,73 @@ public sealed class GroupStore
     }
 
     /// <summary>
+    /// Updates a group within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="name">The optional replacement group name.</param>
+    /// <param name="email">The optional replacement group email.</param>
+    /// <param name="description">The optional replacement group description.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The updated <see cref="Group"/>, or <see langword="null"/>.</returns>
+    public async Task<Group?> UpdateAsync(Guid orgId, Guid groupId, string? name, string? email, string? description, CancellationToken ct = default)
+    {
+        var group = await this.GetAsync(orgId, groupId, ct);
+        if (group is null)
+        {
+            return null;
+        }
+
+        if (name is not null)
+        {
+            group.Name = name;
+            group.NameUpcase = name.ToUpperInvariant();
+        }
+
+        if (email is not null)
+        {
+            group.Email = email;
+            group.EmailUpcase = email.ToUpperInvariant();
+        }
+
+        if (description is not null)
+        {
+            group.Description = description;
+        }
+
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Group updated: {GroupId} org={OrgId}", group.Id, orgId);
+        return group;
+    }
+
+    /// <summary>
+    /// Deletes a group and its direct assignments within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when deleted; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> DeleteAsync(Guid orgId, Guid groupId, CancellationToken ct = default)
+    {
+        var group = await this.GetAsync(orgId, groupId, ct);
+        if (group is null)
+        {
+            return false;
+        }
+
+        group.Roles.Clear();
+        group.Members.Clear();
+        group.Owners.Clear();
+        group.ServiceAccountMembers.Clear();
+        group.ServiceAccountOwners.Clear();
+        this.db.Groups.Remove(group);
+        await this.db.SaveChangesAsync(ct);
+
+        this.logger.LogInformation("Group deleted: {GroupId} org={OrgId}", groupId, orgId);
+        return true;
+    }
+
+    /// <summary>
     /// Adds a user to a group.
     /// </summary>
     /// <param name="orgId">The organization identifier.</param>

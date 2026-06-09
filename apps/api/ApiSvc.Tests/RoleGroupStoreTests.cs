@@ -167,6 +167,69 @@ public class RoleGroupStoreTests
     }
 
     /// <summary>
+    /// Verifies groups can be updated within an organization.
+    /// </summary>
+    [Fact]
+    public async Task GroupStore_CanUpdateGroup()
+    {
+        var db = CreateDatabase();
+        var groups = new GroupStore(db, NullLogger<GroupStore>.Instance);
+
+        var group = await groups.CreateAsync(Constants.DefaultOrganizationId, "platform", null, null, TestContext.Current.CancellationToken);
+        var updated = await groups.UpdateAsync(Constants.DefaultOrganizationId, group.Id, "ops", "ops@example.com", "Operations", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(updated);
+        Assert.Equal("ops", updated!.Name);
+        Assert.Equal("OPS", updated.NameUpcase);
+        Assert.Equal("ops@example.com", updated.Email);
+        Assert.Equal("OPS@EXAMPLE.COM", updated.EmailUpcase);
+        Assert.Equal("Operations", updated.Description);
+    }
+
+    /// <summary>
+    /// Verifies deleting a group removes memberships and role assignments.
+    /// </summary>
+    [Fact]
+    public async Task GroupStore_CanDeleteGroupWithAssignments()
+    {
+        var db = CreateDatabase();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var groups = new GroupStore(db, NullLogger<GroupStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "group-delete-creator@example.com", "Group Delete Creator")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var user = new User(Guid.NewGuid(), "group-delete-user@example.com", "Group Delete User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "group-delete-bot",
+            NameUpcase = "GROUP-DELETE-BOT",
+            CreatedBy = creator.Id,
+        };
+
+        db.Users.Add(creator);
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        db.SaveChanges();
+
+        var role = await roles.CreateAsync(Constants.DefaultOrganizationId, creator.Id, "group-delete-role", null, TestContext.Current.CancellationToken);
+        var group = await groups.CreateAsync(Constants.DefaultOrganizationId, "delete-me", null, null, TestContext.Current.CancellationToken);
+
+        Assert.True(await groups.AddUserAsync(Constants.DefaultOrganizationId, group.Id, user.Id, TestContext.Current.CancellationToken));
+        Assert.True(await groups.AddServiceAccountAsync(Constants.DefaultOrganizationId, group.Id, serviceAccount.Id, TestContext.Current.CancellationToken));
+        Assert.True(await groups.AttachRoleAsync(Constants.DefaultOrganizationId, group.Id, role.Id, TestContext.Current.CancellationToken));
+
+        Assert.True(await groups.DeleteAsync(Constants.DefaultOrganizationId, group.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await groups.GetAsync(Constants.DefaultOrganizationId, group.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Verifies that roles can be attached to and detached from users directly.
     /// </summary>
 
