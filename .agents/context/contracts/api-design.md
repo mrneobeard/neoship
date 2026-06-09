@@ -157,3 +157,6 @@ If JWT exchange exists:
 - all auth mutations write `AuditEvent`
 - `me` endpoints always resolve current actor and tenant context first
 - org-scoped routes never trust an org id in request body
+- routes with heavy logic, security decisions, or key product flows must have route-level tests, not only store/unit tests
+- tests should move toward shared fixtures for seed data; in-code fixtures are fine initially, YAML/data-file fixtures are acceptable when they reduce duplication
+- release-grade validation should include automated E2E coverage against each supported DB provider

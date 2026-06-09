@@ -22,6 +22,13 @@
 - optional short-lived encrypted JWT access token
 - passkey-backed login may mint a session or exchange token, but not a standing machine credential
 
+### Organization Auth Policy
+
+- default organizations are permissive so setup does not lock out the initial operator
+- organizations may enforce auth policies for SSO, OIDC, SAML, MFA, passkeys, passwords, and recovery options
+- users must not be allowed to remove their last usable authentication method unless organization policy explicitly allows it and they have first configured another allowed sign-in method
+- self-service auth changes should fail safe rather than creating admin-only recovery situations
+
 ### Basic Auth
 
 - disabled by default
