@@ -31,6 +31,8 @@ public static class MeEndpoints
         group.MapPost("/mfa/totp/start", StartTotpAsync);
         group.MapPost("/mfa/totp/confirm", ConfirmTotpAsync);
         group.MapPost("/mfa/totp/disable", DisableTotpAsync);
+        group.MapPost("/mfa/recovery-codes/regenerate", RegenerateRecoveryCodesAsync);
+        group.MapDelete("/mfa/recovery-codes", RevokeRecoveryCodesAsync);
 
         return group;
     }
@@ -255,6 +257,10 @@ public static class MeEndpoints
 
     private sealed record DisableTotpRequest(Guid FactorId);
 
+    private sealed record RegenerateRecoveryCodesRequest(int? Count);
+
+    private sealed record RegenerateRecoveryCodesResponse(IReadOnlyList<string> Codes);
+
     private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
@@ -308,5 +314,38 @@ public static class MeEndpoints
 
         var disabled = await mfa.DisableTotpAsync(user.Id, req.FactorId, ct);
         return disabled ? TypedResults.Ok() : TypedResults.NotFound();
+    }
+
+    private static async Task<Results<Ok<RegenerateRecoveryCodesResponse>, UnauthorizedHttpResult>> RegenerateRecoveryCodesAsync(
+        [FromBody] RegenerateRecoveryCodesRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        MfaStore mfa,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var codes = await mfa.RegenerateRecoveryCodesAsync(user.Id, req.Count ?? 10, ct);
+        return TypedResults.Ok(new RegenerateRecoveryCodesResponse(codes));
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult>> RevokeRecoveryCodesAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        MfaStore mfa,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        await mfa.RevokeRecoveryCodesAsync(user.Id, ct);
+        return TypedResults.Ok();
     }
 }

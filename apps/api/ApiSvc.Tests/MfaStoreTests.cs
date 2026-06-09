@@ -61,7 +61,7 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = new MfaStore(db, NullLogger<MfaStore>.Instance, new PasswordStore());
         var (factor, secret) = await store.StartTotpAsync(user.Id, "Phone", TestContext.Current.CancellationToken);
         var code = MfaStore.ComputeTotp(factor.ValueEncrypted, DateTimeOffset.UtcNow);
 
@@ -90,9 +90,80 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = new MfaStore(db, NullLogger<MfaStore>.Instance, new PasswordStore());
         var (factor, _) = await store.StartTotpAsync(user.Id, "Phone", TestContext.Current.CancellationToken);
 
         Assert.False(await store.ConfirmTotpAsync(user.Id, factor.Id, "000000", TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies that recovery codes are one-time credentials.
+    /// </summary>
+    [Fact]
+    public async Task RecoveryCodes_CanBeConsumedOnce()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "recovery@example.com", "Recovery User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new MfaStore(db, NullLogger<MfaStore>.Instance, new PasswordStore());
+        var codes = await store.RegenerateRecoveryCodesAsync(user.Id, 3, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, codes.Count);
+        Assert.Equal(3, await db.UserMfaFactors.CountAsync(x => x.Type == MfaFactorType.RecoverCode.Id, TestContext.Current.CancellationToken));
+        Assert.True(await store.ConsumeRecoveryCodeAsync(user.Id, codes[0], TestContext.Current.CancellationToken));
+        Assert.False(await store.ConsumeRecoveryCodeAsync(user.Id, codes[0], TestContext.Current.CancellationToken));
+        Assert.Equal(2, await db.UserMfaFactors.CountAsync(x => x.Type == MfaFactorType.RecoverCode.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies that recovery-code regeneration replaces old codes.
+    /// </summary>
+    [Fact]
+    public async Task RegenerateRecoveryCodesAsync_ReplacesExistingCodes()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "regen@example.com", "Regenerate User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new MfaStore(db, NullLogger<MfaStore>.Instance, new PasswordStore());
+        var oldCodes = await store.RegenerateRecoveryCodesAsync(user.Id, 2, TestContext.Current.CancellationToken);
+        var newCodes = await store.RegenerateRecoveryCodesAsync(user.Id, 4, TestContext.Current.CancellationToken);
+
+        Assert.Equal(4, newCodes.Count);
+        Assert.Equal(4, await db.UserMfaFactors.CountAsync(x => x.Type == MfaFactorType.RecoverCode.Id, TestContext.Current.CancellationToken));
+        Assert.False(await store.ConsumeRecoveryCodeAsync(user.Id, oldCodes[0], TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies that all recovery codes can be revoked.
+    /// </summary>
+    [Fact]
+    public async Task RevokeRecoveryCodesAsync_RemovesCodes()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "revoke@example.com", "Revoke User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new MfaStore(db, NullLogger<MfaStore>.Instance, new PasswordStore());
+        await store.RegenerateRecoveryCodesAsync(user.Id, 5, TestContext.Current.CancellationToken);
+
+        Assert.Equal(5, await store.RevokeRecoveryCodesAsync(user.Id, TestContext.Current.CancellationToken));
+        Assert.Empty(await db.UserMfaFactors.ToListAsync(TestContext.Current.CancellationToken));
     }
 }

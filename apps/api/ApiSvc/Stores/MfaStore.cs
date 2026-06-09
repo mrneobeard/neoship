@@ -18,6 +18,8 @@ namespace NeoShip.ApiSvc.Stores;
 /// </remarks>
 public sealed class MfaStore
 {
+    private const int DefaultRecoveryCodeCount = 10;
+    private const int RecoveryCodeBytes = 10;
     private const int TotpSecretBytes = 20;
     private const int TotpDigits = 6;
     private const long TotpStepSeconds = 30;
@@ -26,16 +28,19 @@ public sealed class MfaStore
 
     private readonly ShipDb db;
     private readonly ILogger<MfaStore> logger;
+    private readonly PasswordStore passwords;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MfaStore"/> class.
     /// </summary>
     /// <param name="db">The database context.</param>
     /// <param name="logger">The MFA store logger.</param>
-    public MfaStore(ShipDb db, ILogger<MfaStore> logger)
+    /// <param name="passwords">The password hashing store.</param>
+    public MfaStore(ShipDb db, ILogger<MfaStore> logger, PasswordStore passwords)
     {
         this.db = db;
         this.logger = logger;
+        this.passwords = passwords;
     }
 
     /// <summary>
@@ -118,6 +123,97 @@ public sealed class MfaStore
     }
 
     /// <summary>
+    /// Regenerates recovery codes for a user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="count">The number of recovery codes to generate.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The plaintext recovery codes. These values are only returned once.</returns>
+    public async Task<IReadOnlyList<string>> RegenerateRecoveryCodesAsync(Guid userId, int count = DefaultRecoveryCodeCount, CancellationToken ct = default)
+    {
+        if (count is < 1 or > 50)
+        {
+            throw new ArgumentOutOfRangeException(nameof(count), count, "Recovery code count must be between 1 and 50.");
+        }
+
+        var existing = await db.UserMfaFactors
+            .Where(x => x.UserId == userId && x.Type == MfaFactorType.RecoverCode.Id)
+            .ToListAsync(ct);
+
+        db.UserMfaFactors.RemoveRange(existing);
+
+        var now = DateTime.UtcNow;
+        var codes = new List<string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var code = GenerateRecoveryCode();
+            codes.Add(code);
+
+            db.UserMfaFactors.Add(new UserMfaFactor
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = userId,
+                Name = "Recovery code",
+                Type = MfaFactorType.RecoverCode.Id,
+                ValueEncrypted = Encoding.UTF8.GetBytes(this.passwords.Hash(NormalizeRecoveryCode(code))),
+                VerifiedAt = now,
+                CreatedAt = now,
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Recovery codes regenerated: user={UserId} count={Count}", userId, count);
+        return codes;
+    }
+
+    /// <summary>
+    /// Consumes one recovery code for a user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="code">The recovery code.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when a code was consumed; otherwise, <see langword="false"/>.</returns>
+    public async Task<bool> ConsumeRecoveryCodeAsync(Guid userId, string code, CancellationToken ct = default)
+    {
+        var normalized = NormalizeRecoveryCode(code);
+        var factors = await db.UserMfaFactors
+            .Where(x => x.UserId == userId && x.Type == MfaFactorType.RecoverCode.Id)
+            .ToListAsync(ct);
+
+        var factor = factors.FirstOrDefault(x => this.passwords.Verify(normalized, Encoding.UTF8.GetString(x.ValueEncrypted)).Success);
+        if (factor is null)
+        {
+            return false;
+        }
+
+        db.UserMfaFactors.Remove(factor);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Recovery code consumed: user={UserId}", userId);
+        return true;
+    }
+
+    /// <summary>
+    /// Revokes all recovery codes for a user.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The number of revoked recovery codes.</returns>
+    public async Task<int> RevokeRecoveryCodesAsync(Guid userId, CancellationToken ct = default)
+    {
+        var factors = await db.UserMfaFactors
+            .Where(x => x.UserId == userId && x.Type == MfaFactorType.RecoverCode.Id)
+            .ToListAsync(ct);
+
+        db.UserMfaFactors.RemoveRange(factors);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Recovery codes revoked: user={UserId} count={Count}", userId, factors.Count);
+        return factors.Count;
+    }
+
+    /// <summary>
     /// Computes a TOTP code for a secret at a timestamp.
     /// </summary>
     /// <param name="secret">The shared secret bytes.</param>
@@ -174,6 +270,23 @@ public sealed class MfaStore
         }
 
         return output.ToString();
+    }
+
+    private static string GenerateRecoveryCode()
+    {
+        var encoded = ToBase32(RandomNumberGenerator.GetBytes(RecoveryCodeBytes));
+
+        return string.Create(11, encoded, static (span, value) =>
+        {
+            value.AsSpan(0, 5).CopyTo(span);
+            span[5] = '-';
+            value.AsSpan(5, 5).CopyTo(span[6..]);
+        });
+    }
+
+    private static string NormalizeRecoveryCode(string code)
+    {
+        return code.Trim().Replace("-", string.Empty, StringComparison.Ordinal).Replace(" ", string.Empty, StringComparison.Ordinal).ToUpperInvariant();
     }
 
     private static bool VerifyTotp(byte[] secret, string code, DateTimeOffset timestamp)

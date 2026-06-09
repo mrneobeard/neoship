@@ -120,6 +120,8 @@ Disallowed claims:
 ## Secrets And Encryption
 
 - application-layer encryption for provider secrets and similar sensitive fields
+- use slow password-style hashing, such as `PasswordHasher`/Argon2id, for any human-entered or low-entropy secret that must be verified later, including passwords, recovery codes, shared secrets, and similar credentials
+- use checksum/digest hashes, such as BLAKE3, only for high-entropy random bearer values where offline guessing is infeasible, such as generated session tokens, reset tokens, verification tokens, and API keys
 - hash session tokens, reset tokens, verification tokens, and API keys before storage
 - redact secrets from logs, traces, and audit metadata
 
