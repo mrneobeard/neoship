@@ -32,6 +32,9 @@ builder.Services.AddDbContext<ShipDb>(options =>
            .UseSnakeCaseNamingConvention());
 
 builder.Services.AddScoped<RequestContext>();
+builder.Services.AddSingleton(new PermissionRegistry(CorePermissions.All));
+builder.Services.AddSingleton<PermissionClaimCodec>(sp => new PermissionClaimCodec(sp.GetRequiredService<PermissionRegistry>()));
+builder.Services.AddScoped<PermissionResolver>();
 
 builder.Services.AddSingleton<PasswordStore>();
 builder.Services.AddSingleton<TokenStore>();
