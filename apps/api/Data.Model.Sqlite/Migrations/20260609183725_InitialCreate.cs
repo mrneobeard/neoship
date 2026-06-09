@@ -1,10 +1,9 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NeoShip.Data.Pgsql.Migrations
+namespace NeoShip.Data.Sqlite.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -16,29 +15,30 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "audit_events",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    type = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    data_json = table.Column<string>(type: "text", nullable: true),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: true),
-                    target_type = table.Column<string>(type: "text", nullable: true),
-                    target_id = table.Column<string>(type: "text", nullable: true),
-                    action = table.Column<string>(type: "text", nullable: true),
-                    request_id = table.Column<string>(type: "text", nullable: true),
-                    session_id = table.Column<string>(type: "text", nullable: true),
-                    machine_name = table.Column<string>(type: "text", nullable: true),
-                    trace_id = table.Column<string>(type: "text", nullable: true),
-                    span_id = table.Column<string>(type: "text", nullable: true),
-                    parent_span_id = table.Column<string>(type: "text", nullable: true),
-                    ip_address = table.Column<string>(type: "text", nullable: true),
-                    ip_digest = table.Column<string>(type: "text", nullable: true),
-                    user_agent = table.Column<string>(type: "text", nullable: true),
-                    country_code = table.Column<string>(type: "text", nullable: true),
-                    region = table.Column<string>(type: "text", nullable: true),
-                    asn = table.Column<long>(type: "bigint", nullable: true),
-                    risk_level = table.Column<int>(type: "integer", nullable: false),
-                    risk_flags_json = table.Column<string>(type: "text", nullable: true)
+                    id = table.Column<ulong>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    timestamp = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: true),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: true),
+                    target_type = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    target_id = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    action = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    request_id = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    session_id = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    machine_name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
+                    trace_id = table.Column<string>(type: "TEXT", maxLength: 32, nullable: true),
+                    span_id = table.Column<string>(type: "TEXT", maxLength: 32, nullable: true),
+                    parent_span_id = table.Column<string>(type: "TEXT", maxLength: 32, nullable: true),
+                    ip_address = table.Column<string>(type: "TEXT", maxLength: 46, nullable: true),
+                    ip_digest = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
+                    user_agent = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    country_code = table.Column<string>(type: "TEXT", maxLength: 2, nullable: true),
+                    region = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    asn = table.Column<uint>(type: "INTEGER", nullable: true),
+                    risk_level = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    risk_flags_json = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    data_json = table.Column<string>(type: "TEXT", maxLength: 4096, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -49,15 +49,15 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "orgs",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    name_upcase = table.Column<string>(type: "text", nullable: false),
-                    slug = table.Column<string>(type: "text", nullable: false),
-                    organization_plan_id = table.Column<int>(type: "integer", nullable: false),
-                    tenant_mode_id = table.Column<int>(type: "integer", nullable: false),
-                    status_id = table.Column<int>(type: "integer", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    name_upcase = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    slug = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    organization_plan_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    tenant_mode_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    status_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -65,28 +65,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "roles",
-                columns: table => new
-                {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    name_upcase = table.Column<string>(type: "text", nullable: false),
-                    description = table.Column<string>(type: "text", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_roles", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "user_claims",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    type = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false)
+                    id = table.Column<ulong>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    value = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -97,13 +83,13 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "groups",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    name_upcase = table.Column<string>(type: "text", nullable: false),
-                    email = table.Column<string>(type: "text", nullable: true),
-                    email_upcase = table.Column<string>(type: "text", nullable: true),
-                    description = table.Column<string>(type: "text", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    name_upcase = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    email_upcase = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    description = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -120,16 +106,16 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "users",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    email_upcase = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    name = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    name_upcase = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    status_id = table.Column<int>(type: "integer", nullable: false),
-                    avatar_url = table.Column<string>(type: "character varying(1024)", maxLength: 1024, nullable: true),
-                    last_login_ip = table.Column<string>(type: "character varying(39)", maxLength: 39, nullable: true),
-                    last_login_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    email_upcase = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    name_upcase = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    status_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    avatar_url = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    last_login_ip = table.Column<string>(type: "TEXT", maxLength: 39, nullable: true),
+                    last_login_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -143,55 +129,11 @@ namespace NeoShip.Data.Pgsql.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "role_claims",
-                columns: table => new
-                {
-                    id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    role_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    type = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_role_claims", x => x.id);
-                    table.ForeignKey(
-                        name: "fk_role_claims_roles_role_id",
-                        column: x => x.role_id,
-                        principalTable: "roles",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "group_role",
-                columns: table => new
-                {
-                    groups_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    roles_id = table.Column<Guid>(type: "uuid", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_group_role", x => new { x.groups_id, x.roles_id });
-                    table.ForeignKey(
-                        name: "fk_group_role_groups_groups_id",
-                        column: x => x.groups_id,
-                        principalTable: "groups",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "fk_group_role_roles_roles_id",
-                        column: x => x.roles_id,
-                        principalTable: "roles",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "group_members",
                 columns: table => new
                 {
-                    group_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    members_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    group_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    members_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -214,8 +156,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "group_owners",
                 columns: table => new
                 {
-                    group1id = table.Column<Guid>(type: "uuid", nullable: false),
-                    owners_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    group1id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    owners_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -235,24 +177,29 @@ namespace NeoShip.Data.Pgsql.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "role_user",
+                name: "roles",
                 columns: table => new
                 {
-                    roles_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    users_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    name_upcase = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    description = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    created_by = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_role_user", x => new { x.roles_id, x.users_id });
+                    table.PrimaryKey("pk_roles", x => x.id);
                     table.ForeignKey(
-                        name: "fk_role_user_roles_roles_id",
-                        column: x => x.roles_id,
-                        principalTable: "roles",
+                        name: "fk_roles_orgs_org_id",
+                        column: x => x.org_id,
+                        principalTable: "orgs",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_role_user_users_users_id",
-                        column: x => x.users_id,
+                        name: "fk_roles_users_created_by",
+                        column: x => x.created_by,
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
@@ -262,15 +209,15 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "service_accounts",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    name_upcase = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    description = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    name_upcase = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    description = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    created_by = table.Column<Guid>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    deleted_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -293,17 +240,17 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_api_keys",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
-                    description = table.Column<string>(type: "text", nullable: true),
-                    key_digest = table.Column<string>(type: "text", nullable: false),
-                    scopes_json = table.Column<string>(type: "text", nullable: false),
-                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    revoked_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    last_used_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    description = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    key_digest = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    scopes_json = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    revoked_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    deleted_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    last_used_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -320,19 +267,19 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_emails",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    email_digest = table.Column<string>(type: "character varying(512)", maxLength: 512, nullable: false),
-                    email_upcase = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    email = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    created_by = table.Column<Guid>(type: "uuid", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    verified_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    verification_token_digest = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    verification_token_expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    erased_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    status_id = table.Column<int>(type: "integer", nullable: false)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    email_digest = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
+                    email_upcase = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    email = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    created_by = table.Column<Guid>(type: "TEXT", nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    verified_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    verification_token_digest = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    verification_token_expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    deleted_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    erased_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    status_id = table.Column<ushort>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -349,19 +296,19 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_identity_providers",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    provider_type_id = table.Column<int>(type: "integer", nullable: false),
-                    status_id = table.Column<int>(type: "integer", nullable: false),
-                    issuer_url = table.Column<string>(type: "text", nullable: true),
-                    client_id = table.Column<string>(type: "text", nullable: true),
-                    client_secret_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    metadata_json = table.Column<string>(type: "text", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<long>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    provider_type_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    status_id = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    issuer_url = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: true),
+                    client_id = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    client_secret_enc = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    metadata_json = table.Column<string>(type: "TEXT", maxLength: 4096, nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -378,16 +325,16 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_known_networks",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    ip_address = table.Column<string>(type: "text", nullable: true),
-                    ip_digest = table.Column<string>(type: "text", nullable: true),
-                    country_code = table.Column<string>(type: "text", nullable: true),
-                    region = table.Column<string>(type: "text", nullable: true),
-                    asn = table.Column<long>(type: "bigint", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    last_used_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    count = table.Column<long>(type: "bigint", nullable: false)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    ip_address = table.Column<string>(type: "TEXT", maxLength: 46, nullable: true),
+                    ip_digest = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    country_code = table.Column<string>(type: "TEXT", maxLength: 2, nullable: true),
+                    region = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    asn = table.Column<uint>(type: "INTEGER", nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    last_used_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    count = table.Column<uint>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -404,17 +351,17 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_mfa_factors",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    type = table.Column<int>(type: "integer", nullable: false),
-                    value_enc = table.Column<byte[]>(type: "bytea", nullable: false),
-                    web_authn_public_key_credential_data = table.Column<byte[]>(type: "bytea", nullable: false),
-                    web_authn_credential_id = table.Column<byte[]>(type: "bytea", nullable: false),
-                    verified_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    transports_json = table.Column<string>(type: "text", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    type = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    value_enc = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    web_authn_public_key_credential_data = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    web_authn_credential_id = table.Column<byte[]>(type: "BLOB", nullable: false),
+                    verified_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    transports_json = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -431,20 +378,18 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_password_auths",
                 columns: table => new
                 {
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    password_hash = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
-                    password_salt = table.Column<string>(type: "character varying(128)", maxLength: 128, nullable: false),
-                    hash_algorithm = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
-                    iterations = table.Column<int>(type: "integer", nullable: false),
-                    memory_kib = table.Column<int>(type: "integer", nullable: false),
-                    parallelism = table.Column<int>(type: "integer", nullable: false),
-                    failed_attempts = table.Column<int>(type: "integer", nullable: false),
-                    locked_until = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    reset_token_digest = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: true),
-                    reset_token_expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    password_changed_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    password_hash = table.Column<string>(type: "TEXT", maxLength: 256, nullable: false),
+                    password_salt = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    hash_algorithm = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
+                    iterations = table.Column<int>(type: "INTEGER", nullable: false),
+                    failed_attempts = table.Column<int>(type: "INTEGER", nullable: false),
+                    locked_until = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    reset_token_digest = table.Column<string>(type: "TEXT", maxLength: 256, nullable: true),
+                    reset_token_expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    password_changed_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -461,24 +406,23 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_sessions",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    org_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    token_digest = table.Column<string>(type: "text", nullable: false),
-                    ip_address = table.Column<string>(type: "text", nullable: true),
-                    ip_hash = table.Column<string>(type: "text", nullable: true),
-                    ip_prefix = table.Column<string>(type: "text", nullable: true),
-                    user_agent = table.Column<string>(type: "text", nullable: true),
-                    risk_level = table.Column<int>(type: "integer", nullable: false),
-                    risk_flags_json = table.Column<string>(type: "text", nullable: true),
-                    last_used_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    mfa_verified_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    revoked_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    revoke_reason = table.Column<string>(type: "text", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    claims_json = table.Column<string>(type: "text", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    user_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    org_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    token_digest = table.Column<string>(type: "TEXT", maxLength: 512, nullable: false),
+                    ip_address = table.Column<string>(type: "TEXT", maxLength: 46, nullable: true),
+                    ip_digest = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    user_agent = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
+                    risk_level = table.Column<ushort>(type: "INTEGER", nullable: false),
+                    risk_flags_json = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: true),
+                    last_used_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    mfa_verified_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    expires_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    revoked_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    revoke_reason = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    claims_json = table.Column<string>(type: "TEXT", maxLength: 4096, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -498,11 +442,88 @@ namespace NeoShip.Data.Pgsql.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "group_role",
+                columns: table => new
+                {
+                    groups_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    roles_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_group_role", x => new { x.groups_id, x.roles_id });
+                    table.ForeignKey(
+                        name: "fk_group_role_groups_groups_id",
+                        column: x => x.groups_id,
+                        principalTable: "groups",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_group_role_roles_roles_id",
+                        column: x => x.roles_id,
+                        principalTable: "roles",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "role_claims",
+                columns: table => new
+                {
+                    id = table.Column<ulong>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    role_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    value = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    created_by = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_role_claims", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_role_claims_roles_role_id",
+                        column: x => x.role_id,
+                        principalTable: "roles",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_role_claims_users_created_by",
+                        column: x => x.created_by,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "role_user",
+                columns: table => new
+                {
+                    roles_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    users_id = table.Column<Guid>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_role_user", x => new { x.roles_id, x.users_id });
+                    table.ForeignKey(
+                        name: "fk_role_user_roles_roles_id",
+                        column: x => x.roles_id,
+                        principalTable: "roles",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_role_user_users_users_id",
+                        column: x => x.users_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "group_service_account_members",
                 columns: table => new
                 {
-                    group_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    service_account_members_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    group_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    service_account_members_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -514,7 +535,7 @@ namespace NeoShip.Data.Pgsql.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_group_service_account_members_service_accounts_service_acco",
+                        name: "fk_group_service_account_members_service_accounts_service_account_members_id",
                         column: x => x.service_account_members_id,
                         principalTable: "service_accounts",
                         principalColumn: "id",
@@ -525,8 +546,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "group_service_account_owners",
                 columns: table => new
                 {
-                    group1id = table.Column<Guid>(type: "uuid", nullable: false),
-                    service_account_owners_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    group1id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    service_account_owners_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -538,7 +559,7 @@ namespace NeoShip.Data.Pgsql.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_group_service_account_owners_service_accounts_service_accou",
+                        name: "fk_group_service_account_owners_service_accounts_service_account_owners_id",
                         column: x => x.service_account_owners_id,
                         principalTable: "service_accounts",
                         principalColumn: "id",
@@ -549,17 +570,17 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "service_account_api_keys",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    service_account_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    name = table.Column<string>(type: "text", nullable: false),
-                    description = table.Column<string>(type: "text", nullable: true),
-                    key_digest = table.Column<string>(type: "text", nullable: false),
-                    scopes_json = table.Column<string>(type: "text", nullable: false),
-                    expires_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    revoked_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    deleted_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    service_account_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    name = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    description = table.Column<string>(type: "TEXT", maxLength: 512, nullable: true),
+                    key_digest = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    scopes_json = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
+                    expires_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    revoked_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    deleted_at = table.Column<DateTime>(type: "TEXT", nullable: true),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -576,12 +597,12 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "service_account_claims",
                 columns: table => new
                 {
-                    id = table.Column<Guid>(type: "uuid", nullable: false),
-                    service_account_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    type = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    service_account_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    value = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -598,13 +619,13 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "user_api_key_claims",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    user_api_key_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    type = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<uint>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    user_api_key_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    value = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -621,18 +642,19 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "service_account_api_key_claims",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    service_account_api_key_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    type = table.Column<string>(type: "text", nullable: false),
-                    value = table.Column<string>(type: "text", nullable: false),
-                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    id = table.Column<ulong>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    service_account_api_key_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    type = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
+                    value = table.Column<string>(type: "TEXT", maxLength: 1024, nullable: false),
+                    created_at = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_service_account_api_key_claims", x => x.id);
                     table.ForeignKey(
-                        name: "fk_service_account_api_key_claims_service_account_api_keys_ser",
+                        name: "fk_service_account_api_key_claims_service_account_api_keys_service_account_api_key_id",
                         column: x => x.service_account_api_key_id,
                         principalTable: "service_account_api_keys",
                         principalColumn: "id",
@@ -643,8 +665,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "service_account_api_key_roles",
                 columns: table => new
                 {
-                    roles_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    service_account_api_key_id = table.Column<Guid>(type: "uuid", nullable: false)
+                    roles_id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    service_account_api_key_id = table.Column<Guid>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -656,7 +678,7 @@ namespace NeoShip.Data.Pgsql.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "fk_service_account_api_key_roles_service_account_api_keys_serv",
+                        name: "fk_service_account_api_key_roles_service_account_api_keys_service_account_api_key_id",
                         column: x => x.service_account_api_key_id,
                         principalTable: "service_account_api_keys",
                         principalColumn: "id",
@@ -704,6 +726,11 @@ namespace NeoShip.Data.Pgsql.Migrations
                 column: "org_id");
 
             migrationBuilder.CreateIndex(
+                name: "ix_role_claims_created_by",
+                table: "role_claims",
+                column: "created_by");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_role_claims_role_id",
                 table: "role_claims",
                 column: "role_id");
@@ -712,6 +739,17 @@ namespace NeoShip.Data.Pgsql.Migrations
                 name: "ix_role_user_users_id",
                 table: "role_user",
                 column: "users_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_roles_created_by",
+                table: "roles",
+                column: "created_by");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_roles_org_id_name_upcase",
+                table: "roles",
+                columns: new[] { "org_id", "name_upcase" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "ix_service_account_api_key_claims_service_account_api_key_id",

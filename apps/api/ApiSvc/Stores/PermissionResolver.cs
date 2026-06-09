@@ -41,6 +41,11 @@ public sealed class PermissionResolver
     {
         var grants = new List<PermissionGrant>();
 
+        var userOrgId = await this.db.Users
+            .Where(x => x.Id == userId)
+            .Select(x => x.OrgId)
+            .FirstOrDefaultAsync(ct);
+
         var userClaims = await this.db.UserClaims
             .Where(x => x.UserId == userId)
             .Select(x => new ClaimPair(x.Type, x.Value ?? string.Empty))
@@ -50,7 +55,7 @@ public sealed class PermissionResolver
 
         var userRoles = await this.db.Users
             .Where(x => x.Id == userId)
-            .SelectMany(x => x.Roles)
+            .SelectMany(x => x.Roles.Where(r => r.OrgId == userOrgId))
             .SelectMany(x => x.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
@@ -58,7 +63,7 @@ public sealed class PermissionResolver
         this.AddClaims(grants, userRoles);
 
         var userGroups = await this.db.Groups
-            .Where(g => g.Members.Any(u => u.Id == userId) || g.Owners.Any(u => u.Id == userId))
+            .Where(g => g.OrgId == userOrgId && (g.Members.Any(u => u.Id == userId) || g.Owners.Any(u => u.Id == userId)))
             .SelectMany(g => g.Roles)
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
@@ -109,6 +114,11 @@ public sealed class PermissionResolver
     {
         var grants = new List<PermissionGrant>();
 
+        var orgId = await this.db.ServiceAccounts
+            .Where(x => x.Id == serviceAccountId)
+            .Select(x => x.OrgId)
+            .FirstOrDefaultAsync(ct);
+
         var directClaims = await this.db.ServiceAccountClaims
             .Where(x => x.ServiceAccountId == serviceAccountId)
             .Select(x => new ClaimPair(x.Type, x.Value))
@@ -117,7 +127,7 @@ public sealed class PermissionResolver
         this.AddClaims(grants, directClaims);
 
         var roleClaims = await this.db.Groups
-            .Where(g => g.ServiceAccountMembers.Any(sa => sa.Id == serviceAccountId) || g.ServiceAccountOwners.Any(sa => sa.Id == serviceAccountId))
+            .Where(g => g.OrgId == orgId && (g.ServiceAccountMembers.Any(sa => sa.Id == serviceAccountId) || g.ServiceAccountOwners.Any(sa => sa.Id == serviceAccountId)))
             .SelectMany(g => g.Roles)
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))

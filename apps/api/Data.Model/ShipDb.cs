@@ -150,10 +150,22 @@ public class ShipDb : DbContext
             .HasMany(u => u.Roles)
             .WithMany(r => r.Users);
 
+        modelBuilder.Entity<Role>(r =>
+        {
+            r.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId);
+            r.HasIndex(x => new { x.OrgId, x.NameUpcase }).IsUnique();
+            r.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedBy);
+        });
+
         // Role -> RoleClaim
         modelBuilder.Entity<RoleClaim>(c =>
         {
             c.HasOne(x => x.Role).WithMany(r => r.Claims).HasForeignKey(x => x.RoleId);
+            c.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedBy);
         });
 
         // Group <-> Role (M:N)

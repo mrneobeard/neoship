@@ -45,6 +45,8 @@ builder.Services.AddScoped<AuthStore>();
 builder.Services.AddScoped<AuditStore>();
 builder.Services.AddScoped<ApiKeyStore>();
 builder.Services.AddScoped<ServiceAccountStore>();
+builder.Services.AddScoped<RoleStore>();
+builder.Services.AddScoped<GroupStore>();
 
 var app = builder.Build();
 

@@ -50,6 +50,7 @@ public class PermissionResolverTests
         var role = new Role
         {
             Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
             Name = "role-admin",
             NameUpcase = "ROLE-ADMIN",
             CreatedBy = user.Id,

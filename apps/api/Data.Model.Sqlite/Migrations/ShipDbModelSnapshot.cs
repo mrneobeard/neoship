@@ -44,6 +44,8 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("action");
 
@@ -52,22 +54,27 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("asn");
 
                     b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
                         .HasColumnType("TEXT")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("TEXT")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
+                        .HasMaxLength(46)
                         .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("machine_name");
 
@@ -76,18 +83,22 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("risk_flags_json");
 
@@ -96,18 +107,22 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("target_type");
 
@@ -116,6 +131,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasColumnName("trace_id");
 
@@ -126,6 +142,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("user_agent");
 
@@ -153,24 +170,29 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
@@ -200,11 +222,13 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
@@ -214,6 +238,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Slug")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("slug");
 
@@ -246,22 +271,40 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by");
+
                     b.Property<string>("Description")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name_upcase");
 
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("org_id");
+
                     b.HasKey("Id")
                         .HasName("pk_roles");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_roles_created_by");
+
+                    b.HasIndex("OrgId", "NameUpcase")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_org_id_name_upcase");
 
                     b.ToTable("roles", (string)null);
                 });
@@ -273,22 +316,35 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("INTEGER")
                         .HasColumnName("id");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_by");
+
                     b.Property<Guid>("RoleId")
                         .HasColumnType("TEXT")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
                         .HasName("pk_role_claims");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_role_claims_created_by");
 
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_role_claims_role_id");
@@ -316,7 +372,6 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
@@ -369,6 +424,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
@@ -378,11 +434,13 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
@@ -392,6 +450,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT")
                         .HasColumnName("scopes_json");
 
@@ -432,6 +491,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("type");
 
@@ -441,6 +501,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("value");
 
@@ -470,6 +531,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("type");
 
@@ -479,6 +541,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("value");
 
@@ -576,6 +639,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("description");
 
@@ -585,6 +649,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("key_digest");
 
@@ -604,6 +669,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("scopes_json");
 
@@ -636,6 +702,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("type");
 
@@ -649,6 +716,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("value");
 
@@ -670,6 +738,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("type");
 
@@ -678,7 +747,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
-                        .IsRequired()
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("value");
 
@@ -773,6 +842,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ClientId")
+                        .HasMaxLength(256)
                         .HasColumnType("TEXT")
                         .HasColumnName("client_id");
 
@@ -786,15 +856,18 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
+                        .HasMaxLength(2048)
                         .HasColumnType("TEXT")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("TEXT")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
@@ -849,6 +922,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("count");
 
                     b.Property<string>("CountryCode")
+                        .HasMaxLength(2)
                         .HasColumnType("TEXT")
                         .HasColumnName("country_code");
 
@@ -857,10 +931,12 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
+                        .HasMaxLength(46)
                         .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("ip_digest");
 
@@ -869,6 +945,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("region");
 
@@ -898,10 +975,12 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("transports_json");
 
@@ -973,14 +1052,6 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnType("TEXT")
                         .HasColumnName("locked_until");
 
-                    b.Property<int>("MemoryKib")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("memory_kib");
-
-                    b.Property<int>("Parallelism")
-                        .HasColumnType("INTEGER")
-                        .HasColumnName("parallelism");
-
                     b.Property<DateTime?>("PasswordChangedAt")
                         .HasColumnType("TEXT")
                         .HasColumnName("password_changed_at");
@@ -1027,6 +1098,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("TEXT")
                         .HasColumnName("claims_json");
 
@@ -1039,16 +1111,14 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
+                        .HasMaxLength(46)
                         .HasColumnType("TEXT")
                         .HasColumnName("ip_address");
 
-                    b.Property<string>("IpHash")
+                    b.Property<string>("IpDigest")
+                        .HasMaxLength(128)
                         .HasColumnType("TEXT")
-                        .HasColumnName("ip_hash");
-
-                    b.Property<string>("IpPrefix")
-                        .HasColumnType("TEXT")
-                        .HasColumnName("ip_prefix");
+                        .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
                         .HasColumnType("TEXT")
@@ -1063,6 +1133,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("revoke_reason");
 
@@ -1071,6 +1142,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
+                        .HasMaxLength(1024)
                         .HasColumnType("TEXT")
                         .HasColumnName("risk_flags_json");
 
@@ -1080,6 +1152,7 @@ namespace NeoShip.Data.Sqlite.Migrations
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("token_digest");
 
@@ -1088,6 +1161,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
+                        .HasMaxLength(512)
                         .HasColumnType("TEXT")
                         .HasColumnName("user_agent");
 
@@ -1253,14 +1327,44 @@ namespace NeoShip.Data.Sqlite.Migrations
                     b.Navigation("Org");
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.Role", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_users_created_by");
+
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_orgs_org_id");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Org");
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_claims_users_created_by");
+
                     b.HasOne("NeoShip.Data.Model.Role", "Role")
                         .WithMany("Claims")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_role_claims_roles_role_id");
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Role");
                 });

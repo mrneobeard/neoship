@@ -49,7 +49,9 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Action")
-                        .HasColumnType("text")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("action");
 
                     b.Property<long?>("Asn")
@@ -57,23 +59,28 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("asn");
 
                     b.Property<string>("CountryCode")
-                        .HasColumnType("text")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("text")
+                        .HasMaxLength(46)
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
-                        .HasColumnType("text")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("machine_name");
 
                     b.Property<Guid?>("OrgId")
@@ -81,19 +88,23 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
-                        .HasColumnType("text")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
@@ -101,19 +112,23 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
-                        .HasColumnType("text")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_type");
 
                     b.Property<DateTime>("Timestamp")
@@ -121,7 +136,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
-                        .HasColumnType("text")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("trace_id");
 
                     b.Property<string>("Type")
@@ -131,7 +147,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid?>("UserId")
@@ -158,25 +175,30 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
@@ -205,12 +227,14 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<int>("OrganizationPlanId")
@@ -219,7 +243,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Slug")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("slug");
 
                     b.Property<int>("StatusId")
@@ -251,22 +276,40 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
                     b.Property<string>("Description")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
 
                     b.HasKey("Id")
                         .HasName("pk_roles");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_roles_created_by");
+
+                    b.HasIndex("OrgId", "NameUpcase")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_org_id_name_upcase");
 
                     b.ToTable("roles", (string)null);
                 });
@@ -278,22 +321,35 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("id");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
                         .HasName("pk_role_claims");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_role_claims_created_by");
 
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_role_claims_role_id");
@@ -321,7 +377,6 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("description");
@@ -374,7 +429,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
@@ -383,12 +439,14 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
@@ -397,7 +455,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("ServiceAccountId")
@@ -437,7 +496,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -446,7 +506,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -475,7 +536,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -484,7 +546,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -581,7 +644,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
@@ -590,7 +654,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<DateTime?>("LastUsedAt")
@@ -609,7 +674,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("UserId")
@@ -643,7 +709,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -656,7 +723,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -677,7 +745,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<Guid>("UserId")
@@ -685,8 +754,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -782,7 +851,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientId")
-                        .HasColumnType("text")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("client_id");
 
                     b.Property<byte[]>("ClientSecretEncrypted")
@@ -795,16 +865,19 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
-                        .HasColumnType("text")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<Guid>("OrgId")
@@ -858,7 +931,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("count");
 
                     b.Property<string>("CountryCode")
-                        .HasColumnType("text")
+                        .HasMaxLength(2)
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<DateTime>("CreatedAt")
@@ -866,11 +940,13 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("text")
+                        .HasMaxLength(46)
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
@@ -878,7 +954,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("region");
 
                     b.Property<Guid>("UserId")
@@ -907,11 +984,13 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("transports_json");
 
                     b.Property<int>("Type")
@@ -982,14 +1061,6 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
 
-                    b.Property<int>("MemoryKib")
-                        .HasColumnType("integer")
-                        .HasColumnName("memory_kib");
-
-                    b.Property<int>("Parallelism")
-                        .HasColumnType("integer")
-                        .HasColumnName("parallelism");
-
                     b.Property<DateTime?>("PasswordChangedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("password_changed_at");
@@ -1036,7 +1107,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("claims_json");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1048,16 +1120,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("text")
+                        .HasMaxLength(46)
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
-                    b.Property<string>("IpHash")
-                        .HasColumnType("text")
-                        .HasColumnName("ip_hash");
-
-                    b.Property<string>("IpPrefix")
-                        .HasColumnType("text")
-                        .HasColumnName("ip_prefix");
+                    b.Property<string>("IpDigest")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1072,7 +1142,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("revoke_reason");
 
                     b.Property<DateTime?>("RevokedAt")
@@ -1080,7 +1151,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
-                        .HasColumnType("text")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
@@ -1089,7 +1161,8 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("token_digest");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -1097,7 +1170,8 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
-                        .HasColumnType("text")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
@@ -1262,14 +1336,44 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.Navigation("Org");
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.Role", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_users_created_by");
+
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_orgs_org_id");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Org");
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_claims_users_created_by");
+
                     b.HasOne("NeoShip.Data.Model.Role", "Role")
                         .WithMany("Claims")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_role_claims_roles_role_id");
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Role");
                 });

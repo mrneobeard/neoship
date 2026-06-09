@@ -51,7 +51,9 @@ namespace NeoShip.Data.Mssql.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
                     b.Property<string>("Action")
-                        .HasColumnType("nvarchar(max)")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("action");
 
                     b.Property<long?>("Asn")
@@ -59,23 +61,28 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("asn");
 
                     b.Property<string>("CountryCode")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(46)
+                        .HasColumnType("nvarchar(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
                         .HasColumnName("machine_name");
 
                     b.Property<Guid?>("OrgId")
@@ -83,19 +90,23 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
@@ -103,19 +114,23 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("target_type");
 
                     b.Property<DateTime>("Timestamp")
@@ -123,7 +138,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)")
                         .HasColumnName("trace_id");
 
                     b.Property<string>("Type")
@@ -133,7 +149,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid?>("UserId")
@@ -160,25 +177,30 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
@@ -207,12 +229,14 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<int>("OrganizationPlanId")
@@ -221,7 +245,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Slug")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("slug");
 
                     b.Property<int>("StatusId")
@@ -253,22 +278,40 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("created_by");
+
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name_upcase");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("org_id");
 
                     b.HasKey("Id")
                         .HasName("pk_roles");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_roles_created_by");
+
+                    b.HasIndex("OrgId", "NameUpcase")
+                        .IsUnique()
+                        .HasDatabaseName("ix_roles_org_id_name_upcase");
 
                     b.ToTable("roles", (string)null);
                 });
@@ -282,22 +325,35 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<decimal>("Id"));
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("created_by");
+
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
                         .HasName("pk_role_claims");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_role_claims_created_by");
 
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_role_claims_role_id");
@@ -325,7 +381,6 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)")
                         .HasColumnName("description");
@@ -378,7 +433,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
@@ -387,12 +443,14 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
@@ -401,7 +459,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("ServiceAccountId")
@@ -443,7 +502,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -452,7 +512,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -481,7 +542,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -490,7 +552,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -587,7 +650,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
@@ -596,7 +660,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<DateTime?>("LastUsedAt")
@@ -615,7 +680,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("UserId")
@@ -649,7 +715,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -662,7 +729,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Value")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -685,7 +753,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Type")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("type");
 
                     b.Property<Guid>("UserId")
@@ -693,8 +762,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -790,7 +859,8 @@ namespace NeoShip.Data.Mssql.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientId")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)")
                         .HasColumnName("client_id");
 
                     b.Property<byte[]>("ClientSecretEncrypted")
@@ -803,16 +873,19 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(2048)
+                        .HasColumnType("nvarchar(2048)")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name");
 
                     b.Property<Guid>("OrgId")
@@ -866,7 +939,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("count");
 
                     b.Property<string>("CountryCode")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)")
                         .HasColumnName("country_code");
 
                     b.Property<DateTime>("CreatedAt")
@@ -874,11 +948,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(46)
+                        .HasColumnType("nvarchar(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
@@ -886,7 +962,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("region");
 
                     b.Property<Guid>("UserId")
@@ -915,11 +992,13 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("transports_json");
 
                     b.Property<int>("Type")
@@ -990,14 +1069,6 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("locked_until");
 
-                    b.Property<int>("MemoryKib")
-                        .HasColumnType("int")
-                        .HasColumnName("memory_kib");
-
-                    b.Property<int>("Parallelism")
-                        .HasColumnType("int")
-                        .HasColumnName("parallelism");
-
                     b.Property<DateTime?>("PasswordChangedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("password_changed_at");
@@ -1044,6 +1115,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
+                        .HasMaxLength(4096)
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("claims_json");
 
@@ -1056,16 +1128,14 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(46)
+                        .HasColumnType("nvarchar(46)")
                         .HasColumnName("ip_address");
 
-                    b.Property<string>("IpHash")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("ip_hash");
-
-                    b.Property<string>("IpPrefix")
-                        .HasColumnType("nvarchar(max)")
-                        .HasColumnName("ip_prefix");
+                    b.Property<string>("IpDigest")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
                         .HasColumnType("datetime2")
@@ -1080,7 +1150,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("revoke_reason");
 
                     b.Property<DateTime?>("RevokedAt")
@@ -1088,7 +1159,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)")
                         .HasColumnName("risk_flags_json");
 
                     b.Property<int>("RiskLevel")
@@ -1097,7 +1169,8 @@ namespace NeoShip.Data.Mssql.Migrations
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
-                        .HasColumnType("nvarchar(450)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("token_digest");
 
                     b.Property<DateTime?>("UpdatedAt")
@@ -1105,7 +1178,8 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
-                        .HasColumnType("nvarchar(max)")
+                        .HasMaxLength(512)
+                        .HasColumnType("nvarchar(512)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
@@ -1270,14 +1344,44 @@ namespace NeoShip.Data.Mssql.Migrations
                     b.Navigation("Org");
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.Role", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_users_created_by");
+
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_roles_orgs_org_id");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Org");
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_claims_users_created_by");
+
                     b.HasOne("NeoShip.Data.Model.Role", "Role")
                         .WithMany("Claims")
                         .HasForeignKey("RoleId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_role_claims_roles_role_id");
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Role");
                 });
