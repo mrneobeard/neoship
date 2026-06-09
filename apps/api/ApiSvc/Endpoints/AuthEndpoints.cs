@@ -194,7 +194,7 @@ public static class AuthEndpoints
         var session = await sessions.ValidateSessionAsync(rawToken, ct);
         if (session is null) return TypedResults.Unauthorized();
 
-        var token = tokenExchange.CreateToken(session.UserId, session.OrgId);
+        var token = tokenExchange.CreateToken(session.UserId, session.OrgId, session.ClaimsJson);
         return TypedResults.Ok(new TokenExchangeResponse(token, "Bearer", 300));
     }
 }

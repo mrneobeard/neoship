@@ -28,6 +28,7 @@ public class AuthStore
     private readonly SessionStore sessions;
     private readonly AuditStore audit;
     private readonly ApiKeyStore apiKeys;
+    private readonly PermissionResolver permissions;
 
     private readonly RequestContext requestContext;
     private readonly ILogger<AuthStore> logger;
@@ -41,15 +42,18 @@ public class AuthStore
     /// <param name="sessions">The session store.</param>
     /// <param name="audit">The audit store.</param>
     /// <param name="apiKeys">The API key store.</param>
+    /// <param name="apiKeys">The API key store.</param>
+    /// <param name="permissions">The permission resolver.</param>
     /// <param name="requestContext">The request context.</param>
     /// <param name="logger">The logger.</param>
-    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, RequestContext requestContext, ILogger<AuthStore> logger)
+    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, PermissionResolver permissions, RequestContext requestContext, ILogger<AuthStore> logger)
     {
         this.db = db;
         this.passwords = passwords;
         this.sessions = sessions;
         this.audit = audit;
         this.apiKeys = apiKeys;
+        this.permissions = permissions;
         this.requestContext = requestContext;
         this.logger = logger;
     }
@@ -111,7 +115,8 @@ public class AuthStore
         this.db.UserPasswordAuths.Add(userPasswordAuth);
         await this.db.SaveChangesAsync(ct);
 
-        var (session, rawToken) = await this.sessions.CreateSessionAsync(userId, orgId, ct);
+        var permissions = await this.permissions.ResolveUserAsync(userId, ct);
+        var (session, rawToken) = await this.sessions.CreateSessionAsync(userId, orgId, permissions, ct);
 
         this.requestContext.UserId = userId;
         this.requestContext.OrgId = orgId;
@@ -207,7 +212,8 @@ public class AuthStore
         user.LastLoginIp = this.requestContext.IpAddress;
         user.LastLoginAt = DateTime.UtcNow;
 
-        var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, orgId, ct);
+        var permissions = await this.permissions.ResolveUserAsync(user.Id, ct);
+        var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, orgId, permissions, ct);
 
         this.requestContext.UserId = user.Id;
         this.requestContext.OrgId = orgId;
@@ -253,7 +259,8 @@ public class AuthStore
             return (LoginResult.AccountSuspended, null, null, null);
         }
 
-        var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, user.OrgId, ct);
+        var permissions = await this.permissions.ResolveUserAsync(user.Id, ct);
+        var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, user.OrgId, permissions, ct);
 
         this.requestContext.UserId = user.Id;
         this.requestContext.OrgId = user.OrgId;

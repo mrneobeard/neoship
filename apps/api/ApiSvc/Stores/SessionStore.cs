@@ -10,18 +10,29 @@ public class SessionStore
     private readonly TokenStore tokens;
     private readonly RequestContext requestContext;
     private readonly ILogger<SessionStore> logger;
+    private readonly PermissionSnapshotCodec snapshotCodec;
 
-    public SessionStore(ShipDb db, TokenStore tokens, RequestContext requestContext, ILogger<SessionStore> logger)
+    /// <summary>
+    /// Initializes a new <see cref="SessionStore"/> instance.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="tokens">The token helper.</param>
+    /// <param name="requestContext">The request context.</param>
+    /// <param name="snapshotCodec">The permission snapshot codec.</param>
+    /// <param name="logger">The logger.</param>
+    public SessionStore(ShipDb db, TokenStore tokens, RequestContext requestContext, PermissionSnapshotCodec snapshotCodec, ILogger<SessionStore> logger)
     {
         this.db = db;
         this.tokens = tokens;
         this.requestContext = requestContext;
+        this.snapshotCodec = snapshotCodec;
         this.logger = logger;
     }
 
     public async Task<(UserSession Session, string RawToken)> CreateSessionAsync(
         Guid userId,
         Guid orgId,
+        PermissionSet? permissions = null,
         CancellationToken ct = default)
     {
         var (rawToken, digest) = tokens.GenerateSessionToken();
@@ -35,6 +46,7 @@ public class SessionStore
             TokenDigest = digestBase64,
             IpAddress = requestContext.IpAddress,
             UserAgent = requestContext.UserAgent,
+            ClaimsJson = permissions is null ? null : this.snapshotCodec.Serialize(permissions),
             ExpiresAt = DateTime.UtcNow.AddDays(7),
             CreatedAt = DateTime.UtcNow,
         };
