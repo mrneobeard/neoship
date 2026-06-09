@@ -50,6 +50,7 @@ builder.Services.AddScoped<RoleStore>();
 builder.Services.AddScoped<GroupStore>();
 builder.Services.AddScoped<OrganizationStore>();
 builder.Services.AddScoped<IdentityProviderStore>();
+builder.Services.AddScoped<MfaStore>();
 
 var app = builder.Build();
 

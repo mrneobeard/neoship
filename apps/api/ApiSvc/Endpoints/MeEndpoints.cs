@@ -28,6 +28,10 @@ public static class MeEndpoints
         group.MapPost("/api-keys", CreateApiKeyAsync);
         group.MapPost("/api-keys/{apiKeyId:guid}/revoke", RevokeApiKeyAsync);
 
+        group.MapPost("/mfa/totp/start", StartTotpAsync);
+        group.MapPost("/mfa/totp/confirm", ConfirmTotpAsync);
+        group.MapPost("/mfa/totp/disable", DisableTotpAsync);
+
         return group;
     }
 
@@ -241,5 +245,68 @@ public static class MeEndpoints
         }
 
         return TypedResults.Ok();
+    }
+
+    private sealed record StartTotpRequest(string? Name);
+
+    private sealed record StartTotpResponse(Guid FactorId, string Secret, string OtpAuthUri);
+
+    private sealed record ConfirmTotpRequest(Guid FactorId, string Code);
+
+    private sealed record DisableTotpRequest(Guid FactorId);
+
+    private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
+        [FromBody] StartTotpRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        MfaStore mfa,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var (factor, secret) = await mfa.StartTotpAsync(user.Id, req.Name, ct);
+        var issuer = Uri.EscapeDataString("NeoShip");
+        var label = Uri.EscapeDataString($"NeoShip:{user.Email}");
+        var uri = $"otpauth://totp/{label}?secret={secret}&issuer={issuer}&digits=6&period=30";
+
+        return TypedResults.Ok(new StartTotpResponse(factor.Id, secret, uri));
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> ConfirmTotpAsync(
+        [FromBody] ConfirmTotpRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        MfaStore mfa,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var confirmed = await mfa.ConfirmTotpAsync(user.Id, req.FactorId, req.Code, ct);
+        return confirmed ? TypedResults.Ok() : TypedResults.NotFound();
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> DisableTotpAsync(
+        [FromBody] DisableTotpRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        MfaStore mfa,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var disabled = await mfa.DisableTotpAsync(user.Id, req.FactorId, ct);
+        return disabled ? TypedResults.Ok() : TypedResults.NotFound();
     }
 }
