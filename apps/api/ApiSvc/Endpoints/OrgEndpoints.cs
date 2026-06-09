@@ -13,6 +13,8 @@ public static class OrgEndpoints
     {
         var group = routes.MapGroup("/api/v1/orgs/{orgSlug}");
 
+        group.MapGet("/permissions", ListPermissionsAsync);
+
         group.MapGet("/roles", ListRolesAsync);
         group.MapPost("/roles", CreateRoleAsync);
         group.MapPatch("/roles/{roleId:guid}", UpdateRoleAsync);
@@ -83,6 +85,11 @@ public static class OrgEndpoints
     /// Represents a role permission grant request.
     /// </summary>
     public record AddRoleClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
+
+    /// <summary>
+    /// Represents a registered permission definition.
+    /// </summary>
+    public record PermissionDefinitionResponse(string Key, string Resource, string Action, string Description, List<PermissionScopeKind> AllowedScopes);
 
     /// <summary>
     /// Represents a group response.
@@ -197,6 +204,14 @@ public static class OrgEndpoints
         return (await permissions.ResolveServiceAccountApiKeyAsync(apiKeyId, ct)).Allows(permission, PermissionScopeKind.Organization, orgSlug);
     }
 
+    private static PermissionDefinitionResponse ToPermissionDefinitionResponse(PermissionDefinition definition)
+        => new(
+            definition.Key.ToString(),
+            definition.Key.Resource,
+            definition.Key.Action,
+            definition.Description,
+            definition.AllowedScopes.ToList());
+
     private static RoleResponse ToRoleResponse(Role role)
         => new(
             role.Id,
@@ -206,6 +221,36 @@ public static class OrgEndpoints
 
     private static GroupResponse ToGroupResponse(Group group)
         => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count);
+
+    private static async Task<IResult> ListPermissionsAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        PermissionRegistry registry,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var result = registry.All
+            .OrderBy(x => x.Key.Resource)
+            .ThenBy(x => x.Key.Action)
+            .Select(ToPermissionDefinitionResponse)
+            .ToList();
+
+        return TypedResults.Ok(result);
+    }
 
     private static async Task<IResult> ListRolesAsync(
         string orgSlug,
