@@ -83,6 +83,30 @@ public class ServiceAccountStore
         return true;
     }
 
+    /// <summary>
+    /// Enables a previously disabled service account.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when enabled; otherwise, <see langword="false"/>.</returns>
+    public async Task<bool> EnableAsync(Guid orgId, Guid serviceAccountId, CancellationToken ct = default)
+    {
+        var sa = await db.ServiceAccounts
+            .FirstOrDefaultAsync(s => s.Id == serviceAccountId && s.OrgId == orgId && s.DeletedAt != null, ct);
+        if (sa is null)
+        {
+            return false;
+        }
+
+        sa.DeletedAt = null;
+        sa.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Service account enabled: {Id} org={OrgId}", serviceAccountId, orgId);
+        return true;
+    }
+
     public (string PlaintextKey, ServiceAccountApiKey ApiKey) GenerateApiKey(
         Guid serviceAccountId, string name, string? description, string? scopesJson, DateTime? expiresAt)
     {

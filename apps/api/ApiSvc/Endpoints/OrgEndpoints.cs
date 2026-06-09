@@ -33,6 +33,7 @@ public static class OrgEndpoints
         group.MapPost("/service-accounts", CreateServiceAccountAsync);
         group.MapPatch("/service-accounts/{serviceAccountId:guid}", UpdateServiceAccountAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/disable", DisableServiceAccountAsync);
+        group.MapPost("/service-accounts/{serviceAccountId:guid}/enable", EnableServiceAccountAsync);
 
         group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
@@ -776,6 +777,40 @@ public static class OrgEndpoints
         }
 
         await audit.RecordAsync("org.service_accounts.disable", org.Id, auth.User!.Id, "service_account.disable", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
+
+        return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> EnableServiceAccountAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var success = await store.EnableAsync(org.Id, serviceAccountId, ct);
+        if (!success)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.service_accounts.enable", org.Id, auth.User!.Id, "service_account.enable", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
         return TypedResults.Ok();
     }

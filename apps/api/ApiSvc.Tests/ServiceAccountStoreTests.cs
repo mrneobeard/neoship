@@ -131,4 +131,40 @@ public class ServiceAccountStoreTests
         Assert.True(await store.RemoveApiKeyClaimAsync(Constants.DefaultOrganizationId, serviceAccount.Id, apiKey.Id, claim!.Id, TestContext.Current.CancellationToken));
         Assert.Empty((await store.ListApiKeyClaimsAsync(Constants.DefaultOrganizationId, serviceAccount.Id, apiKey.Id, TestContext.Current.CancellationToken))!);
     }
+
+    /// <summary>
+    /// Verifies disabled service accounts can be re-enabled.
+    /// </summary>
+    [Fact]
+    public async Task EnableAsync_RestoresDisabledServiceAccount()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "sa-enable-tests@example.com", "Service Account Enable Tester")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "deploy-bot",
+            NameUpcase = "DEPLOY-BOT",
+            CreatedBy = user.Id,
+            DeletedAt = DateTime.UtcNow,
+        };
+
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = CreateStore(db);
+        Assert.Empty(await store.ListAsync(Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+
+        Assert.True(await store.EnableAsync(Constants.DefaultOrganizationId, serviceAccount.Id, TestContext.Current.CancellationToken));
+
+        var accounts = await store.ListAsync(Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+        Assert.Single(accounts);
+        Assert.Null(accounts[0].DeletedAt);
+        Assert.NotNull(accounts[0].UpdatedAt);
+    }
 }
