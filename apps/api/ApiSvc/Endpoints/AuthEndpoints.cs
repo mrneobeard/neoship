@@ -19,6 +19,7 @@ public static class AuthEndpoints
         group.MapPost("/signup", SignupAsync);
         group.MapPost("/login", LoginAsync);
         group.MapGet("/sso/{orgSlug}/begin", BeginSsoAsync);
+        group.MapGet("/sso/callback", FinishSsoAsync);
         group.MapPost("/passkeys/begin-login", BeginPasskeyLoginAsync);
         group.MapPost("/passkeys/finish-login", FinishPasskeyLoginAsync);
         group.MapPost("/api-keys/login", LoginWithApiKeyAsync);
@@ -137,6 +138,31 @@ public static class AuthEndpoints
         }
 
         return TypedResults.Ok(new BeginSsoResponse(result.ProviderId, result.AuthorizationUrl, result.State, result.ExpiresAt));
+    }
+
+    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult>> FinishSsoAsync(
+        [FromQuery] string state,
+        [FromQuery] string code,
+        HttpContext httpContext,
+        SsoStore sso,
+        PermissionResolver permissions,
+        SessionStore sessions,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await sso.FinishOidcAsync(state, code, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var permissionSet = await permissions.ResolveUserAsync(user.Id, ct);
+        var (session, rawToken) = await sessions.CreateSessionAsync(user.Id, user.OrgId, permissionSet, ct);
+
+        SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
+        await audit.RecordAsync("auth.sso.login", user.OrgId, user.Id, "sso.login", targetType: "user", targetId: user.Id.ToString(), ct: ct);
+
+        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }
 
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> FinishPasskeyLoginAsync(

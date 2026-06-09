@@ -19,16 +19,22 @@ public sealed class SsoStore
 {
     private readonly ShipDb db;
     private readonly SsoChallengeStore challenges;
+    private readonly ISsoTokenClient tokenClient;
+    private readonly ISsoTokenValidator tokenValidator;
 
     /// <summary>
     /// Initializes a new <see cref="SsoStore"/> instance.
     /// </summary>
     /// <param name="db">The database context.</param>
     /// <param name="challenges">The SSO challenge store.</param>
-    public SsoStore(ShipDb db, SsoChallengeStore challenges)
+    /// <param name="tokenClient">The OIDC token client.</param>
+    /// <param name="tokenValidator">The OIDC token validator.</param>
+    public SsoStore(ShipDb db, SsoChallengeStore challenges, ISsoTokenClient tokenClient, ISsoTokenValidator tokenValidator)
     {
         this.db = db;
         this.challenges = challenges;
+        this.tokenClient = tokenClient;
+        this.tokenValidator = tokenValidator;
     }
 
     /// <summary>
@@ -74,6 +80,61 @@ public sealed class SsoStore
         var authorizationUrl = BuildAuthorizationUrl(authorizationEndpoint, provider.ClientId, redirectUri, challenge.State, nonce);
 
         return new SsoBeginResult(provider.Id, authorizationUrl, challenge.State, challenge.ExpiresAt);
+    }
+
+    /// <summary>
+    /// Finishes an OIDC authorization flow.
+    /// </summary>
+    /// <param name="state">The state token.</param>
+    /// <param name="code">The authorization code.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The authenticated user, or <see langword="null"/>.</returns>
+    public async Task<User?> FinishOidcAsync(string state, string code, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var challenge = this.challenges.Take(state);
+        if (challenge is null)
+        {
+            return null;
+        }
+
+        var provider = await this.db.UserIdentityProviders.FirstOrDefaultAsync(x => x.Id == challenge.ProviderId
+            && x.OrgId == challenge.OrgId
+            && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
+            && x.StatusId == UserIdentityProviderStatus.Active.Id, ct);
+        if (provider is null)
+        {
+            return null;
+        }
+
+        var tokenResponse = await this.tokenClient.ExchangeAsync(provider, code, challenge.RedirectUri, ct);
+        if (tokenResponse is null)
+        {
+            return null;
+        }
+
+        var externalIdentity = await this.tokenValidator.ValidateAsync(provider, tokenResponse.IdToken, challenge.Nonce, ct);
+        if (externalIdentity is null || !externalIdentity.EmailVerified)
+        {
+            return null;
+        }
+
+        var emailUpcase = externalIdentity.Email.ToUpperInvariant();
+        var user = await this.db.Users.FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
+            && x.EmailUpcase == emailUpcase
+            && x.StatusId == UserStatus.Active.Id, ct);
+        if (user is null)
+        {
+            return null;
+        }
+
+        user.LastLoginAt = DateTime.UtcNow;
+        await this.db.SaveChangesAsync(ct);
+        return user;
     }
 
     private static string? TryReadAuthorizationEndpoint(string? metadataJson)

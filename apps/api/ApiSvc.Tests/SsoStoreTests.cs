@@ -53,7 +53,7 @@ public class SsoStoreTests
         await using var db = CreateDatabase();
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var challenges = new SsoChallengeStore(cache);
-        var store = new SsoStore(db, challenges);
+        var store = new SsoStore(db, challenges, new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-admin@example.com", "SSO Admin")
         {
@@ -93,7 +93,7 @@ public class SsoStoreTests
     {
         await using var db = CreateDatabase();
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new SsoStore(db, new SsoChallengeStore(cache));
+        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-http@example.com", "SSO Http")
         {
@@ -114,5 +114,108 @@ public class SsoStoreTests
         var result = await store.BeginOidcAsync("default", null, "https://app.example.com/api/v1/auth/sso/callback", TestContext.Current.CancellationToken);
 
         Assert.Null(result);
+    }
+
+    /// <summary>
+    /// Verifies OIDC finish signs in an existing active user by verified email.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_ReturnsExistingUserForVerifiedEmail()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "sso-user@example.com", "SSO User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+            MetadataJson = "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\"}",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", true, "SSO User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+        Assert.Equal(userId, user!.Id);
+        Assert.NotNull(user.LastLoginAt);
+        Assert.Null(await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies OIDC finish rejects unverified email identities.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_RejectsUnverifiedEmail()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var userId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "sso-user@example.com", "SSO User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", false, "SSO User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.Null(user);
+    }
+
+    private sealed class FakeSsoTokenClient : ISsoTokenClient
+    {
+        public Task<SsoTokenResponse?> ExchangeAsync(UserIdentityProvider provider, string code, string redirectUri, CancellationToken ct = default)
+        {
+            return Task.FromResult<SsoTokenResponse?>(new SsoTokenResponse("id-token"));
+        }
+    }
+
+    private sealed class FakeSsoTokenValidator : ISsoTokenValidator
+    {
+        private readonly SsoExternalIdentity? identity;
+
+        public FakeSsoTokenValidator(SsoExternalIdentity? identity = null)
+        {
+            this.identity = identity;
+        }
+
+        public Task<SsoExternalIdentity?> ValidateAsync(UserIdentityProvider provider, string idToken, string nonce, CancellationToken ct = default)
+        {
+            return Task.FromResult(this.identity);
+        }
     }
 }
