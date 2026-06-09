@@ -188,7 +188,7 @@ public class PermissionResolverTests
         db.ServiceAccounts.Add(serviceAccount);
         db.SaveChanges();
 
-        var serviceAccounts = new ServiceAccountStore(db, NullLogger<ServiceAccountStore>.Instance);
+        var serviceAccounts = new ServiceAccountStore(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)), NullLogger<ServiceAccountStore>.Instance);
         var (_, apiKey) = serviceAccounts.GenerateApiKey(serviceAccount.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
 
         db.ServiceAccountApiKeys.Add(apiKey);

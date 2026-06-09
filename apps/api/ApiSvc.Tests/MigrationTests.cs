@@ -124,7 +124,7 @@ public class MigrationTests
 
         Assert.NotNull(user);
 
-        var serviceAccounts = new ServiceAccountStore(db, NullLogger<ServiceAccountStore>.Instance);
+        var serviceAccounts = new ServiceAccountStore(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)), NullLogger<ServiceAccountStore>.Instance);
         var serviceAccount = await serviceAccounts.CreateAsync(
             Constants.DefaultOrganizationId,
             user!.Id,

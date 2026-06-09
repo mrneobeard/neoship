@@ -9,11 +9,13 @@ namespace NeoShip.ApiSvc.Stores;
 public class ServiceAccountStore
 {
     private readonly ShipDb db;
+    private readonly PermissionClaimCodec codec;
     private readonly ILogger<ServiceAccountStore> logger;
 
-    public ServiceAccountStore(ShipDb db, ILogger<ServiceAccountStore> logger)
+    public ServiceAccountStore(ShipDb db, PermissionClaimCodec codec, ILogger<ServiceAccountStore> logger)
     {
         this.db = db;
+        this.codec = codec;
         this.logger = logger;
     }
 
@@ -181,6 +183,97 @@ public class ServiceAccountStore
 
         key.RevokedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Lists direct permission claims for a service account.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The service account direct claims.</returns>
+    public async Task<List<ServiceAccountClaim>?> ListClaimsAsync(Guid orgId, Guid serviceAccountId, CancellationToken ct = default)
+    {
+        var exists = await db.ServiceAccounts.AnyAsync(x => x.Id == serviceAccountId && x.OrgId == orgId && x.DeletedAt == null, ct);
+        if (!exists)
+        {
+            return null;
+        }
+
+        return await db.ServiceAccountClaims
+            .Where(x => x.ServiceAccountId == serviceAccountId)
+            .OrderBy(x => x.Type)
+            .ThenBy(x => x.Value)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Adds a direct permission claim to a service account.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="grant">The permission grant.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The created <see cref="ServiceAccountClaim"/>, or <see langword="null"/>.</returns>
+    public async Task<ServiceAccountClaim?> AddClaimAsync(Guid orgId, Guid serviceAccountId, PermissionGrant grant, CancellationToken ct = default)
+    {
+        var exists = await db.ServiceAccounts.AnyAsync(x => x.Id == serviceAccountId && x.OrgId == orgId && x.DeletedAt == null, ct);
+        if (!exists)
+        {
+            return null;
+        }
+
+        var (type, value) = this.codec.Encode(grant);
+        if (!this.codec.TryDecode(type, value, out var normalizedGrant))
+        {
+            return null;
+        }
+
+        var (normalizedType, normalizedValue) = this.codec.Encode(normalizedGrant);
+        var claim = new ServiceAccountClaim
+        {
+            Id = Guid.CreateVersion7(),
+            ServiceAccountId = serviceAccountId,
+            Type = normalizedType,
+            Value = normalizedValue,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        db.ServiceAccountClaims.Add(claim);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Service account claim added: serviceAccount={ServiceAccountId} claim={ClaimId}", serviceAccountId, claim.Id);
+        return claim;
+    }
+
+    /// <summary>
+    /// Removes a direct permission claim from a service account.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="claimId">The claim identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when removed; otherwise, <see langword="false"/>.</returns>
+    public async Task<bool> RemoveClaimAsync(Guid orgId, Guid serviceAccountId, Guid claimId, CancellationToken ct = default)
+    {
+        var claim = await db.ServiceAccountClaims
+            .Include(x => x.ServiceAccount)
+            .FirstOrDefaultAsync(x => x.Id == claimId
+                && x.ServiceAccountId == serviceAccountId
+                && x.ServiceAccount != null
+                && x.ServiceAccount.OrgId == orgId
+                && x.ServiceAccount.DeletedAt == null, ct);
+
+        if (claim is null)
+        {
+            return false;
+        }
+
+        db.ServiceAccountClaims.Remove(claim);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Service account claim removed: serviceAccount={ServiceAccountId} claim={ClaimId}", serviceAccountId, claimId);
         return true;
     }
 }
