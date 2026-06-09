@@ -152,6 +152,8 @@ public class ServiceAccountStore
             .FirstOrDefaultAsync(k => k.KeyDigest == digest
                 && k.DeletedAt == null
                 && k.RevokedAt == null
+                && k.ServiceAccount != null
+                && k.ServiceAccount.DeletedAt == null
                 && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow), ct);
 
         if (key is null || key.ServiceAccount is null)

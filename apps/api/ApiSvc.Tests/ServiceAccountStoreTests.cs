@@ -198,4 +198,39 @@ public class ServiceAccountStoreTests
 
         Assert.Null(found);
     }
+
+    /// <summary>
+    /// Verifies service account API keys cannot authenticate when the parent service account is disabled.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateApiKeyAsync_RejectsDisabledServiceAccount()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "sa-auth-tests@example.com", "Service Account Auth Tester")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var serviceAccount = new ServiceAccount
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "auth-bot",
+            NameUpcase = "AUTH-BOT",
+            CreatedBy = user.Id,
+        };
+
+        db.Users.Add(user);
+        db.ServiceAccounts.Add(serviceAccount);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = CreateStore(db);
+        var (plaintextKey, apiKey) = store.GenerateApiKey(serviceAccount.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
+        db.ServiceAccountApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.NotNull(await store.AuthenticateApiKeyAsync(plaintextKey, TestContext.Current.CancellationToken));
+
+        Assert.True(await store.DisableAsync(Constants.DefaultOrganizationId, serviceAccount.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await store.AuthenticateApiKeyAsync(plaintextKey, TestContext.Current.CancellationToken));
+    }
 }
