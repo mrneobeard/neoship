@@ -1,5 +1,7 @@
 using System.Diagnostics;
 
+using Fido2NetLib;
+
 using Microsoft.EntityFrameworkCore;
 
 using NeoShip.ApiSvc;
@@ -25,6 +27,13 @@ builder.Host.UseSerilog((ctx, lc) => lc
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton(sp => new Fido2(new Fido2Configuration
+{
+    ServerDomain = sp.GetRequiredService<IConfiguration>()["Auth:Passkeys:ServerDomain"] ?? "localhost",
+    ServerName = sp.GetRequiredService<IConfiguration>()["Auth:Passkeys:ServerName"] ?? "NeoShip",
+    Origins = sp.GetRequiredService<IConfiguration>().GetSection("Auth:Passkeys:Origins").Get<HashSet<string>>()
+        ?? ["https://localhost", "http://localhost"],
+}, metadataService: null));
 
 builder.Services.AddDbContext<ShipDb>(options =>
     options.UseSqlite("Data Source=neoship.db",
