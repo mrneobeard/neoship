@@ -48,6 +48,7 @@ builder.Services.AddScoped<ApiKeyStore>();
 builder.Services.AddScoped<ServiceAccountStore>();
 builder.Services.AddScoped<RoleStore>();
 builder.Services.AddScoped<GroupStore>();
+builder.Services.AddScoped<OrganizationStore>();
 
 var app = builder.Build();
 
@@ -89,6 +90,7 @@ app.MapGet("/", () => "NeoShip Identity API");
 
 app.MapAuthEndpoints();
 app.MapMeEndpoints();
+app.MapTenantEndpoints();
 app.MapOrgEndpoints();
 
 app.MapDefaultEndpoints();
