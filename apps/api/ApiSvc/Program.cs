@@ -27,6 +27,7 @@ builder.Host.UseSerilog((ctx, lc) => lc
 
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton(sp => new Fido2(new Fido2Configuration
 {
     ServerDomain = sp.GetRequiredService<IConfiguration>()["Auth:Passkeys:ServerDomain"] ?? "localhost",
@@ -61,6 +62,7 @@ builder.Services.AddScoped<OrganizationStore>();
 builder.Services.AddScoped<IdentityProviderStore>();
 builder.Services.AddScoped<MfaStore>();
 builder.Services.AddScoped<PasskeyStore>();
+builder.Services.AddSingleton<PasskeyChallengeStore>();
 
 var app = builder.Build();
 

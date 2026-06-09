@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.Json;
 
 using Fido2NetLib;
 using Fido2NetLib.Objects;
@@ -86,6 +87,58 @@ public sealed class PasskeyStore
     }
 
     /// <summary>
+    /// Finishes passkey registration and stores the verified credential.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="name">The passkey name.</param>
+    /// <param name="options">The original credential creation options.</param>
+    /// <param name="response">The authenticator attestation response.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The stored passkey factor.</returns>
+    public async Task<UserMfaFactor> FinishRegistrationAsync(
+        Guid userId,
+        string? name,
+        CredentialCreateOptions options,
+        AuthenticatorAttestationRawResponse response,
+        CancellationToken ct = default)
+    {
+        var result = await fido2.MakeNewCredentialAsync(new MakeNewCredentialParams
+        {
+            AttestationResponse = response,
+            OriginalOptions = options,
+            IsCredentialIdUniqueToUserCallback = async (args, cancellationToken) =>
+            {
+                var digest = ComputeCredentialIdDigest(args.CredentialId);
+                return !await db.UserMfaFactors.AnyAsync(
+                    x => x.Type == MfaFactorType.Passkey.Id && x.WebAuthnCredentialIdDigest == digest,
+                    cancellationToken);
+            },
+        }, ct);
+
+        var now = DateTime.UtcNow;
+        var factor = new UserMfaFactor
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = userId,
+            Name = string.IsNullOrWhiteSpace(name) ? "Passkey" : name.Trim(),
+            Type = MfaFactorType.Passkey.Id,
+            WebAuthnCredentialId = result.Id,
+            WebAuthnCredentialIdDigest = ComputeCredentialIdDigest(result.Id),
+            WebAuthnPublicKeyCredentialData = result.PublicKey,
+            WebAuthnSignCount = result.SignCount,
+            TransportsJson = JsonSerializer.Serialize(result.Transports.Select(x => x.ToString()).ToArray()),
+            CreatedAt = now,
+            VerifiedAt = now,
+        };
+
+        db.UserMfaFactors.Add(factor);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Passkey registered: factor={FactorId} user={UserId}", factor.Id, userId);
+        return factor;
+    }
+
+    /// <summary>
     /// Revokes a passkey for a user.
     /// </summary>
     /// <param name="userId">The user identifier.</param>
@@ -108,5 +161,15 @@ public sealed class PasskeyStore
 
         logger.LogInformation("Passkey revoked: factor={FactorId} user={UserId}", factorId, userId);
         return true;
+    }
+
+    /// <summary>
+    /// Computes the stored lookup digest for a WebAuthn credential identifier.
+    /// </summary>
+    /// <param name="credentialId">The WebAuthn credential identifier.</param>
+    /// <returns>The Base64 digest.</returns>
+    public static string ComputeCredentialIdDigest(byte[] credentialId)
+    {
+        return TokenStore.ComputeDigestBase64(credentialId);
     }
 }

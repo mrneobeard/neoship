@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 
+using Fido2NetLib;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -36,6 +38,7 @@ public static class MeEndpoints
 
         group.MapGet("/passkeys", GetPasskeysAsync);
         group.MapPost("/passkeys/begin-registration", BeginPasskeyRegistrationAsync);
+        group.MapPost("/passkeys/finish-registration", FinishPasskeyRegistrationAsync);
         group.MapPost("/passkeys/{factorId:guid}/revoke", RevokePasskeyAsync);
 
         return group;
@@ -267,7 +270,9 @@ public static class MeEndpoints
 
     private sealed record PasskeyResponse(Guid Id, string Name, DateTime CreatedAt, DateTime? LastUsedAt);
 
-    private sealed record BeginPasskeyRegistrationResponse(string OptionsJson);
+    private sealed record BeginPasskeyRegistrationResponse(Guid ChallengeId, string OptionsJson);
+
+    private sealed record FinishPasskeyRegistrationRequest(Guid ChallengeId, string? Name, AuthenticatorAttestationRawResponse Response);
 
     private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
         [FromBody] StartTotpRequest req,
@@ -388,7 +393,32 @@ public static class MeEndpoints
         }
 
         var options = await passkeys.BeginRegistrationAsync(user, ct);
-        return TypedResults.Ok(new BeginPasskeyRegistrationResponse(options.ToJson()));
+        var challengeId = httpContext.RequestServices.GetRequiredService<PasskeyChallengeStore>().StoreRegistration(user.Id, options);
+        return TypedResults.Ok(new BeginPasskeyRegistrationResponse(challengeId, options.ToJson()));
+    }
+
+    private static async Task<Results<Ok<PasskeyResponse>, UnauthorizedHttpResult, NotFound>> FinishPasskeyRegistrationAsync(
+        [FromBody] FinishPasskeyRegistrationRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PasskeyStore passkeys,
+        PasskeyChallengeStore challenges,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var options = challenges.TakeRegistration(req.ChallengeId, user.Id);
+        if (options is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var factor = await passkeys.FinishRegistrationAsync(user.Id, req.Name, options, req.Response, ct);
+        return TypedResults.Ok(new PasskeyResponse(factor.Id, factor.Name, factor.CreatedAt, factor.LastUsedAt));
     }
 
     private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokePasskeyAsync(
