@@ -200,6 +200,26 @@ public static class MeEndpoints
 
         var now = DateTime.UtcNow;
         actor.StatusId = UserStatus.Deleted.Id;
+        if (configuration.GetValue("Auth:Deletion:AnonymizeOnDelete", false))
+        {
+            var anonymousEmail = $"deleted-{actor.Id:N}@deleted.local";
+            actor.Email = anonymousEmail;
+            actor.EmailUpcase = anonymousEmail.ToUpperInvariant();
+            actor.Name = "Deleted user";
+            actor.NameUpcase = "DELETED USER";
+            actor.AvatarUrl = null;
+            actor.LastLoginIp = null;
+            actor.LastLoginAt = null;
+
+            await db.UserEmails
+                .Where(x => x.UserId == actor.Id)
+                .ExecuteUpdateAsync(x => x
+                    .SetProperty(e => e.Email, anonymousEmail)
+                    .SetProperty(e => e.EmailUpcase, anonymousEmail.ToUpperInvariant())
+                    .SetProperty(e => e.EmailDigest, TokenStore.ComputeDigestBase64(anonymousEmail))
+                    .SetProperty(e => e.VerificationTokenDigest, (string?)null)
+                    .SetProperty(e => e.VerificationTokenExpiresAt, (DateTime?)null), ct);
+        }
 
         await db.UserSessions
             .Where(x => x.UserId == actor.Id && x.RevokedAt == null)

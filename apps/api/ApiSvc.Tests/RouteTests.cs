@@ -13,6 +13,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
@@ -431,6 +432,51 @@ public sealed class RouteTests
             Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.RevokedAt != null, TestContext.Current.CancellationToken));
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.DeletedAt != null, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.user.delete", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task DeleteMe_WhenConfigured_AnonymizesUserIdentity()
+    {
+        await using var app = await RouteTestApp.CreateAsync(configuration: new Dictionary<string, string?>
+        {
+            ["Auth:Deletion:AnonymizeOnDelete"] = "true",
+        });
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-delete-anon@example.com", "Delete Anon");
+            userId = user.Id;
+            db.UserEmails.Add(new UserEmail
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = user.Id,
+                Email = user.Email,
+                EmailUpcase = user.EmailUpcase,
+                EmailDigest = TokenStore.ComputeDigestBase64(user.Email),
+                StatusId = UserEmailStatus.Active.Id,
+                CreatedBy = user.Id,
+                CreatedAt = DateTime.UtcNow,
+                VerificationTokenDigest = "pending-token",
+                VerificationTokenExpiresAt = DateTime.UtcNow.AddHours(1),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/v1/me/");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            var user = await db.Users.SingleAsync(x => x.Id == userId, TestContext.Current.CancellationToken);
+            var email = await db.UserEmails.SingleAsync(x => x.UserId == userId, TestContext.Current.CancellationToken);
+            Assert.Equal(UserStatus.Deleted.Id, user.StatusId);
+            Assert.StartsWith("deleted-", user.Email, StringComparison.Ordinal);
+            Assert.Equal("Deleted user", user.Name);
+            Assert.Equal(user.Email, email.Email);
+            Assert.Null(email.VerificationTokenDigest);
         });
     }
 
@@ -2052,12 +2098,19 @@ public sealed class RouteTests
 
         public TestEmailSender EmailSender => this.host.Services.GetRequiredService<TestEmailSender>();
 
-        public static async Task<RouteTestApp> CreateAsync(SsoExternalIdentity? externalIdentity = null)
+        public static async Task<RouteTestApp> CreateAsync(SsoExternalIdentity? externalIdentity = null, Dictionary<string, string?>? configuration = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
             await connection.OpenAsync(TestContext.Current.CancellationToken);
             var fakeTokenValidator = new FakeSsoTokenValidator(externalIdentity);
             var host = await new HostBuilder()
+                .ConfigureAppConfiguration(builder =>
+                {
+                    if (configuration is not null)
+                    {
+                        builder.AddInMemoryCollection(configuration);
+                    }
+                })
                 .ConfigureWebHost(web => web
                     .UseTestServer()
                     .ConfigureServices(services =>
