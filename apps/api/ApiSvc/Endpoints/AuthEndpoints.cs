@@ -367,7 +367,7 @@ public static class AuthEndpoints
 
     public record TokenExchangeResponse(string Token, string TokenType, long ExpiresIn);
 
-    private static async Task<Results<Ok<TokenExchangeResponse>, UnauthorizedHttpResult>> TokenExchangeAsync(
+    private static async Task<Results<Ok<ApiEnvelope<TokenExchangeResponse>>, UnauthorizedHttpResult>> TokenExchangeAsync(
         HttpContext httpContext,
         SessionStore sessions,
         TokenExchangeStore tokenExchange,
@@ -380,7 +380,7 @@ public static class AuthEndpoints
         if (session is null) return TypedResults.Unauthorized();
 
         var token = tokenExchange.CreateToken(session.UserId, session.OrgId, session.ClaimsJson);
-        return TypedResults.Ok(new TokenExchangeResponse(token, "Bearer", 300));
+        return TypedResults.Ok(Envelope(httpContext, new TokenExchangeResponse(token, "Bearer", 300)));
     }
 
     private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
