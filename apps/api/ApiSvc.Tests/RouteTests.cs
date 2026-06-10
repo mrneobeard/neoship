@@ -815,6 +815,7 @@ public sealed class RouteTests
                         services.AddScoped<AuditStore>();
                         services.AddScoped<ApiKeyStore>();
                         services.AddScoped<OrganizationStore>();
+                        services.AddScoped<OrganizationInviteStore>();
                         services.AddScoped<RoleStore>();
                         services.AddScoped<GroupStore>();
                         services.AddScoped<ServiceAccountStore>();

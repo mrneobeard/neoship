@@ -17,6 +17,8 @@ public class ShipDb : DbContext
 
     public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
 
+    public DbSet<OrganizationInvite> OrganizationInvites => Set<OrganizationInvite>();
+
     public DbSet<UserEmail> UserEmails => Set<UserEmail>();
 
     public DbSet<UserPasswordAuth> UserPasswordAuths => Set<UserPasswordAuth>();
@@ -65,6 +67,12 @@ public class ShipDb : DbContext
         {
             m.HasIndex(x => new { x.OrgId, x.UserId }).IsUnique();
             m.HasIndex(x => new { x.UserId, x.DeletedAt });
+        });
+
+        modelBuilder.Entity<OrganizationInvite>(i =>
+        {
+            i.HasIndex(x => x.TokenDigest).IsUnique();
+            i.HasIndex(x => new { x.OrgId, x.EmailUpcase });
         });
 
         modelBuilder.Entity<UserEmail>(e =>
@@ -128,6 +136,13 @@ public class ShipDb : DbContext
         {
             m.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
             m.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<OrganizationInvite>(i =>
+        {
+            i.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
+            i.HasOne(x => x.InvitedByUser).WithMany().HasForeignKey(x => x.InvitedByUserId).OnDelete(DeleteBehavior.Restrict);
+            i.HasOne(x => x.AcceptedByUser).WithMany().HasForeignKey(x => x.AcceptedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         // User -> UserMfaFactor

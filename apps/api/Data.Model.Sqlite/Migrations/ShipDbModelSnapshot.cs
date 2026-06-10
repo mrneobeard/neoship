@@ -284,6 +284,88 @@ namespace NeoShip.Data.Sqlite.Migrations
                     b.ToTable("orgs", (string)null);
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.OrganizationInvite", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime?>("AcceptedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<Guid?>("AcceptedByUserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("accepted_by_user_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("email");
+
+                    b.Property<string>("EmailUpcase")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("email_upcase");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("InvitedByUserId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("invited_by_user_id");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("PendingGroupIdsJson")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("pending_group_ids_json");
+
+                    b.Property<string>("PendingRoleIdsJson")
+                        .HasMaxLength(4096)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("pending_role_ids_json");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<string>("TokenDigest")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT")
+                        .HasColumnName("token_digest");
+
+                    b.HasKey("Id")
+                        .HasName("pk_organization_invites");
+
+                    b.HasIndex("AcceptedByUserId")
+                        .HasDatabaseName("ix_organization_invites_accepted_by_user_id");
+
+                    b.HasIndex("InvitedByUserId")
+                        .HasDatabaseName("ix_organization_invites_invited_by_user_id");
+
+                    b.HasIndex("TokenDigest")
+                        .IsUnique()
+                        .HasDatabaseName("ix_organization_invites_token_digest");
+
+                    b.HasIndex("OrgId", "EmailUpcase")
+                        .HasDatabaseName("ix_organization_invites_org_id_email_upcase");
+
+                    b.ToTable("organization_invites", (string)null);
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.OrganizationMembership", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1463,6 +1545,35 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_groups_orgs_org_id");
+
+                    b.Navigation("Org");
+                });
+
+            modelBuilder.Entity("NeoShip.Data.Model.OrganizationInvite", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.User", "AcceptedByUser")
+                        .WithMany()
+                        .HasForeignKey("AcceptedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_organization_invites_users_accepted_by_user_id");
+
+                    b.HasOne("NeoShip.Data.Model.User", "InvitedByUser")
+                        .WithMany()
+                        .HasForeignKey("InvitedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_organization_invites_users_invited_by_user_id");
+
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_organization_invites_orgs_org_id");
+
+                    b.Navigation("AcceptedByUser");
+
+                    b.Navigation("InvitedByUser");
 
                     b.Navigation("Org");
                 });

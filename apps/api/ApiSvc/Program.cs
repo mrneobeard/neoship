@@ -59,6 +59,7 @@ builder.Services.AddScoped<ServiceAccountStore>();
 builder.Services.AddScoped<RoleStore>();
 builder.Services.AddScoped<GroupStore>();
 builder.Services.AddScoped<OrganizationStore>();
+builder.Services.AddScoped<OrganizationInviteStore>();
 builder.Services.AddSingleton<IdentityProviderSecretProtector>();
 builder.Services.AddScoped<IdentityProviderStore>();
 builder.Services.AddScoped<MfaStore>();
