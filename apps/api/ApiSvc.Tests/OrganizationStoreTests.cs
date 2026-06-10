@@ -258,8 +258,9 @@ public class OrganizationStoreTests
             allowOidcSso: false,
             allowSamlSso: null,
             requireSso: true,
+            mfaPolicy: OrganizationMfaPolicy.AllMembers,
             allowSelfServiceExternalIdentityUnlink: false,
-            TestContext.Current.CancellationToken);
+            ct: TestContext.Current.CancellationToken);
 
         Assert.NotNull(org);
         Assert.False(org!.AllowPasswordAuth);
@@ -267,6 +268,7 @@ public class OrganizationStoreTests
         Assert.False(org.AllowOidcSso);
         Assert.True(org.AllowSamlSso);
         Assert.True(org.RequireSso);
+        Assert.Equal(OrganizationMfaPolicy.AllMembers.Id, org.MfaPolicyId);
         Assert.False(org.AllowSelfServiceExternalIdentityUnlink);
         Assert.NotNull(org.UpdatedAt);
     }

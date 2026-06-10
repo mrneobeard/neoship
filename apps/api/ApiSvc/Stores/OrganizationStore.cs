@@ -178,6 +178,7 @@ public sealed class OrganizationStore
     /// <param name="allowOidcSso">The optional OIDC SSO sign-in allowance.</param>
     /// <param name="allowSamlSso">The optional SAML SSO sign-in allowance.</param>
     /// <param name="requireSso">The optional SSO requirement.</param>
+    /// <param name="mfaPolicy">The optional MFA policy.</param>
     /// <param name="allowSelfServiceExternalIdentityUnlink">The optional self-service external identity unlink allowance.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns>The updated <see cref="Organization"/>, or <see langword="null"/>.</returns>
@@ -188,6 +189,7 @@ public sealed class OrganizationStore
         bool? allowOidcSso,
         bool? allowSamlSso,
         bool? requireSso,
+        OrganizationMfaPolicy? mfaPolicy,
         bool? allowSelfServiceExternalIdentityUnlink,
         CancellationToken ct)
     {
@@ -202,6 +204,7 @@ public sealed class OrganizationStore
         org.AllowOidcSso = allowOidcSso ?? org.AllowOidcSso;
         org.AllowSamlSso = allowSamlSso ?? org.AllowSamlSso;
         org.RequireSso = requireSso ?? org.RequireSso;
+        org.MfaPolicyId = mfaPolicy?.Id ?? org.MfaPolicyId;
         org.AllowSelfServiceExternalIdentityUnlink = allowSelfServiceExternalIdentityUnlink ?? org.AllowSelfServiceExternalIdentityUnlink;
         org.UpdatedAt = DateTime.UtcNow;
 

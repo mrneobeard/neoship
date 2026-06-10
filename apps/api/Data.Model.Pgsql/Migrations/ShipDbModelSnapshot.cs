@@ -245,6 +245,10 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<int>("MfaPolicyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("mfa_policy_id");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)

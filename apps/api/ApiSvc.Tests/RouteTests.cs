@@ -90,6 +90,32 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task Login_WhenOrgRequiresMfaEnrollment_ReturnsMfaRequired()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-mfa-required@example.com", "MFA Required");
+            db.UserPasswordAuths.Add(new UserPasswordAuth
+            {
+                UserId = user.Id,
+                PasswordHash = new PasswordStore().Hash("password123"),
+            });
+            var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
+            org.MfaPolicyId = OrganizationMfaPolicy.AllMembers.Id;
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/login",
+            new StringContent("{\"email\":\"route-mfa-required@example.com\",\"password\":\"password123\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("mfa_required", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Signup_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -639,6 +665,33 @@ public sealed class RouteTests
             Assert.False(org.AllowOidcSso);
             Assert.True(org.RequireSso);
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.auth_policy.update", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task UpdateAuthPolicy_PersistsMfaPolicy()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-policy-mfa@example.com", "Policy MFA");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.settings.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/orgs/default/auth-policy");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"mfaPolicy\":\"all_members\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("all_members", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal(OrganizationMfaPolicy.AllMembers.Id, (await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken)).MfaPolicyId);
         });
     }
 

@@ -247,6 +247,10 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
+                    b.Property<int>("MfaPolicyId")
+                        .HasColumnType("int")
+                        .HasColumnName("mfa_policy_id");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)

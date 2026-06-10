@@ -117,6 +117,13 @@ public static class AuthEndpoints
         if (result == LoginResult.AuthMethodNotAllowed)
             return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
 
+        if (result == LoginResult.MfaRequired)
+            return TypedResults.Json(
+                new ApiErrorEnvelope(
+                    new ApiError("mfa_required", "MFA enrollment is required."),
+                    ApiMeta.FromHttpContext(httpContext)),
+                statusCode: StatusCodes.Status403Forbidden);
+
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
             return TypedResults.Unauthorized();
 

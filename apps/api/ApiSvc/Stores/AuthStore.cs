@@ -20,6 +20,7 @@ public enum LoginResult
     AccountLocked,
     AccountSuspended,
     AuthMethodNotAllowed,
+    MfaRequired,
 }
 
 public class AuthStore
@@ -184,6 +185,15 @@ public class AuthStore
             return (LoginResult.AuthMethodNotAllowed, null, null, null);
         }
 
+        if (org.MfaPolicyId == OrganizationMfaPolicy.AllMembers.Id && !await this.UserHasRequiredMfaEnrollmentAsync(user.Id, ct))
+        {
+            this.logger.LogWarning("Password login requires MFA enrollment: {UserId}", user.Id);
+            activity?.SetTag(OTelConstants.AuthResult, "mfa_required");
+            await this.audit.RecordAsync("auth.login.failed", user.OrgId, user.Id, "login",
+                dataJson: "{\"reason\":\"mfa_required\"}", ct: ct);
+            return (LoginResult.MfaRequired, null, null, null);
+        }
+
         var auth = await this.db.UserPasswordAuths.FirstOrDefaultAsync(a => a.UserId == user.Id, ct);
 
         if (auth is null)
@@ -248,6 +258,23 @@ public class AuthStore
         await this.audit.RecordAsync("auth.login.success", orgId, user.Id, "login", ct: ct);
 
         return (LoginResult.Success, user, session, rawToken);
+    }
+
+    private async Task<bool> UserHasRequiredMfaEnrollmentAsync(Guid userId, CancellationToken ct)
+    {
+        var hasVerifiedFactor = await this.db.UserMfaFactors.AnyAsync(x => x.UserId == userId
+            && x.VerifiedAt != null
+            && (x.Type == MfaFactorType.Totp.Id
+                || x.Type == MfaFactorType.Passkey.Id
+                || x.Type == MfaFactorType.WebAuthnSecurityKey.Id), ct);
+        if (!hasVerifiedFactor)
+        {
+            return false;
+        }
+
+        return await this.db.UserMfaFactors.AnyAsync(x => x.UserId == userId
+            && x.VerifiedAt != null
+            && x.Type == MfaFactorType.RecoverCode.Id, ct);
     }
 
     /// <summary>

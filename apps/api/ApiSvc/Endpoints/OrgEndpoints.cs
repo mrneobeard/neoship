@@ -139,6 +139,7 @@ public static class OrgEndpoints
     /// <param name="AllowOidcSso">Whether OIDC SSO sign-in is allowed.</param>
     /// <param name="AllowSamlSso">Whether SAML SSO sign-in is allowed.</param>
     /// <param name="RequireSso">Whether SSO is required.</param>
+    /// <param name="MfaPolicy">The MFA enforcement policy.</param>
     /// <param name="AllowSelfServiceExternalIdentityUnlink">Whether users may unlink external identities themselves.</param>
     public record AuthPolicyResponse(
         bool AllowPasswordAuth,
@@ -146,6 +147,7 @@ public static class OrgEndpoints
         bool AllowOidcSso,
         bool AllowSamlSso,
         bool RequireSso,
+        string MfaPolicy,
         bool AllowSelfServiceExternalIdentityUnlink);
 
     /// <summary>
@@ -156,6 +158,7 @@ public static class OrgEndpoints
     /// <param name="AllowOidcSso">The optional OIDC SSO sign-in allowance.</param>
     /// <param name="AllowSamlSso">The optional SAML SSO sign-in allowance.</param>
     /// <param name="RequireSso">The optional SSO requirement.</param>
+    /// <param name="MfaPolicy">The optional MFA enforcement policy.</param>
     /// <param name="AllowSelfServiceExternalIdentityUnlink">The optional self-service external identity unlink allowance.</param>
     public record UpdateAuthPolicyRequest(
         bool? AllowPasswordAuth,
@@ -163,6 +166,7 @@ public static class OrgEndpoints
         bool? AllowOidcSso,
         bool? AllowSamlSso,
         bool? RequireSso,
+        string? MfaPolicy,
         bool? AllowSelfServiceExternalIdentityUnlink);
 
     /// <summary>
@@ -306,6 +310,7 @@ public static class OrgEndpoints
             org.AllowOidcSso,
             org.AllowSamlSso,
             org.RequireSso,
+            org.MfaPolicy.Name,
             org.AllowSelfServiceExternalIdentityUnlink);
 
     private static async Task<IResult> GetAuthPolicyAsync(
@@ -354,6 +359,14 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        if (!TryParseMfaPolicy(req.MfaPolicy, out var mfaPolicy))
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?>
+            {
+                ["fields"] = new Dictionary<string, string[]> { ["mfaPolicy"] = ["MFA policy must be off, admins_owners, or all_members."] },
+            });
+        }
+
         var updated = await orgs.UpdateAuthPolicyAsync(
             org.Id,
             req.AllowPasswordAuth,
@@ -361,6 +374,7 @@ public static class OrgEndpoints
             req.AllowOidcSso,
             req.AllowSamlSso,
             req.RequireSso,
+            mfaPolicy,
             req.AllowSelfServiceExternalIdentityUnlink,
             ct);
         if (updated is null)
@@ -370,6 +384,25 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.auth_policy.update", org.Id, auth.User!.Id, "org.auth_policy.update", targetType: "organization", targetId: org.Id.ToString(), ct: ct);
         return TypedResults.Ok(ToAuthPolicyResponse(updated));
+    }
+
+    private static bool TryParseMfaPolicy(string? value, out OrganizationMfaPolicy policy)
+    {
+        policy = OrganizationMfaPolicy.Off;
+        if (value is null)
+        {
+            return true;
+        }
+
+        policy = value.Trim().ToLowerInvariant() switch
+        {
+            "off" => OrganizationMfaPolicy.Off,
+            "admins_owners" => OrganizationMfaPolicy.AdminsAndOwners,
+            "all_members" => OrganizationMfaPolicy.AllMembers,
+            _ => OrganizationMfaPolicy.Unknown,
+        };
+
+        return policy.Id != OrganizationMfaPolicy.Unknown.Id;
     }
 
     private static async Task<IResult> ListPermissionsAsync(

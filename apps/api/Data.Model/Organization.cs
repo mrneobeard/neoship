@@ -23,6 +23,12 @@ public class Organization
 
     public ushort StatusId { get; set; } = 1;
 
+    /// <summary>
+    /// Gets or sets the organization MFA policy identifier.
+    /// </summary>
+    /// <value>The organization MFA policy identifier.</value>
+    public ushort MfaPolicyId { get; set; } = OrganizationMfaPolicy.Off.Id;
+
     [NotMapped]
     public bool IsPrimaryTenant => this.Id.Equals(Guid.Empty);
 
@@ -38,6 +44,17 @@ public class Organization
     {
         get => this.TenantModeId;
         set => this.TenantModeId = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the organization MFA policy.
+    /// </summary>
+    /// <value>The organization MFA policy.</value>
+    [NotMapped]
+    public OrganizationMfaPolicy MfaPolicy
+    {
+        get => this.MfaPolicyId;
+        set => this.MfaPolicyId = value;
     }
 
     public DateTime  CreatedAt { get; set; } = DateTime.UtcNow;
@@ -73,4 +90,85 @@ public class Organization
     /// Gets or sets a value indicating whether users may unlink external identities themselves.
     /// </summary>
     public bool AllowSelfServiceExternalIdentityUnlink { get; set; } = true;
+}
+
+/// <summary>
+/// Represents organization MFA enforcement modes.
+/// </summary>
+/// <remarks>
+/// Example:
+/// <code>
+/// org.MfaPolicy = OrganizationMfaPolicy.AllMembers;
+/// </code>
+/// </remarks>
+public readonly struct OrganizationMfaPolicy
+{
+    /// <summary>
+    /// Gets the policy identifier.
+    /// </summary>
+    /// <value>The policy identifier.</value>
+    public ushort Id { get; init; }
+
+    /// <summary>
+    /// Gets the policy name.
+    /// </summary>
+    /// <value>The policy name.</value>
+    public string Name { get; init; }
+
+    private OrganizationMfaPolicy(ushort id, string name)
+    {
+        this.Id = id;
+        this.Name = name;
+    }
+
+    /// <summary>
+    /// Gets the disabled MFA policy.
+    /// </summary>
+    /// <value>The disabled MFA policy.</value>
+    public static OrganizationMfaPolicy Off => new(0, "off");
+
+    /// <summary>
+    /// Gets the admin and owner MFA policy.
+    /// </summary>
+    /// <value>The admin and owner MFA policy.</value>
+    public static OrganizationMfaPolicy AdminsAndOwners => new(10, "admins_owners");
+
+    /// <summary>
+    /// Gets the all-members MFA policy.
+    /// </summary>
+    /// <value>The all-members MFA policy.</value>
+    public static OrganizationMfaPolicy AllMembers => new(20, "all_members");
+
+    /// <summary>
+    /// Gets the unknown MFA policy.
+    /// </summary>
+    /// <value>The unknown MFA policy.</value>
+    public static OrganizationMfaPolicy Unknown => new(ushort.MaxValue, "unknown");
+
+    /// <summary>
+    /// Converts an MFA policy to its name.
+    /// </summary>
+    /// <param name="policy">The policy.</param>
+    /// <returns>The policy name.</returns>
+    public static implicit operator string(OrganizationMfaPolicy policy) => policy.Name;
+
+    /// <summary>
+    /// Converts an MFA policy to its identifier.
+    /// </summary>
+    /// <param name="policy">The policy.</param>
+    /// <returns>The policy identifier.</returns>
+    public static implicit operator ushort(OrganizationMfaPolicy policy) => policy.Id;
+
+    /// <summary>
+    /// Converts an identifier to an MFA policy.
+    /// </summary>
+    /// <param name="id">The policy identifier.</param>
+    /// <returns>The matching policy, or <see cref="Unknown"/>.</returns>
+    public static implicit operator OrganizationMfaPolicy(ushort id) => id switch
+    {
+        0 => Off,
+        10 => AdminsAndOwners,
+        20 => AllMembers,
+        _ => Unknown,
+    };
 }
