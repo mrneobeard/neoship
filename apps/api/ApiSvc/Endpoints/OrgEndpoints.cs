@@ -56,6 +56,7 @@ public static class OrgEndpoints
 
         group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
+        group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/rotate", RotateServiceAccountApiKeyAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
         group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", ListServiceAccountApiKeyClaimsAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", AddServiceAccountApiKeyClaimAsync);
@@ -1549,6 +1550,8 @@ public static class OrgEndpoints
 
     public record CreateServiceAccountApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
 
+    public record RotateServiceAccountApiKeyRequest(string? Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
+
     private static async Task<IResult> CreateServiceAccountApiKeyAsync(
         string orgSlug,
         Guid serviceAccountId,
@@ -1665,6 +1668,95 @@ public static class OrgEndpoints
         await audit.RecordAsync("org.service_accounts.api_key.revoke", org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
 
         return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> RotateServiceAccountApiKeyAsync(
+        string orgSlug,
+        Guid serviceAccountId,
+        Guid apiKeyId,
+        [FromBody] RotateServiceAccountApiKeyRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        ServiceAccountStore store,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidateRotateServiceAccountApiKey(req);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
+        var oldKey = await db.ServiceAccountApiKeys
+            .Include(x => x.ServiceAccount)
+            .FirstOrDefaultAsync(x => x.Id == apiKeyId
+                && x.ServiceAccountId == serviceAccountId
+                && x.ServiceAccount != null
+                && x.ServiceAccount.OrgId == org.Id
+                && x.ServiceAccount.DeletedAt == null
+                && x.DeletedAt == null
+                && x.RevokedAt == null, ct);
+        if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var (plaintextKey, newKey) = store.GenerateApiKey(
+            serviceAccountId,
+            string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
+            req.Description ?? oldKey.Description,
+            req.ScopesJson ?? oldKey.ScopesJson,
+            req.ExpiresAt ?? oldKey.ExpiresAt);
+
+        oldKey.RevokedAt = DateTime.UtcNow;
+        db.ServiceAccountApiKeys.Add(newKey);
+        await db.SaveChangesAsync(ct);
+
+        await audit.RecordAsync("org.service_accounts.api_key.rotate", org.Id, auth.User!.Id, "service_account.api_key.rotate", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Created(
+            $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{newKey.Id}",
+            new CreateServiceAccountApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt));
+    }
+
+    private static Dictionary<string, string[]> ValidateRotateServiceAccountApiKey(RotateServiceAccountApiKeyRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (req.Name is not null && (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160))
+        {
+            errors["name"] = ["Name must be 160 characters or fewer when provided."];
+        }
+
+        if (req.Description is not null && req.Description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+
+        return errors;
     }
 
     private static async Task<IResult> ListServiceAccountApiKeyClaimsAsync(

@@ -817,6 +817,37 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task RotateServiceAccountApiKey_RevokesOldKeyAndReturnsNewPlaintextKey()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-key-rotate@example.com", "Service Account Key Rotate");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/rotate");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"rotated\",\"description\":\"Rotated key\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("plaintextKey", body, StringComparison.OrdinalIgnoreCase);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.NotNull((await db.ServiceAccountApiKeys.SingleAsync(x => x.Id == seed.ApiKeyId, TestContext.Current.CancellationToken)).RevokedAt);
+            Assert.True(await db.ServiceAccountApiKeys.AnyAsync(x => x.ServiceAccountId == seed.ServiceAccountId && x.Name == "rotated", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.rotate", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListServiceAccountClaims_AllowsScopedServiceAccountBearer()
     {
         await using var app = await RouteTestApp.CreateAsync();
