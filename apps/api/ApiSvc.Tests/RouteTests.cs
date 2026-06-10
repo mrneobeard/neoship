@@ -56,6 +56,21 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task OpenApi_GeneratesIamRoutes()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("/api/v1/auth/login", body, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/me/api-keys", body, StringComparison.Ordinal);
+        Assert.Contains("/api/v1/orgs/{orgSlug}/service-accounts", body, StringComparison.Ordinal);
+    }
+
+
+    [Fact]
     public async Task BeginSso_ReturnsNotFoundForUnknownOrg()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1757,6 +1772,7 @@ public sealed class RouteTests
                     {
                         services.AddRouting();
                         services.AddProblemDetails();
+                        services.AddOpenApi();
                         services.AddLogging();
                         services.AddMemoryCache();
                         services.AddRateLimiter(options =>
@@ -1826,6 +1842,7 @@ public sealed class RouteTests
                         app.UseRateLimiter();
                         app.UseEndpoints(endpoints =>
                         {
+                            endpoints.MapOpenApi();
                             endpoints.MapAuthEndpoints();
                             endpoints.MapMeEndpoints();
                             endpoints.MapTenantEndpoints();
