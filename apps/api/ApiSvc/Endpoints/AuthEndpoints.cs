@@ -3,6 +3,7 @@ using Fido2NetLib;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
+using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -62,11 +63,18 @@ public static class AuthEndpoints
 
     public record UserResponse(Guid Id, string Email, string Name, string? AvatarUrl);
 
-    private static async Task<Results<Created<UserResponse>, Conflict<string>>> SignupAsync(
+    private static async Task<IResult> SignupAsync(
         [FromBody] SignupRequest req,
+        HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateSignup(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var (result, user, _, _) = await auth.SignupAsync(
             req.Email, req.Name, req.Password, Constants.DefaultOrganizationId, ct);
 
@@ -86,12 +94,18 @@ public static class AuthEndpoints
 
     public record FinishPasskeyLoginRequest(Guid ChallengeId, AuthenticatorAssertionRawResponse Response);
 
-    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> LoginAsync(
+    private static async Task<IResult> LoginAsync(
         [FromBody] LoginRequest req,
         HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateLogin(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var (result, user, session, rawToken) = await auth.LoginAsync(
             req.Email, req.Password, Constants.DefaultOrganizationId, ct);
 
@@ -109,12 +123,19 @@ public static class AuthEndpoints
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }
 
-    private static async Task<Results<Ok<BeginPasskeyLoginResponse>, UnauthorizedHttpResult>> BeginPasskeyLoginAsync(
+    private static async Task<IResult> BeginPasskeyLoginAsync(
         [FromBody] BeginPasskeyLoginRequest req,
+        HttpContext httpContext,
         PasskeyStore passkeys,
         PasskeyChallengeStore challenges,
         CancellationToken ct)
     {
+        var validation = ValidateEmailRequest(req.Email);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var result = await passkeys.BeginLoginAsync(req.Email, ct);
         if (result is null)
         {
@@ -168,7 +189,7 @@ public static class AuthEndpoints
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }
 
-    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> FinishPasskeyLoginAsync(
+    private static async Task<IResult> FinishPasskeyLoginAsync(
         [FromBody] FinishPasskeyLoginRequest req,
         HttpContext httpContext,
         PasskeyStore passkeys,
@@ -177,6 +198,12 @@ public static class AuthEndpoints
         SessionStore sessions,
         CancellationToken ct)
     {
+        var validation = ValidateFinishPasskeyLogin(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var challenge = challenges.TakeLogin(req.ChallengeId);
         if (challenge is null)
         {
@@ -205,12 +232,18 @@ public static class AuthEndpoints
     /// <param name="ApiKey">The plaintext API key.</param>
     public record ApiKeyLoginRequest(string ApiKey);
 
-    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult, StatusCodeHttpResult>> LoginWithApiKeyAsync(
+    private static async Task<IResult> LoginWithApiKeyAsync(
         [FromBody] ApiKeyLoginRequest req,
         HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateApiKeyLogin(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var (result, user, session, rawToken) = await auth.LoginWithUserApiKeyAsync(req.ApiKey, ct);
 
         if (result == LoginResult.AccountLocked)
@@ -245,44 +278,72 @@ public static class AuthEndpoints
 
     public record PasswordResetRequest(string Email);
 
-    private static async Task<Ok> RequestPasswordResetAsync(
+    private static async Task<IResult> RequestPasswordResetAsync(
         [FromBody] PasswordResetRequest req,
+        HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateEmailRequest(req.Email);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         await auth.RequestPasswordResetAsync(req.Email, ct);
         return TypedResults.Ok();
     }
 
     public record PasswordResetConfirm(string Token, string NewPassword);
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmPasswordResetAsync(
+    private static async Task<IResult> ConfirmPasswordResetAsync(
         [FromBody] PasswordResetConfirm req,
+        HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidatePasswordResetConfirm(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
         return success ? TypedResults.Ok() : TypedResults.Unauthorized();
     }
 
     public record EmailVerificationRequest(string Email);
 
-    private static async Task<Ok> RequestEmailVerificationAsync(
+    private static async Task<IResult> RequestEmailVerificationAsync(
         [FromBody] EmailVerificationRequest req,
+        HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateEmailRequest(req.Email);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         await auth.RequestEmailVerificationAsync(req.Email, ct);
         return TypedResults.Ok();
     }
 
     public record EmailVerificationConfirm(string Token);
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult>> ConfirmEmailVerificationAsync(
+    private static async Task<IResult> ConfirmEmailVerificationAsync(
         [FromBody] EmailVerificationConfirm req,
+        HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
     {
+        var validation = ValidateToken(req.Token);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
         return success ? TypedResults.Ok() : TypedResults.Unauthorized();
     }
@@ -303,5 +364,112 @@ public static class AuthEndpoints
 
         var token = tokenExchange.CreateToken(session.UserId, session.OrgId, session.ClaimsJson);
         return TypedResults.Ok(new TokenExchangeResponse(token, "Bearer", 300));
+    }
+
+    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
+        => TypedResults.Json(
+            new ApiErrorEnvelope(
+                new ApiError("validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields }),
+                ApiMeta.FromHttpContext(httpContext)),
+            statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    private static Dictionary<string, string[]> ValidateSignup(SignupRequest req)
+    {
+        var errors = ValidateEmailRequest(req.Email);
+
+        if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160)
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        AddPasswordErrors(errors, req.Password, "password");
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateLogin(LoginRequest req)
+    {
+        var errors = ValidateEmailRequest(req.Email);
+        if (string.IsNullOrEmpty(req.Password))
+        {
+            errors["password"] = ["Password is required."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateEmailRequest(string? email)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var value = email?.Trim() ?? string.Empty;
+        if (!IsValidEmail(value))
+        {
+            errors["email"] = ["Email must be a valid email address and 320 characters or fewer."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateFinishPasskeyLogin(FinishPasskeyLoginRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (req.ChallengeId == Guid.Empty)
+        {
+            errors["challengeId"] = ["Challenge ID is required."];
+        }
+
+        if (req.Response is null)
+        {
+            errors["response"] = ["Passkey assertion response is required."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateApiKeyLogin(ApiKeyLoginRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(req.ApiKey))
+        {
+            errors["apiKey"] = ["API key is required."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidatePasswordResetConfirm(PasswordResetConfirm req)
+    {
+        var errors = ValidateToken(req.Token);
+        AddPasswordErrors(errors, req.NewPassword, "newPassword");
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateToken(string? token)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            errors["token"] = ["Token is required."];
+        }
+
+        return errors;
+    }
+
+    private static void AddPasswordErrors(Dictionary<string, string[]> errors, string? password, string field)
+    {
+        if (string.IsNullOrEmpty(password) || password.Length is < 12 or > 256)
+        {
+            errors[field] = ["Password must be 12 to 256 characters."];
+        }
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (email.Length is < 3 or > 320)
+        {
+            return false;
+        }
+
+        var at = email.IndexOf('@', StringComparison.Ordinal);
+        return at > 0 && at == email.LastIndexOf('@') && at < email.Length - 1 && email[(at + 1)..].Contains('.', StringComparison.Ordinal);
     }
 }

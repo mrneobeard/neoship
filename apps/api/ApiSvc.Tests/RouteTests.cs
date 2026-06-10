@@ -87,6 +87,74 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task Signup_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/signup",
+            new StringContent("{\"email\":\"not-email\",\"name\":\" \" ,\"password\":\"short\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("email", out _));
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("password", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.Users.AnyAsync(x => x.Email == "not-email", TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "auth.signup.success" || x.Type == "auth.signup.failed", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task Login_ReturnsAggregateValidationErrorsBeforeAuditWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/login",
+            new StringContent("{\"email\":\"not-email\",\"password\":\"\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("email", out _));
+        Assert.True(fields.TryGetProperty("password", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "auth.login.failed" || x.Type == "auth.login.success", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task ConfirmPasswordReset_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/password-reset/confirm",
+            new StringContent("{\"token\":\" \" ,\"newPassword\":\"short\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("token", out _));
+        Assert.True(fields.TryGetProperty("newPassword", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "auth.password_reset", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task FinishSso_SetsSessionCookieAndWritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync(new SsoExternalIdentity("subject", "route-sso-user@example.com", true, "SSO User"));
