@@ -94,6 +94,8 @@ Conform public names to canonical C# types where practical.
 - `GET /api/v1/auth/sso/{orgSlug}/begin`
 - `GET /api/v1/auth/sso/callback`
 
+Identity provider creation supports `preset` values `github`, `google`, and `microsoft`. A preset fills provider type and standard HTTPS metadata endpoints; explicit `issuerUrl` or `metadataJson` may override preset defaults when needed. If both `preset` and `providerType` are provided, `providerType` must match the preset.
+
 ## Request/Response Semantics
 
 - use `data` envelope for success
