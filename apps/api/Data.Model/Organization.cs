@@ -57,9 +57,21 @@ public class Organization
         set => this.MfaPolicyId = value;
     }
 
-    public DateTime  CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp when this organization was soft-deleted.
+    /// </summary>
+    /// <value>The UTC soft-deletion timestamp.</value>
+    public DateTime? DeletedAt { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp when this organization becomes eligible for hard deletion.
+    /// </summary>
+    /// <value>The UTC hard-deletion eligibility timestamp.</value>
+    public DateTime? HardDeleteAt { get; set; } = null;
 
     /// <summary>
     /// Gets or sets a value indicating whether password sign-in is allowed.

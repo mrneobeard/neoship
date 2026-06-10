@@ -1,9 +1,11 @@
 packages:
   - lib/js/*
+  - apps/apphost
   - apps/ui
 
 allowBuilds:
   '@hugeicons/svelte': false
+  esbuild: true
 catalog:
   vite: 8.0.16
   vitest: 4.1.8

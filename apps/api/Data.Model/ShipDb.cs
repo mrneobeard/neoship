@@ -61,6 +61,37 @@ public class ShipDb : DbContext
         {
             u.HasIndex(x => x.Email).IsUnique();
             u.HasIndex(x => x.EmailUpcase);
+            u.HasIndex(x => x.HardDeleteAt);
+        });
+
+        modelBuilder.Entity<AuditEvent>(a =>
+        {
+            a.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<UserApiKeyClaim>(c =>
+        {
+            c.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<UserClaim>(c =>
+        {
+            c.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<RoleClaim>(c =>
+        {
+            c.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<ServiceAccountApiKeyClaim>(c =>
+        {
+            c.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<Organization>(o =>
+        {
+            o.HasIndex(x => x.HardDeleteAt);
         });
 
         modelBuilder.Entity<OrganizationMembership>(m =>
@@ -222,25 +253,37 @@ public class ShipDb : DbContext
         modelBuilder.Entity<Group>()
             .HasMany(g => g.Members)
             .WithMany()
-            .UsingEntity("group_members");
+            .UsingEntity<Dictionary<string, object>>(
+                "group_members",
+                r => r.HasOne<User>().WithMany().OnDelete(DeleteBehavior.Restrict),
+                l => l.HasOne<Group>().WithMany().OnDelete(DeleteBehavior.Restrict));
 
         // Group <-> User Owners (M:N)
         modelBuilder.Entity<Group>()
             .HasMany(g => g.Owners)
             .WithMany()
-            .UsingEntity("group_owners");
+            .UsingEntity<Dictionary<string, object>>(
+                "group_owners",
+                r => r.HasOne<User>().WithMany().OnDelete(DeleteBehavior.Restrict),
+                l => l.HasOne<Group>().WithMany().OnDelete(DeleteBehavior.Restrict));
 
         // Group <-> ServiceAccount Members (M:N)
         modelBuilder.Entity<Group>()
             .HasMany(g => g.ServiceAccountMembers)
             .WithMany()
-            .UsingEntity("group_service_account_members");
+            .UsingEntity<Dictionary<string, object>>(
+                "group_service_account_members",
+                r => r.HasOne<ServiceAccount>().WithMany().OnDelete(DeleteBehavior.Restrict),
+                l => l.HasOne<Group>().WithMany().OnDelete(DeleteBehavior.Restrict));
 
         // Group <-> ServiceAccount Owners (M:N)
         modelBuilder.Entity<Group>()
             .HasMany(g => g.ServiceAccountOwners)
             .WithMany()
-            .UsingEntity("group_service_account_owners");
+            .UsingEntity<Dictionary<string, object>>(
+                "group_service_account_owners",
+                r => r.HasOne<ServiceAccount>().WithMany().OnDelete(DeleteBehavior.Restrict),
+                l => l.HasOne<Group>().WithMany().OnDelete(DeleteBehavior.Restrict));
 
         // ServiceAccount -> ServiceAccountClaim
         modelBuilder.Entity<ServiceAccountClaim>(c =>

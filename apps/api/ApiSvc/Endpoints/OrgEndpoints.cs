@@ -82,7 +82,7 @@ public static class OrgEndpoints
     /// <summary>
     /// Represents a claim summary on a role.
     /// </summary>
-    public record RoleClaimResponse(ulong Id, string Type, string Value);
+    public record RoleClaimResponse(long Id, string Type, string Value);
 
     /// <summary>
     /// Represents a role response.
@@ -208,7 +208,7 @@ public static class OrgEndpoints
             var userAllowed = await HasOrgPermissionAsync(httpContext, permissions, user.Id, permission, orgSlug, ct);
             if (!userAllowed)
             {
-                return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
+                return (null, Forbidden(httpContext));
             }
 
             if (permission.Action == "write")
@@ -226,18 +226,18 @@ public static class OrgEndpoints
         var serviceAccountKey = await AuthenticateServiceAccountApiKeyAsync(httpContext, ct);
         if (serviceAccountKey?.ServiceAccount is null)
         {
-            return (null, TypedResults.Unauthorized());
+            return (null, Unauthenticated(httpContext));
         }
 
         if (!allowServiceAccount)
         {
-            return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
+            return (null, Forbidden(httpContext));
         }
 
         var allowed = await HasServiceAccountOrgPermissionAsync(permissions, serviceAccountKey.Id, permission, orgSlug, ct);
         if (!allowed)
         {
-            return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
+            return (null, Forbidden(httpContext));
         }
 
         return (null, null);
@@ -274,6 +274,15 @@ public static class OrgEndpoints
 
     private static IResult StepUpRequired(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
+
+    private static IResult Unauthenticated(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication required.");
+
+    private static IResult Forbidden(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
+
+    private static IResult NotFoundError(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
 
     private static async Task<ServiceAccountApiKey?> AuthenticateServiceAccountApiKeyAsync(HttpContext httpContext, CancellationToken ct)
     {
@@ -369,7 +378,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.settings", "read"), ct, allowServiceAccount: true);
@@ -378,7 +387,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        return TypedResults.Ok(ToAuthPolicyResponse(org));
+        return TypedResults.Ok(Envelope(httpContext, ToAuthPolicyResponse(org)));
     }
 
     private static async Task<IResult> UpdateAuthPolicyAsync(
@@ -395,7 +404,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.settings", "write"), ct);
@@ -424,11 +433,11 @@ public static class OrgEndpoints
             ct);
         if (updated is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.auth_policy.update", org.Id, auth.User!.Id, "org.auth_policy.update", targetType: "organization", targetId: org.Id.ToString(), ct: ct);
-        return TypedResults.Ok(ToAuthPolicyResponse(updated));
+        return TypedResults.Ok(Envelope(httpContext, ToAuthPolicyResponse(updated)));
     }
 
     private static bool TryParseMfaPolicy(string? value, out OrganizationMfaPolicy policy)
@@ -452,6 +461,10 @@ public static class OrgEndpoints
 
     private static async Task<IResult> ListPermissionsAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[resource]")] string? filterResource,
+        [FromQuery(Name = "filter[action]")] string? filterAction,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -462,7 +475,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
@@ -471,17 +484,80 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var result = registry.All
+        var query = ParsePermissionListQuery(httpContext, limit, cursor, filterResource, filterAction);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<PermissionDefinition> filtered = registry.All;
+        if (!string.IsNullOrWhiteSpace(query.FilterResource))
+        {
+            filtered = filtered.Where(x => x.Key.Resource.Contains(query.FilterResource, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.FilterAction))
+        {
+            filtered = filtered.Where(x => x.Key.Action.Contains(query.FilterAction, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var page = filtered
             .OrderBy(x => x.Key.Resource)
             .ThenBy(x => x.Key.Action)
-            .Select(ToPermissionDefinitionResponse)
+            .Skip(query.Offset)
+            .Take(query.Limit + 1)
             .ToList();
+        var hasMore = page.Count > query.Limit;
+        var result = page.Take(query.Limit).Select(ToPermissionDefinitionResponse).ToList();
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = new Dictionary<string, string>();
+        if (!string.IsNullOrWhiteSpace(query.FilterResource)) filters["resource"] = query.FilterResource;
+        if (!string.IsNullOrWhiteSpace(query.FilterAction)) filters["action"] = query.FilterAction;
+        var queryMeta = new ApiQueryMeta(filters, ["resource", "action"], [], query.Limit, cursor);
 
-        return TypedResults.Ok(result);
+        return TypedResults.Ok(new ApiCollectionEnvelope<PermissionDefinitionResponse>(result, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private sealed record ParsedPermissionListQuery(int Limit, int Offset, string? FilterResource, string? FilterAction, Dictionary<string, string[]> Errors);
+
+    private static ParsedPermissionListQuery ParsePermissionListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterResource, string? filterAction)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[resource]", "filter[action]" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterResource is { Length: > 160 }) errors["filter.resource"] = ["Resource filter must be 160 characters or fewer."];
+        if (filterAction is { Length: > 160 }) errors["filter.action"] = ["Action filter must be 160 characters or fewer."];
+
+        return new ParsedPermissionListQuery(resolvedLimit, offset, filterResource, filterAction, errors);
     }
 
     private static async Task<IResult> ListInvitesAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[email]")] string? filterEmail,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -492,7 +568,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "read"), ct);
@@ -502,7 +578,75 @@ public static class OrgEndpoints
         }
 
         var list = await invites.ListAsync(org.Id, ct);
-        return TypedResults.Ok(list.Select(ToInviteResponse).ToList());
+        var query = ParseEmailListQuery(httpContext, limit, cursor, filterEmail, sort);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<OrganizationInvite> filtered = list;
+        if (!string.IsNullOrWhiteSpace(query.FilterEmail))
+        {
+            filtered = filtered.Where(x => x.Email.Contains(query.FilterEmail, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToInviteResponse).ToList();
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterEmail) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["email"] = query.FilterEmail };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<OrganizationInviteResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private sealed record ParsedEmailListQuery(int Limit, int Offset, string? FilterEmail, string Sort, Dictionary<string, string[]> Errors);
+
+    private static ParsedEmailListQuery ParseEmailListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterEmail, string? sort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[email]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "-createdAt" : sort.Trim();
+        if (resolvedSort is not ("createdAt" or "-createdAt"))
+        {
+            errors["sort"] = ["Sort must be createdAt or -createdAt."];
+            resolvedSort = "-createdAt";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterEmail is { Length: > 320 })
+        {
+            errors["filter.email"] = ["Email filter must be 320 characters or fewer."];
+        }
+
+        return new ParsedEmailListQuery(resolvedLimit, offset, filterEmail, resolvedSort, errors);
     }
 
     private static async Task<IResult> CreateInviteAsync(
@@ -514,12 +658,13 @@ public static class OrgEndpoints
         ShipDb db,
         OrganizationInviteStore invites,
         AuditStore audit,
+        IEmailSender emails,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "write"), ct);
@@ -536,11 +681,18 @@ public static class OrgEndpoints
 
         var (invite, token) = await invites.CreateAsync(org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
         await audit.RecordAsync("org.invites.create", org.Id, auth.User.Id, "org.invite.create", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
-        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/invites/{invite.Id}", new CreateOrganizationInviteResponse(invite.Id, invite.Email, token, invite.CreatedAt, invite.ExpiresAt));
+        await emails.SendAsync(new EmailMessage(
+            invite.Email,
+            $"You're invited to {org.Name}",
+            $"You've been invited to join {org.Name}. Accept the invite at /accept-invite?token={token}"), ct);
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/invites/{invite.Id}", Envelope(httpContext, new CreateOrganizationInviteResponse(invite.Id, invite.Email, token, invite.CreatedAt, invite.ExpiresAt)));
     }
 
     private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
         => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
+
+    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
+        => new(data, ApiMeta.FromHttpContext(httpContext));
 
     private static Dictionary<string, string[]> ValidateCreateInvite(CreateOrganizationInviteRequest req)
     {
@@ -592,7 +744,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "write"), ct);
@@ -604,15 +756,19 @@ public static class OrgEndpoints
         var revoked = await invites.RevokeAsync(org.Id, inviteId, ct);
         if (!revoked)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.invites.revoke", org.Id, auth.User!.Id, "org.invite.revoke", targetType: "organization_invite", targetId: inviteId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> ListRolesAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -623,7 +779,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
@@ -632,8 +788,98 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
         var list = await roles.ListAsync(org.Id, ct);
-        return TypedResults.Ok(list.Select(ToRoleResponse).ToList());
+        IEnumerable<Role> filtered = list;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToRoleResponse).ToList();
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<RoleResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private sealed record ParsedNamedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
+
+    private static ParsedNamedListQuery ParseNamedListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterName, string? sort, bool allowCreatedAtSort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[name]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "name" : sort.Trim();
+        var sortIsValid = resolvedSort is "name" or "-name" || (allowCreatedAtSort && resolvedSort is "createdAt" or "-createdAt");
+        if (!sortIsValid)
+        {
+            errors["sort"] = [allowCreatedAtSort ? "Sort must be name, -name, createdAt, or -createdAt." : "Sort must be name or -name."];
+            resolvedSort = "name";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterName is { Length: > 160 })
+        {
+            errors["filter.name"] = ["Name filter must be 160 characters or fewer."];
+        }
+
+        return new ParsedNamedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
+    }
+
+    private static string EncodeCursor(int offset)
+        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static bool TryDecodeCursor(string cursor, out int offset)
+    {
+        offset = 0;
+        try
+        {
+            var padded = cursor.Replace('-', '+').Replace('_', '/');
+            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
+            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static async Task<IResult> CreateRoleAsync(
@@ -650,7 +896,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -667,7 +913,7 @@ public static class OrgEndpoints
 
         var role = await roles.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
         await audit.RecordAsync("org.roles.create", org.Id, auth.User.Id, "role.create", targetType: "role", targetId: role.Id.ToString(), ct: ct);
-        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", ToRoleResponse(role));
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", Envelope(httpContext, ToRoleResponse(role)));
     }
 
     private static async Task<IResult> GetRoleAsync(
@@ -683,7 +929,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "read"), ct, allowServiceAccount: true);
@@ -695,10 +941,10 @@ public static class OrgEndpoints
         var role = await roles.GetAsync(org.Id, roleId, ct);
         if (role is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(ToRoleResponse(role));
+        return TypedResults.Ok(Envelope(httpContext, ToRoleResponse(role)));
     }
 
     private static async Task<IResult> UpdateRoleAsync(
@@ -716,7 +962,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -734,11 +980,11 @@ public static class OrgEndpoints
         var role = await roles.UpdateAsync(org.Id, roleId, req.Name, req.Description, ct);
         if (role is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.update", org.Id, auth.User!.Id, "role.update", targetType: "role", targetId: role.Id.ToString(), ct: ct);
-        return TypedResults.Ok(ToRoleResponse(role));
+        return TypedResults.Ok(Envelope(httpContext, ToRoleResponse(role)));
     }
 
     private static async Task<IResult> DeleteRoleAsync(
@@ -755,7 +1001,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -767,11 +1013,11 @@ public static class OrgEndpoints
         var deleted = await roles.DeleteAsync(org.Id, roleId, ct);
         if (!deleted)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.delete", org.Id, auth.User!.Id, "role.delete", targetType: "role", targetId: roleId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> AddRoleClaimAsync(
@@ -789,7 +1035,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -808,11 +1054,11 @@ public static class OrgEndpoints
         var added = await roles.AddClaimAsync(org.Id, roleId, grant, auth.User!.Id, ct);
         if (!added)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.claim.add", org.Id, auth.User.Id, "role.claim.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static Dictionary<string, string[]> ValidateRoleInput(string? name, string? description, bool requireName)
@@ -856,7 +1102,7 @@ public static class OrgEndpoints
     private static async Task<IResult> RemoveRoleClaimAsync(
         string orgSlug,
         Guid roleId,
-        ulong claimId,
+        long claimId,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -868,7 +1114,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -880,11 +1126,11 @@ public static class OrgEndpoints
         var removed = await roles.RemoveClaimAsync(org.Id, roleId, claimId, ct);
         if (!removed)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.claim.remove", org.Id, auth.User!.Id, "role.claim.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> AttachRoleUserAsync(
@@ -902,7 +1148,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -914,11 +1160,11 @@ public static class OrgEndpoints
         var attached = await roles.AttachUserAsync(org.Id, roleId, userId, ct);
         if (!attached)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.user.add", org.Id, auth.User!.Id, "role.user.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> DetachRoleUserAsync(
@@ -936,7 +1182,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.roles", "write"), ct);
@@ -948,15 +1194,19 @@ public static class OrgEndpoints
         var detached = await roles.DetachUserAsync(org.Id, roleId, userId, ct);
         if (!detached)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.roles.user.remove", org.Id, auth.User!.Id, "role.user.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> ListGroupsAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -967,7 +1217,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct, allowServiceAccount: true);
@@ -977,7 +1227,33 @@ public static class OrgEndpoints
         }
 
         var list = await groups.ListAsync(org.Id, ct);
-        return TypedResults.Ok(list.Select(ToGroupResponse).ToList());
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: false);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<Group> filtered = list;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToGroupResponse).ToList();
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<GroupResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
     private static async Task<IResult> CreateGroupAsync(
@@ -994,7 +1270,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1011,7 +1287,7 @@ public static class OrgEndpoints
 
         var group = await groups.CreateAsync(org.Id, req.Name, req.Email, req.Description, ct);
         await audit.RecordAsync("org.groups.create", org.Id, auth.User!.Id, "group.create", targetType: "group", targetId: group.Id.ToString(), ct: ct);
-        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", ToGroupResponse(group));
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", Envelope(httpContext, ToGroupResponse(group)));
     }
 
     private static async Task<IResult> GetGroupAsync(
@@ -1027,7 +1303,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "read"), ct, allowServiceAccount: true);
@@ -1039,10 +1315,10 @@ public static class OrgEndpoints
         var group = await groups.GetAsync(org.Id, groupId, ct);
         if (group is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(ToGroupResponse(group));
+        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group)));
     }
 
     private static async Task<IResult> UpdateGroupAsync(
@@ -1060,7 +1336,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1078,11 +1354,11 @@ public static class OrgEndpoints
         var group = await groups.UpdateAsync(org.Id, groupId, req.Name, req.Email, req.Description, ct);
         if (group is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.update", org.Id, auth.User!.Id, "group.update", targetType: "group", targetId: group.Id.ToString(), ct: ct);
-        return TypedResults.Ok(ToGroupResponse(group));
+        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group)));
     }
 
     private static Dictionary<string, string[]> ValidateGroupInput(string? name, string? email, string? description, bool requireName)
@@ -1121,7 +1397,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1133,11 +1409,11 @@ public static class OrgEndpoints
         var deleted = await groups.DeleteAsync(org.Id, groupId, ct);
         if (!deleted)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.delete", org.Id, auth.User!.Id, "group.delete", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> AddGroupUserAsync(
@@ -1155,7 +1431,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1167,11 +1443,11 @@ public static class OrgEndpoints
         var ok = await groups.AddUserAsync(org.Id, groupId, userId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.member.add", org.Id, auth.User!.Id, "group.member.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> RemoveGroupUserAsync(
@@ -1189,7 +1465,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1201,11 +1477,11 @@ public static class OrgEndpoints
         var ok = await groups.RemoveUserAsync(org.Id, groupId, userId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.member.remove", org.Id, auth.User!.Id, "group.member.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> AddGroupServiceAccountAsync(
@@ -1223,7 +1499,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1235,11 +1511,11 @@ public static class OrgEndpoints
         var ok = await groups.AddServiceAccountAsync(org.Id, groupId, serviceAccountId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.service_account.add", org.Id, auth.User!.Id, "group.service_account.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> RemoveGroupServiceAccountAsync(
@@ -1257,7 +1533,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1269,11 +1545,11 @@ public static class OrgEndpoints
         var ok = await groups.RemoveServiceAccountAsync(org.Id, groupId, serviceAccountId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.service_account.remove", org.Id, auth.User!.Id, "group.service_account.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> AttachGroupRoleAsync(
@@ -1291,7 +1567,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1303,11 +1579,11 @@ public static class OrgEndpoints
         var ok = await groups.AttachRoleAsync(org.Id, groupId, roleId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.role.add", org.Id, auth.User!.Id, "group.role.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> DetachGroupRoleAsync(
@@ -1325,7 +1601,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.groups", "write"), ct);
@@ -1337,11 +1613,11 @@ public static class OrgEndpoints
         var ok = await groups.DetachRoleAsync(org.Id, groupId, roleId, ct);
         if (!ok)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.groups.role.remove", org.Id, auth.User!.Id, "group.role.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record ServiceAccountResponse(
@@ -1349,6 +1625,10 @@ public static class OrgEndpoints
 
     private static async Task<IResult> ListServiceAccountsAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -1359,7 +1639,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
@@ -1369,12 +1649,39 @@ public static class OrgEndpoints
         }
 
         var accounts = await store.ListAsync(org.Id, ct);
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
 
-        var result = accounts.Select(s => new ServiceAccountResponse(
+        IEnumerable<ServiceAccount> filtered = accounts;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+
+        var result = page.Take(query.Limit).Select(s => new ServiceAccountResponse(
             s.Id, s.Name, s.Description, s.CreatedAt, s.UpdatedAt
         )).ToList();
 
-        return TypedResults.Ok(result);
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<ServiceAccountResponse>(result, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
     public record CreateServiceAccountRequest(string Name, string? Description);
@@ -1392,7 +1699,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
@@ -1404,10 +1711,10 @@ public static class OrgEndpoints
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt)));
     }
 
     private static async Task<IResult> CreateServiceAccountAsync(
@@ -1424,7 +1731,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1444,7 +1751,7 @@ public static class OrgEndpoints
 
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{sa.Id}",
-            new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
+            Envelope(httpContext, new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt)));
     }
 
     public record UpdateServiceAccountRequest(string? Name, string? Description);
@@ -1464,7 +1771,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1482,12 +1789,12 @@ public static class OrgEndpoints
         var sa = await store.UpdateAsync(org.Id, serviceAccountId, req.Name, req.Description, ct);
         if (sa is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.update", org.Id, auth.User!.Id, "service_account.update", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
 
-        return TypedResults.Ok(new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt)));
     }
 
     private static Dictionary<string, string[]> ValidateServiceAccountInput(string? name, string? description, bool requireName)
@@ -1521,7 +1828,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1533,12 +1840,12 @@ public static class OrgEndpoints
         var success = await store.DisableAsync(org.Id, serviceAccountId, ct);
         if (!success)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.disable", org.Id, auth.User!.Id, "service_account.disable", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> EnableServiceAccountAsync(
@@ -1555,7 +1862,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1567,12 +1874,12 @@ public static class OrgEndpoints
         var success = await store.EnableAsync(org.Id, serviceAccountId, ct);
         if (!success)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.enable", org.Id, auth.User!.Id, "service_account.enable", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record ServiceAccountApiKeyResponse(
@@ -1582,7 +1889,7 @@ public static class OrgEndpoints
 
     public record AddServiceAccountClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
 
-    public record ServiceAccountApiKeyClaimResponse(ulong Id, string Type, string Value);
+    public record ServiceAccountApiKeyClaimResponse(long Id, string Type, string Value);
 
     public record AddServiceAccountApiKeyClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
 
@@ -1592,6 +1899,10 @@ public static class OrgEndpoints
     private static async Task<IResult> ListServiceAccountApiKeysAsync(
         string orgSlug,
         Guid serviceAccountId,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -1602,7 +1913,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
@@ -1614,16 +1925,43 @@ public static class OrgEndpoints
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var keys = await store.ListApiKeysAsync(serviceAccountId, ct);
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
 
-        var result = keys.Select(k => new ServiceAccountApiKeyResponse(
+        IEnumerable<ServiceAccountApiKey> filtered = keys;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+
+        var result = page.Take(query.Limit).Select(k => new ServiceAccountApiKeyResponse(
             k.Id, k.Name, k.Description, k.CreatedAt, k.ExpiresAt
         )).ToList();
 
-        return TypedResults.Ok(result);
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<ServiceAccountApiKeyResponse>(result, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
     public record CreateServiceAccountApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
@@ -1646,7 +1984,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1664,7 +2002,7 @@ public static class OrgEndpoints
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt, configuration);
@@ -1677,7 +2015,7 @@ public static class OrgEndpoints
 
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{apiKey.Id}",
-            new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
+            Envelope(httpContext, new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt)));
     }
 
     private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req, IConfiguration configuration)
@@ -1734,7 +2072,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1746,12 +2084,12 @@ public static class OrgEndpoints
         var success = await store.RevokeApiKeyAsync(org.Id, apiKeyId, serviceAccountId, ct);
         if (!success)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.api_key.revoke", org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
 
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> RotateServiceAccountApiKeyAsync(
@@ -1771,7 +2109,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1797,7 +2135,7 @@ public static class OrgEndpoints
                 && x.RevokedAt == null, ct);
         if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt ?? oldKey.ExpiresAt, configuration);
@@ -1815,7 +2153,7 @@ public static class OrgEndpoints
         await audit.RecordAsync("org.service_accounts.api_key.rotate", org.Id, auth.User!.Id, "service_account.api_key.rotate", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{newKey.Id}",
-            new CreateServiceAccountApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt));
+            Envelope(httpContext, new CreateServiceAccountApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt)));
     }
 
     private static Dictionary<string, string[]> ValidateRotateServiceAccountApiKey(RotateServiceAccountApiKeyRequest req, IConfiguration configuration)
@@ -1859,6 +2197,10 @@ public static class OrgEndpoints
         string orgSlug,
         Guid serviceAccountId,
         Guid apiKeyId,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[type]")] string? filterType,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -1869,7 +2211,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
@@ -1881,10 +2223,28 @@ public static class OrgEndpoints
         var claims = await store.ListApiKeyClaimsAsync(org.Id, serviceAccountId, apiKeyId, ct);
         if (claims is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(claims.Select(x => new ServiceAccountApiKeyClaimResponse(x.Id, x.Type, x.Value)).ToList());
+        var query = ParseClaimListQuery(httpContext, limit, cursor, filterType, sort);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<ServiceAccountApiKeyClaim> filtered = claims;
+        if (!string.IsNullOrWhiteSpace(query.FilterType))
+        {
+            filtered = filtered.Where(x => x.Type.Contains(query.FilterType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort == "-type"
+            ? filtered.OrderByDescending(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            : filtered.OrderBy(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id);
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(x => new ServiceAccountApiKeyClaimResponse(x.Id, x.Type, x.Value)).ToList();
+        return ClaimCollection(httpContext, data, query, hasMore, cursor);
     }
 
     private static async Task<IResult> AddServiceAccountApiKeyClaimAsync(
@@ -1903,7 +2263,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1922,18 +2282,18 @@ public static class OrgEndpoints
         var claim = await store.AddApiKeyClaimAsync(org.Id, serviceAccountId, apiKeyId, grant, ct);
         if (claim is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.api_key.claim.add", org.Id, auth.User!.Id, "service_account.api_key.claim.add", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
-        return TypedResults.Ok(new ServiceAccountApiKeyClaimResponse(claim.Id, claim.Type, claim.Value));
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountApiKeyClaimResponse(claim.Id, claim.Type, claim.Value)));
     }
 
     private static async Task<IResult> RemoveServiceAccountApiKeyClaimAsync(
         string orgSlug,
         Guid serviceAccountId,
         Guid apiKeyId,
-        ulong claimId,
+        long claimId,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -1945,7 +2305,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -1957,16 +2317,20 @@ public static class OrgEndpoints
         var removed = await store.RemoveApiKeyClaimAsync(org.Id, serviceAccountId, apiKeyId, claimId, ct);
         if (!removed)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.api_key.claim.remove", org.Id, auth.User!.Id, "service_account.api_key.claim.remove", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     private static async Task<IResult> ListServiceAccountClaimsAsync(
         string orgSlug,
         Guid serviceAccountId,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[type]")] string? filterType,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -1977,7 +2341,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
@@ -1989,10 +2353,79 @@ public static class OrgEndpoints
         var claims = await store.ListClaimsAsync(org.Id, serviceAccountId, ct);
         if (claims is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(claims.Select(x => new ServiceAccountClaimResponse(x.Id, x.Type, x.Value)).ToList());
+        var query = ParseClaimListQuery(httpContext, limit, cursor, filterType, sort);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<ServiceAccountClaim> filtered = claims;
+        if (!string.IsNullOrWhiteSpace(query.FilterType))
+        {
+            filtered = filtered.Where(x => x.Type.Contains(query.FilterType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort == "-type"
+            ? filtered.OrderByDescending(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            : filtered.OrderBy(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id);
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(x => new ServiceAccountClaimResponse(x.Id, x.Type, x.Value)).ToList();
+        return ClaimCollection(httpContext, data, query, hasMore, cursor);
+    }
+
+    private sealed record ParsedClaimListQuery(int Limit, int Offset, string? FilterType, string Sort, Dictionary<string, string[]> Errors);
+
+    private static IResult ClaimCollection<T>(HttpContext httpContext, IReadOnlyList<T> data, ParsedClaimListQuery query, bool hasMore, string? cursor)
+    {
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterType) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["type"] = query.FilterType };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+        return TypedResults.Ok(new ApiCollectionEnvelope<T>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private static ParsedClaimListQuery ParseClaimListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterType, string? sort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[type]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "type" : sort.Trim();
+        if (resolvedSort is not ("type" or "-type"))
+        {
+            errors["sort"] = ["Sort must be type or -type."];
+            resolvedSort = "type";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterType is { Length: > 160 })
+        {
+            errors["filter.type"] = ["Type filter must be 160 characters or fewer."];
+        }
+
+        return new ParsedClaimListQuery(resolvedLimit, offset, filterType, resolvedSort, errors);
     }
 
     private static async Task<IResult> AddServiceAccountClaimAsync(
@@ -2010,7 +2443,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -2029,11 +2462,11 @@ public static class OrgEndpoints
         var claim = await store.AddClaimAsync(org.Id, serviceAccountId, grant, ct);
         if (claim is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.claim.add", org.Id, auth.User!.Id, "service_account.claim.add", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
-        return TypedResults.Ok(new ServiceAccountClaimResponse(claim.Id, claim.Type, claim.Value));
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountClaimResponse(claim.Id, claim.Type, claim.Value)));
     }
 
     private static Dictionary<string, string[]> ValidatePermissionGrant(string permission, PermissionScopeKind scopeKind, string? scopeId, out PermissionKey key)
@@ -2072,7 +2505,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.service_accounts", "write"), ct);
@@ -2084,11 +2517,11 @@ public static class OrgEndpoints
         var removed = await store.RemoveClaimAsync(org.Id, serviceAccountId, claimId, ct);
         if (!removed)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.service_accounts.claim.remove", org.Id, auth.User!.Id, "service_account.claim.remove", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record IdentityProviderResponse(
@@ -2176,6 +2609,10 @@ public static class OrgEndpoints
 
     private static async Task<IResult> ListIdentityProvidersAsync(
         string orgSlug,
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         PermissionResolver permissions,
@@ -2186,7 +2623,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
@@ -2196,7 +2633,35 @@ public static class OrgEndpoints
         }
 
         var list = await providers.ListAsync(org.Id, ct);
-        return TypedResults.Ok(list.Select(ToIdentityProviderResponse).ToList());
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
+
+        IEnumerable<UserIdentityProvider> filtered = list;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToIdentityProviderResponse).ToList();
+        var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
+        var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<IdentityProviderResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
     private static async Task<IResult> CreateIdentityProviderAsync(
@@ -2213,7 +2678,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
@@ -2240,7 +2705,7 @@ public static class OrgEndpoints
             ct);
         await audit.RecordAsync("org.identity_providers.create", org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
 
-        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", ToIdentityProviderResponse(provider));
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
     private static async Task<IResult> GetIdentityProviderAsync(
@@ -2256,7 +2721,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
@@ -2268,10 +2733,10 @@ public static class OrgEndpoints
         var provider = await providers.GetAsync(org.Id, providerId, ct);
         if (provider is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(ToIdentityProviderResponse(provider));
+        return TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
     private static async Task<IResult> UpdateIdentityProviderAsync(
@@ -2289,7 +2754,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
@@ -2307,11 +2772,11 @@ public static class OrgEndpoints
         var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         if (provider is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         await audit.RecordAsync("org.identity_providers.update", org.Id, auth.User!.Id, "identity_provider.update", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
-        return TypedResults.Ok(ToIdentityProviderResponse(provider));
+        return TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
     private static Dictionary<string, string[]> ValidateCreateIdentityProvider(
@@ -2463,7 +2928,7 @@ public static class OrgEndpoints
         var org = await ResolveOrgAsync(orgSlug, db, ct);
         if (org is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.identity_providers", "write"), ct);
@@ -2479,16 +2944,16 @@ public static class OrgEndpoints
         }
         catch (ArgumentException)
         {
-            return TypedResults.BadRequest("Invalid identity provider request.");
+            return Error(httpContext, StatusCodes.Status400BadRequest, "invalid_identity_provider", "Invalid identity provider request.");
         }
 
         if (provider is null)
         {
-            return TypedResults.NotFound();
+            return NotFoundError(httpContext);
         }
 
         var action = active ? "identity_provider.enable" : "identity_provider.disable";
         await audit.RecordAsync($"org.identity_providers.{(active ? "enable" : "disable")}", org.Id, auth.User!.Id, action, targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
-        return TypedResults.Ok(ToIdentityProviderResponse(provider));
+        return TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 }

@@ -191,7 +191,7 @@ public sealed class RoleStore
     /// <param name="claimId">The claim identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns><see langword="true"/> when removed; otherwise <see langword="false"/>.</returns>
-    public async Task<bool> RemoveClaimAsync(Guid orgId, Guid roleId, ulong claimId, CancellationToken ct = default)
+    public async Task<bool> RemoveClaimAsync(Guid orgId, Guid roleId, long claimId, CancellationToken ct = default)
     {
         var role = await this.GetAsync(orgId, roleId, ct);
         if (role is null)

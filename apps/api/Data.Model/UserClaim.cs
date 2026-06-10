@@ -4,7 +4,7 @@ namespace NeoShip.Data.Model;
 
 public class UserClaim
 {
-    public ulong Id { get; set; }
+    public long Id { get; set; }
 
     public Guid UserId { get; set; }
 

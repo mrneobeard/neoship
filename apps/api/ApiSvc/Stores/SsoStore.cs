@@ -97,8 +97,8 @@ public sealed class SsoStore
     /// <param name="state">The state token.</param>
     /// <param name="code">The authorization code.</param>
     /// <param name="ct">The cancellation token.</param>
-    /// <returns>The authenticated user, or <see langword="null"/>.</returns>
-    public async Task<User?> FinishOidcAsync(string state, string code, CancellationToken ct = default)
+    /// <returns>The SSO finish result, or <see langword="null"/>.</returns>
+    public async Task<SsoFinishResult?> FinishOidcAsync(string state, string code, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(state) || string.IsNullOrWhiteSpace(code))
         {
@@ -185,11 +185,14 @@ public sealed class SsoStore
             createdUser = true;
         }
 
+        var createdExternalIdentity = false;
+        var externalIdentityId = link?.Id;
         if (link is null)
         {
+            externalIdentityId = Guid.CreateVersion7();
             this.db.UserExternalIdentities.Add(new UserExternalIdentity
             {
-                Id = Guid.CreateVersion7(),
+                Id = externalIdentityId.Value,
                 OrgId = challenge.OrgId,
                 UserId = user.Id,
                 ProviderId = provider.Id,
@@ -199,6 +202,7 @@ public sealed class SsoStore
                 CreatedAt = DateTime.UtcNow,
                 LastUsedAt = DateTime.UtcNow,
             });
+            createdExternalIdentity = true;
         }
         else
         {
@@ -214,7 +218,7 @@ public sealed class SsoStore
         }
 
         await transaction.CommitAsync(ct);
-        return user;
+        return new SsoFinishResult(user, createdUser, createdExternalIdentity, !createdExternalIdentity, externalIdentityId);
     }
 
     private async Task<SsoExternalIdentity?> ResolveExternalIdentityAsync(UserIdentityProvider provider, SsoTokenResponse tokenResponse, string nonce, CancellationToken ct)
@@ -353,6 +357,27 @@ public sealed class SsoStore
                     || (org.AllowSamlSso && x.Provider.ProviderTypeId == UserIdentityProviderType.SAML.Id)), ct);
     }
 }
+
+/// <summary>
+/// Represents the result of a completed SSO callback.
+/// </summary>
+/// <param name="User">The authenticated user.</param>
+/// <param name="CreatedUser">Whether a user was auto-provisioned.</param>
+/// <param name="CreatedExternalIdentity">Whether an external identity link was created.</param>
+/// <param name="UpdatedExternalIdentity">Whether an existing external identity link was updated.</param>
+/// <param name="ExternalIdentityId">The external identity identifier, when available.</param>
+/// <remarks>
+/// Example:
+/// <code>
+/// if (result.CreatedUser) { /* record provisioning audit */ }
+/// </code>
+/// </remarks>
+public sealed record SsoFinishResult(
+    User User,
+    bool CreatedUser,
+    bool CreatedExternalIdentity,
+    bool UpdatedExternalIdentity,
+    Guid? ExternalIdentityId);
 
 /// <summary>
 /// Represents an SSO begin result.

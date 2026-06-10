@@ -8,9 +8,4 @@
     <AssemblyName>shipctl</AssemblyName>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\ApiSvc\NeoShip.ApiSvc.csproj" />
-    <ProjectReference Include="..\Data.Model.Sqlite\NeoShip.Data.Sqlite.csproj" />
-  </ItemGroup>
-
 </Project>

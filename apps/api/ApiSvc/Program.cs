@@ -3,14 +3,15 @@ using System.Threading.RateLimiting;
 
 using Fido2NetLib;
 
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 
 using NeoShip.ApiSvc;
 using NeoShip.ApiSvc.Endpoints;
 using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
+using NeoShip.Data.Runtime;
 
 using Serilog;
 
@@ -31,6 +32,23 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
+var cacheBackend = builder.Configuration["Cache:Backend"] ?? builder.Configuration["Auth:Cache:Backend"] ?? "memory";
+if (string.Equals(cacheBackend, "redis", StringComparison.OrdinalIgnoreCase))
+{
+    var connectionString = builder.Configuration["Cache:Redis:ConnectionString"]
+        ?? builder.Configuration["Auth:Cache:Redis:ConnectionString"]
+        ?? builder.Configuration.GetConnectionString("redis");
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        throw new InvalidOperationException("Redis cache backend requires Cache:Redis:ConnectionString or ConnectionStrings:redis.");
+    }
+
+    builder.Services.AddStackExchangeRedisCache(options => options.Configuration = connectionString);
+}
+else
+{
+    builder.Services.AddDistributedMemoryCache();
+}
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -72,10 +90,7 @@ builder.Services.AddSingleton(sp => new Fido2(new Fido2Configuration
         ?? ["https://localhost", "http://localhost"],
 }, metadataService: null));
 
-builder.Services.AddDbContext<ShipDb>(options =>
-    options.UseSqlite("Data Source=neoship.db",
-        b => b.MigrationsAssembly("NeoShip.Data.Sqlite"))
-           .UseSnakeCaseNamingConvention());
+builder.Services.AddShipData(builder.Configuration);
 
 builder.Services.AddScoped<RequestContext>();
 builder.Services.AddSingleton(new PermissionRegistry(CorePermissions.All));
@@ -116,6 +131,7 @@ builder.Services.AddHttpClient<ISsoTokenClient, SsoTokenClient>();
 builder.Services.AddHttpClient<ISsoTokenValidator, SsoTokenValidator>();
 builder.Services.AddHttpClient<ISsoOAuth2ProfileClient, SsoOAuth2ProfileClient>();
 builder.Services.AddScoped<SsoStore>();
+builder.Services.AddHostedService<DeleteRetentionWorker>();
 
 var app = builder.Build();
 
@@ -157,6 +173,7 @@ using (var scope = app.Services.CreateScope())
 app.MapGet("/", () => "NeoShip Identity API");
 
 app.MapAuthEndpoints();
+app.MapAdminEndpoints();
 app.MapMeEndpoints();
 app.MapTenantEndpoints();
 app.MapOrgEndpoints();

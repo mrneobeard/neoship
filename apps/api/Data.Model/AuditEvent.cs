@@ -4,7 +4,7 @@ namespace NeoShip.Data.Model;
 
 public class AuditEvent
 {
-    public ulong Id { get; set; } = 0;
+    public long Id { get; set; } = 0;
 
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
 

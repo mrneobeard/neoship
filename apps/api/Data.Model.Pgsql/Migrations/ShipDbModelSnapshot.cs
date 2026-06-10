@@ -43,10 +43,12 @@ namespace NeoShip.Data.Pgsql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.AuditEvent", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(20,0)")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
@@ -245,6 +247,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTime?>("HardDeleteAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hard_delete_at");
+
                     b.Property<int>("MfaPolicyId")
                         .HasColumnType("integer")
                         .HasColumnName("mfa_policy_id");
@@ -289,6 +299,9 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_orgs");
+
+                    b.HasIndex("HardDeleteAt")
+                        .HasDatabaseName("ix_orgs_hard_delete_at");
 
                     b.ToTable("orgs", (string)null);
                 });
@@ -466,10 +479,12 @@ namespace NeoShip.Data.Pgsql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(20,0)")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -631,10 +646,12 @@ namespace NeoShip.Data.Pgsql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.ServiceAccountApiKeyClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(20,0)")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -721,6 +738,10 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasColumnType("character varying(1024)")
                         .HasColumnName("avatar_url");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -732,6 +753,10 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
+
+                    b.Property<DateTime?>("HardDeleteAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("hard_delete_at");
 
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone")
@@ -771,6 +796,9 @@ namespace NeoShip.Data.Pgsql.Migrations
 
                     b.HasIndex("EmailUpcase")
                         .HasDatabaseName("ix_users_email_upcase");
+
+                    b.HasIndex("HardDeleteAt")
+                        .HasDatabaseName("ix_users_hard_delete_at");
 
                     b.HasIndex("OrgId")
                         .HasDatabaseName("ix_users_org_id");
@@ -846,12 +874,12 @@ namespace NeoShip.Data.Pgsql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.UserApiKeyClaim", b =>
                 {
-                    b.Property<long>("Id")
+                    b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -888,10 +916,12 @@ namespace NeoShip.Data.Pgsql.Migrations
 
             modelBuilder.Entity("NeoShip.Data.Model.UserClaim", b =>
                 {
-                    b.Property<decimal>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(20,0)")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -1876,14 +1906,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.HasOne("NeoShip.Data.Model.Group", null)
                         .WithMany()
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_members_groups_group_id");
 
                     b.HasOne("NeoShip.Data.Model.User", null)
                         .WithMany()
                         .HasForeignKey("MembersId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_members_users_members_id");
                 });
@@ -1893,14 +1923,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.HasOne("NeoShip.Data.Model.Group", null)
                         .WithMany()
                         .HasForeignKey("Group1Id")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_owners_groups_group1id");
 
                     b.HasOne("NeoShip.Data.Model.User", null)
                         .WithMany()
                         .HasForeignKey("OwnersId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_owners_users_owners_id");
                 });
@@ -1910,14 +1940,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.HasOne("NeoShip.Data.Model.Group", null)
                         .WithMany()
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_service_account_members_groups_group_id");
 
                     b.HasOne("NeoShip.Data.Model.ServiceAccount", null)
                         .WithMany()
                         .HasForeignKey("ServiceAccountMembersId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_service_account_members_service_accounts_service_acco");
                 });
@@ -1927,14 +1957,14 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.HasOne("NeoShip.Data.Model.Group", null)
                         .WithMany()
                         .HasForeignKey("Group1Id")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_service_account_owners_groups_group1id");
 
                     b.HasOne("NeoShip.Data.Model.ServiceAccount", null)
                         .WithMany()
                         .HasForeignKey("ServiceAccountOwnersId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_group_service_account_owners_service_accounts_service_accou");
                 });

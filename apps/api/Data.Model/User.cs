@@ -47,7 +47,7 @@ public class User
     [StringLength(256)]
     [Required]
     public string Name { get; set; } = string.Empty;
-    
+
     /// <summary>
     /// 
     /// </summary>
@@ -72,6 +72,18 @@ public class User
     public string? LastLoginIp { get; set; } = null;
 
     public DateTime? LastLoginAt { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp when this user was soft-deleted.
+    /// </summary>
+    /// <value>The UTC soft-deletion timestamp.</value>
+    public DateTime? DeletedAt { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the UTC timestamp when this user becomes eligible for hard deletion.
+    /// </summary>
+    /// <value>The UTC hard-deletion eligibility timestamp.</value>
+    public DateTime? HardDeleteAt { get; set; } = null;
 
     [ForeignKey(nameof(OrgId))]
     public Organization? Org { get; set; }

@@ -8,8 +8,9 @@
   },
   "scripts": {
     "aspire:start": "aspire run",
-    "aspire:build": "tsc -p tsconfig.apphost.json",
-    "aspire:dev": "tsc --watch -p tsconfig.apphost.json",
+    "aspire:build": "pnpm exec tsc -p tsconfig.apphost.json",
+    "aspire:dev": "pnpm exec tsc --watch -p tsconfig.apphost.json",
+    "aspire:lint": "pnpm exec tsc -p tsconfig.apphost.json --noEmit",
     "predev": "pnpm run aspire:lint",
     "dev": "pnpm run aspire:start",
     "prebuild": "pnpm run aspire:lint",

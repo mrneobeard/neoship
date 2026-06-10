@@ -53,9 +53,14 @@ public static class TenantEndpoints
         => await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
 
     private static async Task<IResult> ListOrganizationsAsync(
+        [FromQuery] int? limit,
+        [FromQuery] string? cursor,
+        [FromQuery(Name = "filter[name]")] string? filterName,
+        [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
         OrganizationStore organizations,
+        IConfiguration configuration,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -65,10 +70,88 @@ public static class TenantEndpoints
         }
 
         var orgs = await organizations.ListForUserAsync(user.Id, ct);
-        var data = orgs.Select(ToResponse).ToList();
-        var pagination = new ApiPagination(data.Count, nextCursor: null, previousCursor: null, hasMore: false);
+        var query = ParseListQuery(httpContext, limit, cursor, filterName, sort);
+        if (query.Errors.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
+        }
 
-        return TypedResults.Ok(new ApiCollectionEnvelope<OrganizationResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext)));
+        IEnumerable<Organization> filtered = orgs;
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToResponse).ToList();
+        var pagination = new ApiPagination(query.Limit, hasMore ? EncodeCursor(query.Offset + query.Limit) : null, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+
+        return TypedResults.Ok(new ApiCollectionEnvelope<OrganizationResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private sealed record ParsedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
+
+    private static ParsedListQuery ParseListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterName, string? sort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[name]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key)) errors[key] = ["Query parameter is not supported."];
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "name" : sort.Trim();
+        if (resolvedSort is not ("name" or "-name" or "createdAt" or "-createdAt"))
+        {
+            errors["sort"] = ["Sort must be name, -name, createdAt, or -createdAt."];
+            resolvedSort = "name";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterName is { Length: > 160 }) errors["filter.name"] = ["Name filter must be 160 characters or fewer."];
+        return new ParsedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
+    }
+
+    private static string EncodeCursor(int offset)
+        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static bool TryDecodeCursor(string cursor, out int offset)
+    {
+        offset = 0;
+        try
+        {
+            var padded = cursor.Replace('-', '+').Replace('_', '/');
+            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
+            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
     }
 
     private static async Task<IResult> CreateOrganizationAsync(
@@ -189,6 +272,7 @@ public static class TenantEndpoints
         OrganizationStore organizations,
         PermissionResolver permissions,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -222,7 +306,8 @@ public static class TenantEndpoints
             });
         }
 
-        var deleted = await organizations.DeleteAsync(org.Id, ct);
+        var retentionDays = Math.Max(0, configuration.GetValue("Auth:Deletion:RetentionDays", 30));
+        var deleted = await organizations.DeleteAsync(org.Id, retentionDays, ct);
         if (deleted is null)
         {
             return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Organization not found.");

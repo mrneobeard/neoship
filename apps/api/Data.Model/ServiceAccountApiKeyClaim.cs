@@ -4,7 +4,7 @@ namespace NeoShip.Data.Model;
 
 public class ServiceAccountApiKeyClaim
 {
-    public ulong Id { get; set; } = 0;
+    public long Id { get; set; } = 0;
 
     public Guid ServiceAccountApiKeyId { get; set; } = Guid.Empty;
 

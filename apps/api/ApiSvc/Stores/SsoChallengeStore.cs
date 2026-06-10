@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Caching.Distributed;
 
 namespace NeoShip.ApiSvc.Stores;
 
@@ -17,13 +18,13 @@ public sealed class SsoChallengeStore
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromMinutes(5);
 
-    private readonly IMemoryCache cache;
+    private readonly IDistributedCache cache;
 
     /// <summary>
     /// Initializes a new <see cref="SsoChallengeStore"/> instance.
     /// </summary>
-    /// <param name="cache">The memory cache.</param>
-    public SsoChallengeStore(IMemoryCache cache)
+    /// <param name="cache">The distributed cache.</param>
+    public SsoChallengeStore(IDistributedCache cache)
     {
         this.cache = cache;
     }
@@ -39,7 +40,10 @@ public sealed class SsoChallengeStore
     public SsoChallenge Create(Guid orgId, long providerId, string redirectUri, string nonce)
     {
         var challenge = new SsoChallenge(CreateToken(), orgId, providerId, redirectUri, nonce, DateTime.UtcNow.Add(Ttl));
-        this.cache.Set(GetKey(challenge.State), challenge, Ttl);
+        this.cache.SetString(
+            GetKey(challenge.State),
+            JsonSerializer.Serialize(challenge),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = Ttl });
         return challenge;
     }
 
@@ -51,13 +55,14 @@ public sealed class SsoChallengeStore
     public SsoChallenge? Take(string state)
     {
         var key = GetKey(state);
-        if (!this.cache.TryGetValue<SsoChallenge>(key, out var challenge) || challenge is null)
+        var payload = this.cache.GetString(key);
+        if (string.IsNullOrWhiteSpace(payload))
         {
             return null;
         }
 
         this.cache.Remove(key);
-        return challenge;
+        return JsonSerializer.Deserialize<SsoChallenge>(payload);
     }
 
     /// <summary>

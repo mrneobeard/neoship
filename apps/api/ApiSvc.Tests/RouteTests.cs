@@ -204,6 +204,47 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task Login_WithInvalidCredentials_ReturnsCanonicalErrorEnvelope()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/login",
+            new StringContent("{\"email\":\"missing-login@example.com\",\"password\":\"not-the-password\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.TryGetProperty("error", out var error));
+        Assert.True(json.RootElement.TryGetProperty("meta", out _));
+        Assert.Equal("unauthenticated", error.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task TokenExchange_WritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-token-exchange@example.com", "Token Exchange");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/token-exchange");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.token_exchange", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task Login_IsRateLimitedAfterRepeatedAttempts()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -389,6 +430,7 @@ public sealed class RouteTests
         {
             Assert.True(await db.UserSessions.AnyAsync(TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.sso.login", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.sso.external_identity.link", TestContext.Current.CancellationToken));
             Assert.True(await db.UserExternalIdentities.AnyAsync(x => x.Subject == "subject", TestContext.Current.CancellationToken));
         });
     }
@@ -401,6 +443,82 @@ public sealed class RouteTests
         using var response = await app.Client.GetAsync("/api/v1/me/external-identities", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetMe_ReturnsCanonicalEnvelopeForSession()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-me-envelope@example.com", "Me Envelope");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me/");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.TryGetProperty("data", out var data));
+        Assert.True(json.RootElement.TryGetProperty("meta", out _));
+        Assert.Equal("route-me-envelope@example.com", data.GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task RevokeSession_WritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-session-revoke@example.com", "Session Revoke");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+        var sessionId = Guid.Empty;
+        await app.WithDbAsync(async db =>
+        {
+            sessionId = await db.UserSessions.Where(x => x.UserId == userId).Select(x => x.Id).SingleAsync(TestContext.Current.CancellationToken);
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/me/sessions/{sessionId}/revoke");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.session.revoke" && x.TargetId == sessionId.ToString(), TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task GetSessions_SupportsCollectionQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-session-query@example.com", "Session Query");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me/sessions?limit=1&sort=-createdAt");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.TryGetProperty("pagination", out _));
+        Assert.Equal("-createdAt", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("sort")[0].GetString());
     }
 
     [Fact]
@@ -428,9 +546,16 @@ public sealed class RouteTests
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var message = Assert.Single(app.EmailSender.Messages);
+        Assert.Equal("route-delete-me@example.com", message.To);
+        Assert.Contains("deleted", message.Body, StringComparison.OrdinalIgnoreCase);
         await app.WithDbAsync(async db =>
         {
-            Assert.Equal(UserStatus.Deleted.Id, (await db.Users.SingleAsync(x => x.Id == userId, TestContext.Current.CancellationToken)).StatusId);
+            var user = await db.Users.SingleAsync(x => x.Id == userId, TestContext.Current.CancellationToken);
+            Assert.Equal(UserStatus.Deleted.Id, user.StatusId);
+            Assert.NotNull(user.DeletedAt);
+            Assert.NotNull(user.HardDeleteAt);
+            Assert.True(user.HardDeleteAt > user.DeletedAt);
             Assert.True(await db.UserSessions.AnyAsync(x => x.UserId == userId && x.RevokedAt != null, TestContext.Current.CancellationToken));
             Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.RevokedAt != null, TestContext.Current.CancellationToken));
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.DeletedAt != null, TestContext.Current.CancellationToken));
@@ -539,6 +664,34 @@ public sealed class RouteTests
             Assert.InRange(key.ExpiresAt!.Value, DateTime.UtcNow.AddDays(89), DateTime.UtcNow.AddDays(91));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.api_key.create", TestContext.Current.CancellationToken));
         });
+    }
+
+    [Fact]
+    public async Task GetUserApiKeys_SupportsCollectionQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-query@example.com", "User Key Query");
+            userId = user.Id;
+            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var (_, alpha) = store.GenerateUserApiKey(user.Id, "alpha-key", null, "[]", DateTime.UtcNow.AddDays(1));
+            var (_, beta) = store.GenerateUserApiKey(user.Id, "beta-key", null, "[]", DateTime.UtcNow.AddDays(1));
+            db.UserApiKeys.AddRange(alpha, beta);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me/api-keys?limit=1&filter[name]=key");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("key", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
     }
 
     [Fact]
@@ -759,6 +912,33 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetPasskeys_SupportsCollectionQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-passkey-query@example.com", "Passkey Query");
+            userId = user.Id;
+            db.UserMfaFactors.AddRange(
+                new UserMfaFactor { Id = Guid.CreateVersion7(), UserId = user.Id, Name = "Alpha Key", Type = MfaFactorType.Passkey.Id, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new UserMfaFactor { Id = Guid.CreateVersion7(), UserId = user.Id, Name = "Beta Key", Type = MfaFactorType.Passkey.Id, CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me/passkeys?limit=1&filter[name]=Key");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("Key", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task GetExternalIdentities_ReturnsLinkedIdentitiesForSession()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -800,6 +980,43 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetExternalIdentities_SupportsCollectionQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-external-query@example.com", "External Query");
+            userId = user.Id;
+            db.UserIdentityProviders.Add(new UserIdentityProvider
+            {
+                Id = 11,
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+                Name = "Acme OIDC",
+                ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+                StatusId = UserIdentityProviderStatus.Active.Id,
+                ClientId = "client-id",
+            });
+            db.UserExternalIdentities.AddRange(
+                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-a", SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-a")), CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-b", SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-b")), CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me/external-identities?limit=1&sort=createdAt");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("createdAt", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("sort")[0].GetString());
+    }
+
+    [Fact]
     public async Task UnlinkExternalIdentity_ReturnsConflictForLastSignInMethod()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -836,6 +1053,55 @@ public sealed class RouteTests
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UnlinkExternalIdentity_WhenAnotherSignInMethodExists_WritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var linkId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-unlink@example.com", "Unlink User");
+            userId = user.Id;
+            db.UserPasswordAuths.Add(new UserPasswordAuth
+            {
+                UserId = user.Id,
+                PasswordHash = new PasswordStore().Hash("current-password"),
+            });
+            db.UserIdentityProviders.Add(new UserIdentityProvider
+            {
+                Id = 10,
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+                Name = "Acme OIDC",
+                ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+                StatusId = UserIdentityProviderStatus.Active.Id,
+                ClientId = "client-id",
+            });
+            db.UserExternalIdentities.Add(new UserExternalIdentity
+            {
+                Id = linkId,
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+                ProviderId = 10,
+                Subject = "subject",
+                SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/me/external-identities/{linkId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.UserExternalIdentities.AnyAsync(x => x.Id == linkId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.external_identity.unlink" && x.TargetId == linkId.ToString(), TestContext.Current.CancellationToken));
+        });
     }
 
     [Fact]
@@ -964,6 +1230,35 @@ public sealed class RouteTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("deploy-bot", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListServiceAccounts_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-query@example.com", "SA Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.read");
+            db.ServiceAccounts.AddRange(
+                new ServiceAccount { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "alpha-bot", NameUpcase = "ALPHA-BOT", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new ServiceAccount { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "beta-bot", NameUpcase = "BETA-BOT", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+                new ServiceAccount { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "gamma-bot", NameUpcase = "GAMMA-BOT", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 3, 0, 0, 0, DateTimeKind.Utc) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/service-accounts?limit=2&sort=-createdAt&filter[name]=bot");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(2, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("bot", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
     }
 
     [Fact]
@@ -1116,6 +1411,38 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListServiceAccountApiKeys_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+            serviceAccountId = seed.ServiceAccountId;
+            var user = SeedUser(db, "route-sa-key-query@example.com", "SA Key Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.read");
+            var store = new ServiceAccountStore(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)), Microsoft.Extensions.Logging.Abstractions.NullLogger<ServiceAccountStore>.Instance);
+            var (_, alpha) = store.GenerateApiKey(serviceAccountId, "alpha-key", null, "[]", DateTime.UtcNow.AddDays(1));
+            var (_, beta) = store.GenerateApiKey(serviceAccountId, "beta-key", null, "[]", DateTime.UtcNow.AddDays(1));
+            db.ServiceAccountApiKeys.AddRange(alpha, beta);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/service-accounts/{serviceAccountId}/api-keys?limit=1&filter[name]=key");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("key", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task CreateServiceAccountApiKey_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1215,6 +1542,36 @@ public sealed class RouteTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("org.service_accounts.read", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListServiceAccountClaims_SupportsQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-claim-query@example.com", "SA Claim Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.read");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+            db.ServiceAccountClaims.AddRange(
+                new ServiceAccountClaim { Id = Guid.CreateVersion7(), ServiceAccountId = seed.ServiceAccountId, Type = "org.service_accounts.read", Value = "organization:default", CreatedAt = DateTime.UtcNow },
+                new ServiceAccountClaim { Id = Guid.CreateVersion7(), ServiceAccountId = seed.ServiceAccountId, Type = "org.service_accounts.write", Value = "organization:default", CreatedAt = DateTime.UtcNow });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/service-accounts/{seed.ServiceAccountId}/claims?limit=1&filter[type]=org.service_accounts");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("org.service_accounts", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("type").GetString());
     }
 
     [Fact]
@@ -1347,6 +1704,36 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListServiceAccountApiKeyClaims_SupportsQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-key-claim-query@example.com", "SA Key Claim Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.read");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+            db.ServiceAccountApiKeyClaims.AddRange(
+                new ServiceAccountApiKeyClaim { ServiceAccountApiKeyId = seed.ApiKeyId, Type = "org.service_accounts.read", Value = "organization:default", CreatedAt = DateTime.UtcNow },
+                new ServiceAccountApiKeyClaim { ServiceAccountApiKeyId = seed.ApiKeyId, Type = "org.service_accounts.write", Value = "organization:default", CreatedAt = DateTime.UtcNow });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/claims?limit=1&sort=-type");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("-type", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("sort")[0].GetString());
+    }
+
+    [Fact]
     public async Task AddServiceAccountApiKeyClaim_RejectsServiceAccountBearerEvenWithWriteClaim()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1448,6 +1835,31 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListPermissions_SupportsCollectionQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-permission-query@example.com", "Permission Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/permissions?limit=1&filter[resource]=org.service_accounts");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("org.service_accounts", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("resource").GetString());
+    }
+
+    [Fact]
     public async Task ListPermissions_RejectsServiceAccountBearerWithoutRolesRead()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1493,6 +1905,35 @@ public sealed class RouteTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("Acme OIDC", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListIdentityProviders_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-idp-query@example.com", "IDP Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.read");
+            db.UserIdentityProviders.AddRange(
+                new UserIdentityProvider { Id = 30, OrgId = Constants.DefaultOrganizationId, UserId = user.Id, Name = "Alpha OIDC", ProviderTypeId = UserIdentityProviderType.OIDC.Id, StatusId = UserIdentityProviderStatus.Active.Id, ClientId = "client-id", CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new UserIdentityProvider { Id = 31, OrgId = Constants.DefaultOrganizationId, UserId = user.Id, Name = "Beta OIDC", ProviderTypeId = UserIdentityProviderType.OIDC.Id, StatusId = UserIdentityProviderStatus.Active.Id, ClientId = "client-id", CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+                new UserIdentityProvider { Id = 32, OrgId = Constants.DefaultOrganizationId, UserId = user.Id, Name = "Gamma OAuth", ProviderTypeId = UserIdentityProviderType.OAUTH2.Id, StatusId = UserIdentityProviderStatus.Active.Id, ClientId = "client-id", CreatedAt = new DateTime(2025, 1, 3, 0, 0, 0, DateTimeKind.Utc) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/identity-providers?limit=1&sort=name&filter[name]=OIDC");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("OIDC", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
     }
 
     [Fact]
@@ -1668,7 +2109,79 @@ public sealed class RouteTests
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.TryGetProperty("data", out var data));
+        Assert.True(json.RootElement.TryGetProperty("meta", out _));
+        Assert.Equal(JsonValueKind.Array, data.ValueKind);
         Assert.Contains("Reader", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ListRoles_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-query@example.com", "Role Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+            db.Roles.AddRange(
+                new Role { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Alpha", NameUpcase = "ALPHA", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new Role { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Beta", NameUpcase = "BETA", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) },
+                new Role { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Gamma", NameUpcase = "GAMMA", CreatedBy = user.Id, CreatedAt = new DateTime(2025, 1, 3, 0, 0, 0, DateTimeKind.Utc) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var firstRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/roles?limit=1&sort=name&filter[name]=a");
+        firstRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var firstResponse = await app.Client.SendAsync(firstRequest, TestContext.Current.CancellationToken);
+        var firstBody = await firstResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        using var firstJson = JsonDocument.Parse(firstBody);
+        Assert.Equal(1, firstJson.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(firstJson.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("a", firstJson.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
+        var cursor = firstJson.RootElement.GetProperty("pagination").GetProperty("nextCursor").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(cursor));
+
+        using var secondRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/roles?limit=1&sort=name&filter[name]=a&cursor={Uri.EscapeDataString(cursor!)}");
+        secondRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var secondResponse = await app.Client.SendAsync(secondRequest, TestContext.Current.CancellationToken);
+        var secondBody = await secondResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        using var secondJson = JsonDocument.Parse(secondBody);
+        Assert.Equal(1, secondJson.RootElement.GetProperty("data").GetArrayLength());
+        Assert.NotEqual(
+            firstJson.RootElement.GetProperty("data")[0].GetProperty("id").GetString(),
+            secondJson.RootElement.GetProperty("data")[0].GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task ListRoles_RejectsInvalidQueryContractValues()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-query-invalid@example.com", "Role Query Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/roles?sort=bad&unknown=1");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("sort", out _));
+        Assert.True(fields.TryGetProperty("unknown", out _));
     }
 
     [Fact]
@@ -1795,6 +2308,74 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListGroups_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-query@example.com", "Group Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.read");
+            db.Groups.AddRange(
+                new Group { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Alpha", NameUpcase = "ALPHA" },
+                new Group { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Beta", NameUpcase = "BETA" },
+                new Group { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Gamma", NameUpcase = "GAMMA" });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var firstRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/groups?limit=1&sort=-name&filter[name]=a");
+        firstRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var firstResponse = await app.Client.SendAsync(firstRequest, TestContext.Current.CancellationToken);
+        var firstBody = await firstResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, firstResponse.StatusCode);
+        using var firstJson = JsonDocument.Parse(firstBody);
+        Assert.Equal(1, firstJson.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(firstJson.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("-name", firstJson.RootElement.GetProperty("meta").GetProperty("query").GetProperty("sort")[0].GetString());
+        var cursor = firstJson.RootElement.GetProperty("pagination").GetProperty("nextCursor").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(cursor));
+
+        using var secondRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/groups?limit=1&sort=-name&filter[name]=a&cursor={Uri.EscapeDataString(cursor!)}");
+        secondRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var secondResponse = await app.Client.SendAsync(secondRequest, TestContext.Current.CancellationToken);
+        var secondBody = await secondResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        using var secondJson = JsonDocument.Parse(secondBody);
+        Assert.Equal(1, secondJson.RootElement.GetProperty("data").GetArrayLength());
+        Assert.NotEqual(
+            firstJson.RootElement.GetProperty("data")[0].GetProperty("id").GetString(),
+            secondJson.RootElement.GetProperty("data")[0].GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task ListGroups_RejectsInvalidQueryContractValues()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-query-invalid@example.com", "Group Query Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.read");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/groups?limit=0&cursor=bad%%");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("limit", out _));
+        Assert.True(fields.TryGetProperty("cursor", out _));
+    }
+
+    [Fact]
     public async Task CreateInvite_WithHumanWritePermissionReturnsTokenAndWritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1816,11 +2397,42 @@ public sealed class RouteTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Contains("invited@example.com", body, StringComparison.Ordinal);
         Assert.Contains("token", body, StringComparison.OrdinalIgnoreCase);
+        var message = Assert.Single(app.EmailSender.Messages);
+        Assert.Equal("invited@example.com", message.To);
+        Assert.Contains("accept-invite?token=", message.Body, StringComparison.Ordinal);
         await app.WithDbAsync(async db =>
         {
             Assert.True(await db.OrganizationInvites.AnyAsync(x => x.Email == "invited@example.com", TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
         });
+    }
+
+    [Fact]
+    public async Task ListInvites_SupportsQueryContractPaginationAndFilter()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-invite-query@example.com", "Invite Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.read");
+            db.OrganizationInvites.AddRange(
+                new OrganizationInvite { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Email = "alpha@example.com", EmailUpcase = "ALPHA@EXAMPLE.COM", TokenDigest = "a", InvitedByUserId = user.Id, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), ExpiresAt = DateTime.UtcNow.AddDays(7) },
+                new OrganizationInvite { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Email = "beta@example.com", EmailUpcase = "BETA@EXAMPLE.COM", TokenDigest = "b", InvitedByUserId = user.Id, CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc), ExpiresAt = DateTime.UtcNow.AddDays(7) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/invites?limit=1&filter[email]=example&sort=createdAt");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("example", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("email").GetString());
     }
 
     [Fact]
@@ -2018,9 +2630,98 @@ public sealed class RouteTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         await app.WithDbAsync(async db =>
         {
-            Assert.Equal(OrganizationStatus.PendingDeleted.Id, (await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken)).StatusId);
+            var org = await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+            Assert.Equal(OrganizationStatus.PendingDeleted.Id, org.StatusId);
+            Assert.NotNull(org.DeletedAt);
+            Assert.NotNull(org.HardDeleteAt);
+            Assert.True(org.HardDeleteAt > org.DeletedAt);
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.DeletedAt != null, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.delete", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task ListOrganizations_SupportsQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var otherOrgId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-org-query@example.com", "Org Query");
+            userId = user.Id;
+            db.Orgs.Add(new Organization
+            {
+                Id = otherOrgId,
+                Name = "Alpha Org",
+                NameUpcase = "ALPHA ORG",
+                Slug = "alpha-org",
+                StatusId = OrganizationStatus.Active.Id,
+                TenantModeId = TenantMode.Multi.Id,
+                OrganizationPlanId = 1,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+            db.OrganizationMemberships.Add(new OrganizationMembership { OrgId = otherOrgId, UserId = user.Id, CreatedAt = DateTime.UtcNow, AcceptedAt = DateTime.UtcNow });
+            db.OrganizationMemberships.Add(new OrganizationMembership { OrgId = Constants.DefaultOrganizationId, UserId = user.Id, CreatedAt = DateTime.UtcNow, AcceptedAt = DateTime.UtcNow });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/?limit=1&filter[name]=Org");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.TryGetProperty("pagination", out _));
+        Assert.Equal("Org", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task BootstrapAdmin_RequiresRootToken()
+    {
+        await using var app = await RouteTestApp.CreateAsync(configuration: new Dictionary<string, string?>
+        {
+            ["NEO_ROOT_TOKEN"] = "test-root-token",
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/admin/bootstrap-admin",
+            new StringContent("{\"email\":\"root@example.com\",\"password\":\"correct-horse-password\",\"org\":\"default\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("permission_denied", json.RootElement.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task BootstrapAdmin_WithRootTokenCreatesOwnerThroughApi()
+    {
+        await using var app = await RouteTestApp.CreateAsync(configuration: new Dictionary<string, string?>
+        {
+            ["NEO_ROOT_TOKEN"] = "test-root-token",
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/admin/bootstrap-admin");
+        request.Headers.Add("X-NeoShip-Root-Token", "test-root-token");
+        request.Content = new StringContent("{\"email\":\"root@example.com\",\"password\":\"correct-horse-password\",\"name\":\"Root User\",\"org\":\"default\",\"orgName\":\"Default\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("root@example.com", json.RootElement.GetProperty("data").GetProperty("email").GetString());
+        await app.WithDbAsync(async db =>
+        {
+            var user = await db.Users.SingleAsync(x => x.Email == "root@example.com", TestContext.Current.CancellationToken);
+            Assert.Equal("Root User", user.Name);
+            Assert.True(new PasswordStore().Verify("correct-horse-password", (await db.UserPasswordAuths.SingleAsync(x => x.UserId == user.Id, TestContext.Current.CancellationToken)).PasswordHash).Success);
+            Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId && x.DeletedAt == null, TestContext.Current.CancellationToken));
+            Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "admin.bootstrap", TestContext.Current.CancellationToken));
         });
     }
 
@@ -2123,6 +2824,7 @@ public sealed class RouteTests
                         services.AddOpenApi();
                         services.AddLogging();
                         services.AddMemoryCache();
+                        services.AddDistributedMemoryCache();
                         services.AddRateLimiter(options =>
                         {
                             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -2193,6 +2895,7 @@ public sealed class RouteTests
                         {
                             endpoints.MapOpenApi();
                             endpoints.MapAuthEndpoints();
+                            endpoints.MapAdminEndpoints();
                             endpoints.MapMeEndpoints();
                             endpoints.MapTenantEndpoints();
                             endpoints.MapOrgEndpoints();

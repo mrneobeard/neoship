@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ApiSvc\NeoShip.ApiSvc.csproj" />
+    <ProjectReference Include="..\Data.Model.Mssql\NeoShip.Data.Mssql.csproj" />
+    <ProjectReference Include="..\Data.Model.Pgsql\NeoShip.Data.Pgsql.csproj" />
     <ProjectReference Include="..\Data.Model.Sqlite\NeoShip.Data.Sqlite.csproj" />
   </ItemGroup>
 

@@ -405,7 +405,7 @@ public class ServiceAccountStore
     /// <param name="claimId">The claim identifier.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns><see langword="true"/> when removed; otherwise, <see langword="false"/>.</returns>
-    public async Task<bool> RemoveApiKeyClaimAsync(Guid orgId, Guid serviceAccountId, Guid apiKeyId, ulong claimId, CancellationToken ct = default)
+    public async Task<bool> RemoveApiKeyClaimAsync(Guid orgId, Guid serviceAccountId, Guid apiKeyId, long claimId, CancellationToken ct = default)
     {
         var claim = await db.ServiceAccountApiKeyClaims
             .Include(x => x.ServiceAccountApiKey)

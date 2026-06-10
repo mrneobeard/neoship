@@ -1,4 +1,5 @@
 ﻿using System;
+
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -15,7 +16,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 name: "audit_events",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "decimal(20,0)", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     timestamp = table.Column<DateTime>(type: "datetime2", nullable: false),
                     type = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: false),
@@ -68,7 +69,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 name: "user_claims",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "decimal(20,0)", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     user_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     type = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
@@ -99,7 +100,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.org_id,
                         principalTable: "orgs",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -125,7 +126,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.org_id,
                         principalTable: "orgs",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -143,13 +144,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.group_id,
                         principalTable: "groups",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_group_members_users_members_id",
                         column: x => x.members_id,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -167,13 +168,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.group1id,
                         principalTable: "groups",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_group_owners_users_owners_id",
                         column: x => x.owners_id,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -196,13 +197,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.org_id,
                         principalTable: "orgs",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_roles_users_created_by",
                         column: x => x.created_by,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -227,13 +228,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.org_id,
                         principalTable: "orgs",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_service_accounts_users_created_by",
                         column: x => x.created_by,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -260,7 +261,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.user_id,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -289,7 +290,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.user_id,
                         principalTable: "users",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -469,7 +470,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 name: "role_claims",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "decimal(20,0)", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     role_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     type = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
@@ -533,13 +534,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.group_id,
                         principalTable: "groups",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_group_service_account_members_service_accounts_service_account_members_id",
                         column: x => x.service_account_members_id,
                         principalTable: "service_accounts",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -557,13 +558,13 @@ namespace NeoShip.Data.Mssql.Migrations
                         column: x => x.group1id,
                         principalTable: "groups",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_group_service_account_owners_service_accounts_service_account_owners_id",
                         column: x => x.service_account_owners_id,
                         principalTable: "service_accounts",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -619,7 +620,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 name: "user_api_key_claims",
                 columns: table => new
                 {
-                    id = table.Column<long>(type: "bigint", nullable: false)
+                    id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     user_api_key_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     type = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),
@@ -642,7 +643,7 @@ namespace NeoShip.Data.Mssql.Migrations
                 name: "service_account_api_key_claims",
                 columns: table => new
                 {
-                    id = table.Column<decimal>(type: "decimal(20,0)", nullable: false)
+                    id = table.Column<long>(type: "bigint", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     service_account_api_key_id = table.Column<Guid>(type: "uniqueidentifier", nullable: false),
                     type = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: false),

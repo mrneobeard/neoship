@@ -81,10 +81,10 @@ public static class AuthEndpoints
             req.Email, req.Name, req.Password, Constants.DefaultOrganizationId, ct);
 
         if (result == SignupResult.AuthMethodNotAllowed)
-            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
+            return Error(httpContext, StatusCodes.Status403Forbidden, "auth_method_not_allowed", "Authentication method is not allowed.");
 
         if (result == SignupResult.EmailAlreadyExists || user is null)
-            return TypedResults.Conflict("Email already registered.");
+            return Error(httpContext, StatusCodes.Status409Conflict, "conflict", "Email already registered.");
 
         return TypedResults.Created($"/api/v1/me", Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
@@ -115,10 +115,10 @@ public static class AuthEndpoints
             req.Email, req.Password, Constants.DefaultOrganizationId, ct);
 
         if (result == LoginResult.AccountLocked)
-            return TypedResults.StatusCode(423);
+            return Error(httpContext, StatusCodes.Status423Locked, "account_locked", "Account is locked.");
 
         if (result == LoginResult.AuthMethodNotAllowed)
-            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
+            return Error(httpContext, StatusCodes.Status403Forbidden, "auth_method_not_allowed", "Authentication method is not allowed.");
 
         if (result == LoginResult.MfaRequired)
             return TypedResults.Json(
@@ -128,7 +128,7 @@ public static class AuthEndpoints
                 statusCode: StatusCodes.Status403Forbidden);
 
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 
@@ -151,7 +151,7 @@ public static class AuthEndpoints
         var result = await passkeys.BeginLoginAsync(req.Email, ct);
         if (result is null)
         {
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
         }
 
         var (user, options) = result.Value;
@@ -170,7 +170,7 @@ public static class AuthEndpoints
         var result = await sso.BeginOidcAsync(orgSlug, providerId, redirectUri, ct);
         if (result is null)
         {
-            return TypedResults.NotFound();
+            return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "SSO provider not found.");
         }
 
         return TypedResults.Ok(Envelope(httpContext, new BeginSsoResponse(result.ProviderId, result.AuthorizationUrl, result.State, result.ExpiresAt)));
@@ -186,17 +186,32 @@ public static class AuthEndpoints
         AuditStore audit,
         CancellationToken ct)
     {
-        var user = await sso.FinishOidcAsync(state, code, ct);
-        if (user is null)
+        var finish = await sso.FinishOidcAsync(state, code, ct);
+        if (finish is null)
         {
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
         }
+
+        var user = finish.User;
 
         var permissionSet = await permissions.ResolveUserAsync(user.Id, ct);
         var (session, rawToken) = await sessions.CreateSessionAsync(user.Id, user.OrgId, permissionSet, ct);
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
         await audit.RecordAsync("auth.sso.login", user.OrgId, user.Id, "sso.login", targetType: "user", targetId: user.Id.ToString(), ct: ct);
+        if (finish.CreatedUser)
+        {
+            await audit.RecordAsync("auth.sso.user_provision", user.OrgId, user.Id, "sso.user_provision", targetType: "user", targetId: user.Id.ToString(), ct: ct);
+        }
+
+        if (finish.CreatedExternalIdentity && finish.ExternalIdentityId is not null)
+        {
+            await audit.RecordAsync("auth.sso.external_identity.link", user.OrgId, user.Id, "sso.external_identity.link", targetType: "user_external_identity", targetId: finish.ExternalIdentityId.Value.ToString(), ct: ct);
+        }
+        else if (finish.UpdatedExternalIdentity && finish.ExternalIdentityId is not null)
+        {
+            await audit.RecordAsync("auth.sso.external_identity.update", user.OrgId, user.Id, "sso.external_identity.update", targetType: "user_external_identity", targetId: finish.ExternalIdentityId.Value.ToString(), ct: ct);
+        }
 
         return TypedResults.Ok(Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
@@ -220,14 +235,14 @@ public static class AuthEndpoints
         var challenge = challenges.TakeLogin(req.ChallengeId);
         if (challenge is null)
         {
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
         }
 
         var (userId, options) = challenge.Value;
         var result = await passkeys.FinishLoginAsync(userId, options, req.Response, ct);
         if (result is null)
         {
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
         }
 
         var (user, _) = result.Value;
@@ -261,13 +276,13 @@ public static class AuthEndpoints
         var (result, user, session, rawToken) = await auth.LoginWithUserApiKeyAsync(req.ApiKey, ct);
 
         if (result == LoginResult.AccountLocked)
-            return TypedResults.StatusCode(423);
+            return Error(httpContext, StatusCodes.Status423Locked, "account_locked", "Account is locked.");
 
         if (result == LoginResult.AuthMethodNotAllowed)
-            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
+            return Error(httpContext, StatusCodes.Status403Forbidden, "auth_method_not_allowed", "Authentication method is not allowed.");
 
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
-            return TypedResults.Unauthorized();
+            return Unauthenticated(httpContext);
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 
@@ -326,7 +341,7 @@ public static class AuthEndpoints
         }
 
         var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
-        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : TypedResults.Unauthorized();
+        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : Unauthenticated(httpContext);
     }
 
     public record EmailVerificationRequest(string Email);
@@ -362,26 +377,34 @@ public static class AuthEndpoints
         }
 
         var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
-        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : TypedResults.Unauthorized();
+        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : Unauthenticated(httpContext);
     }
 
     public record TokenExchangeResponse(string Token, string TokenType, long ExpiresIn);
 
-    private static async Task<Results<Ok<ApiEnvelope<TokenExchangeResponse>>, UnauthorizedHttpResult>> TokenExchangeAsync(
+    private static async Task<IResult> TokenExchangeAsync(
         HttpContext httpContext,
         SessionStore sessions,
         TokenExchangeStore tokenExchange,
+        AuditStore audit,
         CancellationToken ct)
     {
         var rawToken = ReadSessionToken(httpContext.Request);
-        if (rawToken is null) return TypedResults.Unauthorized();
+        if (rawToken is null) return Unauthenticated(httpContext);
 
         var session = await sessions.ValidateSessionAsync(rawToken, ct);
-        if (session is null) return TypedResults.Unauthorized();
+        if (session is null) return Unauthenticated(httpContext);
 
         var token = tokenExchange.CreateToken(session.UserId, session.OrgId, session.ClaimsJson);
+        await audit.RecordAsync("auth.token_exchange", session.OrgId, session.UserId, "token_exchange", targetType: "user_session", targetId: session.Id.ToString(), ct: ct);
         return TypedResults.Ok(Envelope(httpContext, new TokenExchangeResponse(token, "Bearer", 300)));
     }
+
+    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
+        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
+
+    private static IResult Unauthenticated(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication failed.");
 
     private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
         => TypedResults.Json(

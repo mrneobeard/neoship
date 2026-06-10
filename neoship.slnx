@@ -19,6 +19,12 @@
   <Folder Name="/apps/api/Data.Model/">
     <Project Path="apps/api/Data.Model/NeoShip.Data.Model.csproj" />
   </Folder>
+  <Folder Name="/apps/api/Data.Runtime/">
+    <Project Path="apps/api/Data.Runtime/NeoShip.Data.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/apps/api/DbMigrator/">
+    <Project Path="apps/api/DbMigrator/NeoShip.DbMigrator.csproj" />
+  </Folder>
   <Folder Name="/apps/api/ServiceDefaults/">
     <Project Path="apps/api/ServiceDefaults/NeoShip.ServiceDefaults.csproj" />
   </Folder>

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>$(Fx)</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Data.Model\NeoShip.Data.Model.csproj" />
+    <ProjectReference Include="..\Data.Model.Mssql\NeoShip.Data.Mssql.csproj" />
+    <ProjectReference Include="..\Data.Model.Pgsql\NeoShip.Data.Pgsql.csproj" />
+    <ProjectReference Include="..\Data.Model.Sqlite\NeoShip.Data.Sqlite.csproj" />
+  </ItemGroup>
+
+</Project>

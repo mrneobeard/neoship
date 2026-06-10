@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
@@ -44,6 +46,11 @@ public class SsoStoreTests
         return db;
     }
 
+    private static SsoChallengeStore CreateChallenges()
+    {
+        return new SsoChallengeStore(new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())));
+    }
+
     /// <summary>
     /// Verifies OIDC begin creates an authorization URL and one-time challenge.
     /// </summary>
@@ -51,8 +58,7 @@ public class SsoStoreTests
     public async Task BeginOidcAsync_CreatesAuthorizationUrlAndChallenge()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var store = new SsoStore(db, challenges, new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-admin@example.com", "SSO Admin")
@@ -92,8 +98,7 @@ public class SsoStoreTests
     public async Task BeginOidcAsync_RejectsNonHttpsAuthorizationEndpoint()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var store = new SsoStore(db, CreateChallenges(), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-http@example.com", "SSO Http")
         {
@@ -123,8 +128,7 @@ public class SsoStoreTests
     public async Task BeginOidcAsync_WhenOidcIsDisabled_ReturnsNull()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var store = new SsoStore(db, CreateChallenges(), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
         org.AllowOidcSso = false;
         var userId = Guid.NewGuid();
@@ -156,8 +160,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_ReturnsExistingUserForVerifiedEmail()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-user@example.com", "SSO User")
         {
@@ -183,10 +186,13 @@ public class SsoStoreTests
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", true, "SSO User")));
 
-        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+        var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
-        Assert.NotNull(user);
+        Assert.NotNull(result);
+        var user = result.User;
         Assert.Equal(userId, user!.Id);
+        Assert.False(result.CreatedUser);
+        Assert.True(result.CreatedExternalIdentity);
         Assert.NotNull(user.LastLoginAt);
         var link = await db.UserExternalIdentities.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal(userId, link.UserId);
@@ -203,8 +209,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_ProvisionsUserForVerifiedEmail()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var adminId = Guid.NewGuid();
         db.Users.Add(new User(adminId, "sso-owner@example.com", "SSO Owner")
         {
@@ -229,10 +234,13 @@ public class SsoStoreTests
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("new-subject", "new-sso-user@example.com", true, "New SSO User")));
 
-        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+        var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
-        Assert.NotNull(user);
+        Assert.NotNull(result);
+        var user = result.User;
         Assert.Equal("new-sso-user@example.com", user!.Email);
+        Assert.True(result.CreatedUser);
+        Assert.True(result.CreatedExternalIdentity);
         Assert.Equal("New SSO User", user.Name);
         Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
         Assert.True(await db.UserEmails.AnyAsync(x => x.UserId == user.Id && x.VerifiedAt != null, TestContext.Current.CancellationToken));
@@ -247,8 +255,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_ProvisionsOAuth2UserForVerifiedProfile()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var adminId = Guid.NewGuid();
         db.Users.Add(new User(adminId, "oauth-owner@example.com", "OAuth Owner")
         {
@@ -274,10 +281,13 @@ public class SsoStoreTests
             new FakeSsoTokenValidator(),
             new FakeSsoOAuth2ProfileClient(new SsoOAuth2Profile("github-subject", "github-user@example.com", true, "GitHub User")));
 
-        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+        var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
-        Assert.NotNull(user);
+        Assert.NotNull(result);
+        var user = result.User;
         Assert.Equal("github-user@example.com", user!.Email);
+        Assert.True(result.CreatedUser);
+        Assert.True(result.CreatedExternalIdentity);
         Assert.True(await db.UserExternalIdentities.AnyAsync(x => x.UserId == user.Id && x.Subject == "github-subject", TestContext.Current.CancellationToken));
         Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
     }
@@ -289,8 +299,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_UsesExistingSubjectLink()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var linkedUserId = Guid.NewGuid();
         var otherUserId = Guid.NewGuid();
         db.Users.Add(new User(linkedUserId, "linked-user@example.com", "Linked User")
@@ -329,10 +338,14 @@ public class SsoStoreTests
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "new-email@example.com", true, "SSO User")));
 
-        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+        var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
-        Assert.NotNull(user);
+        Assert.NotNull(result);
+        var user = result.User;
         Assert.Equal(linkedUserId, user!.Id);
+        Assert.False(result.CreatedUser);
+        Assert.False(result.CreatedExternalIdentity);
+        Assert.True(result.UpdatedExternalIdentity);
         var link = await db.UserExternalIdentities.SingleAsync(TestContext.Current.CancellationToken);
         Assert.Equal("new-email@example.com", link.Email);
         Assert.NotNull(link.LastUsedAt);
@@ -342,7 +355,7 @@ public class SsoStoreTests
     public async Task UnlinkExternalIdentityAsync_RejectsLastSignInMethod()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = CreateChallenges();
         var userId = Guid.NewGuid();
         var linkId = Guid.NewGuid();
         db.Users.Add(new User(userId, "unlink-user@example.com", "Unlink User")
@@ -370,7 +383,7 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var store = new SsoStore(db, challenges, new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
 
         Assert.Equal(SsoExternalIdentityUnlinkResult.LastMethod, result);
@@ -381,7 +394,7 @@ public class SsoStoreTests
     public async Task UnlinkExternalIdentityAsync_AllowsWhenPasswordExists()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = CreateChallenges();
         var userId = Guid.NewGuid();
         var linkId = Guid.NewGuid();
         db.Users.Add(new User(userId, "unlink-password@example.com", "Unlink Password")
@@ -414,7 +427,7 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var store = new SsoStore(db, challenges, new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
 
         Assert.Equal(SsoExternalIdentityUnlinkResult.Success, result);
@@ -425,7 +438,7 @@ public class SsoStoreTests
     public async Task UnlinkExternalIdentityAsync_RespectsOrganizationPolicy()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = CreateChallenges();
         var userId = Guid.NewGuid();
         var linkId = Guid.NewGuid();
         var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
@@ -460,7 +473,7 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var store = new SsoStore(db, challenges, new FakeSsoTokenClient(), new FakeSsoTokenValidator());
         var result = await store.UnlinkExternalIdentityAsync(userId, linkId, TestContext.Current.CancellationToken);
 
         Assert.Equal(SsoExternalIdentityUnlinkResult.PolicyDenied, result);
@@ -474,8 +487,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_RejectsUnverifiedEmail()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var userId = Guid.NewGuid();
         db.Users.Add(new User(userId, "sso-user@example.com", "SSO User")
         {
@@ -512,8 +524,7 @@ public class SsoStoreTests
     public async Task FinishOidcAsync_WhenOidcIsDisabled_ReturnsNull()
     {
         await using var db = CreateDatabase();
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var challenges = new SsoChallengeStore(cache);
+        var challenges = CreateChallenges();
         var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
         org.AllowOidcSso = false;
         var userId = Guid.NewGuid();

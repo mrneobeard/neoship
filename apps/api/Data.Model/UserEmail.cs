@@ -72,7 +72,7 @@ public readonly struct UserEmailStatus
     /// Pending verification. This status is used when a user is changing their email
     /// address and we need to verify the new email before making it active.
     /// </summary>
-    public static UserEmailStatus Pending => new(20, "pending"); 
+    public static UserEmailStatus Pending => new(20, "pending");
 
 
     public static UserEmailStatus Deleted => new(100, "deleted");

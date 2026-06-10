@@ -6,14 +6,15 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\lib\dn\Crypto\src\NeoBeard.Crypto.csproj" />
+    <ProjectReference Include="..\Data.Runtime\NeoShip.Data.Runtime.csproj" />
     <ProjectReference Include="..\Data.Model\NeoShip.Data.Model.csproj" />
-    <ProjectReference Include="..\Data.Model.Sqlite\NeoShip.Data.Sqlite.csproj" />
     <ProjectReference Include="..\ServiceDefaults\*.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Fido2" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" />
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
     <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" />
     <PackageReference Include="Serilog.AspNetCore" />

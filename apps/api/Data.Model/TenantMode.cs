@@ -1,6 +1,6 @@
 namespace NeoShip.Data.Model;
 
- public readonly struct TenantMode
+public readonly struct TenantMode
 {
     internal TenantMode(ushort id, string name)
     {

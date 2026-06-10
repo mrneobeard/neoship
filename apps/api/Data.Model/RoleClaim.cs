@@ -5,7 +5,7 @@ namespace NeoShip.Data.Model;
 
 public class RoleClaim
 {
-    public ulong Id { get; set; }
+    public long Id { get; set; }
 
     public Guid RoleId { get; set; }
 
@@ -24,5 +24,5 @@ public class RoleClaim
     public Guid CreatedBy { get; set; } = Guid.Empty;
 
     [ForeignKey(nameof(CreatedBy))]
-    public User? CreatedByUser { get; set; } 
+    public User? CreatedByUser { get; set; }
 }

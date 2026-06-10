@@ -94,6 +94,3 @@ public readonly struct MfaFactorType
         _ => Unknown
     };
 }
-
-
-
