@@ -142,15 +142,44 @@ public sealed class SsoStore
                 && x.ProviderId == provider.Id
                 && x.SubjectDigest == subjectDigest, ct);
 
+        await using var transaction = await this.db.Database.BeginTransactionAsync(ct);
+
         var emailUpcase = externalIdentity.Email.ToUpperInvariant();
         var user = link?.User is { StatusId: var status } linkedUser && status == UserStatus.Active.Id
             ? linkedUser
             : await this.db.Users.FirstOrDefaultAsync(x => x.OrgId == challenge.OrgId
                 && x.EmailUpcase == emailUpcase
                 && x.StatusId == UserStatus.Active.Id, ct);
+
+        var createdUser = false;
         if (user is null)
         {
-            return null;
+            user = new User(Guid.CreateVersion7(), externalIdentity.Email, string.IsNullOrWhiteSpace(externalIdentity.Name) ? externalIdentity.Email : externalIdentity.Name)
+            {
+                OrgId = challenge.OrgId,
+                StatusId = UserStatus.Active.Id,
+            };
+            this.db.Users.Add(user);
+            this.db.UserEmails.Add(new UserEmail
+            {
+                Id = Guid.CreateVersion7(),
+                UserId = user.Id,
+                Email = externalIdentity.Email,
+                EmailUpcase = emailUpcase,
+                EmailDigest = TokenStore.ComputeDigestBase64(externalIdentity.Email),
+                StatusId = UserEmailStatus.Active.Id,
+                CreatedBy = provider.UserId,
+                CreatedAt = DateTime.UtcNow,
+                VerifiedAt = DateTime.UtcNow,
+            });
+            this.db.OrganizationMemberships.Add(new OrganizationMembership
+            {
+                OrgId = challenge.OrgId,
+                UserId = user.Id,
+                CreatedAt = DateTime.UtcNow,
+                AcceptedAt = DateTime.UtcNow,
+            });
+            createdUser = true;
         }
 
         if (link is null)
@@ -176,6 +205,12 @@ public sealed class SsoStore
 
         user.LastLoginAt = DateTime.UtcNow;
         await this.db.SaveChangesAsync(ct);
+        if (createdUser)
+        {
+            await BuiltInRoleStore.AssignAsync(this.db, org.Id, org.Slug, user.Id, BuiltInRoleStore.MemberRoleName, ct);
+        }
+
+        await transaction.CommitAsync(ct);
         return user;
     }
 

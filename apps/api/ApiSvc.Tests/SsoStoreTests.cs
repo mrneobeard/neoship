@@ -197,6 +197,50 @@ public class SsoStoreTests
     }
 
     /// <summary>
+    /// Verifies OIDC finish provisions a user when the provider supplies a verified email.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_ProvisionsUserForVerifiedEmail()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var adminId = Guid.NewGuid();
+        db.Users.Add(new User(adminId, "sso-owner@example.com", "SSO Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = adminId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(new SsoExternalIdentity("new-subject", "new-sso-user@example.com", true, "New SSO User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+        Assert.Equal("new-sso-user@example.com", user!.Email);
+        Assert.Equal("New SSO User", user.Name);
+        Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+        Assert.True(await db.UserEmails.AnyAsync(x => x.UserId == user.Id && x.VerifiedAt != null, TestContext.Current.CancellationToken));
+        Assert.True(await db.UserExternalIdentities.AnyAsync(x => x.UserId == user.Id && x.Subject == "new-subject", TestContext.Current.CancellationToken));
+        Assert.True(await db.Users.Where(x => x.Id == user.Id).SelectMany(x => x.Roles).AnyAsync(x => x.Name == BuiltInRoleStore.MemberRoleName, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Verifies OIDC finish prefers an existing external identity link over email matching.
     /// </summary>
     [Fact]
