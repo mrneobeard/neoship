@@ -15,6 +15,8 @@ namespace NeoShip.ApiSvc.Endpoints;
 
 public static class MeEndpoints
 {
+    private const double DefaultStepUpWindowMinutes = 15;
+
     /// <summary>
     /// The HTTP context item key that stores the authenticated user API key identifier.
     /// </summary>
@@ -106,6 +108,60 @@ public static class MeEndpoints
         return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
+    private static async Task<(User? User, UserSession? Session)> AuthenticateSessionAsync(HttpContext httpContext, SessionStore sessions, CancellationToken ct)
+    {
+        var rawToken = httpContext.Request.Cookies[AuthEndpoints.SessionCookieName];
+        if (rawToken is null)
+        {
+            return (null, null);
+        }
+
+        var session = await sessions.ValidateSessionAsync(rawToken, ct);
+        if (session is null)
+        {
+            return (null, null);
+        }
+
+        var user = await httpContext.RequestServices.GetRequiredService<ShipDb>()
+            .Users.FirstOrDefaultAsync(u => u.Id == session.UserId, ct);
+
+        return (user, session);
+    }
+
+    private static async Task<(User? User, IResult? Failure)> RequireRecentSessionAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        IConfiguration configuration,
+        CancellationToken ct)
+    {
+        var (user, session) = await AuthenticateSessionAsync(httpContext, sessions, ct);
+        if (user is null || session is null)
+        {
+            return (null, TypedResults.Unauthorized());
+        }
+
+        if (!configuration.GetValue("Auth:StepUp:Enabled", true))
+        {
+            return (user, null);
+        }
+
+        var windowMinutes = configuration.GetValue("Auth:StepUp:WindowMinutes", DefaultStepUpWindowMinutes);
+        var window = TimeSpan.FromMinutes(windowMinutes <= 0 ? DefaultStepUpWindowMinutes : windowMinutes);
+        var lastVerifiedAt = session.MfaVerifiedAt is not null && session.MfaVerifiedAt > session.CreatedAt
+            ? session.MfaVerifiedAt.Value
+            : session.CreatedAt;
+
+        if (lastVerifiedAt < DateTime.UtcNow.Subtract(window))
+        {
+            return (null, StepUpRequired(httpContext));
+        }
+
+        return (user, null);
+    }
+
+    private static IResult StepUpRequired(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
+
     public record UserResponse(Guid Id, string Email, string Name, string? AvatarUrl);
 
     private sealed record OrganizationResponse(Guid Id, string Name, string Slug);
@@ -124,36 +180,39 @@ public static class MeEndpoints
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult>> DeleteMeAsync(
+    private static async Task<IResult> DeleteMeAsync(
         HttpContext httpContext,
         SessionStore sessions,
         ShipDb db,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
 
+        var actor = user!;
+
         var now = DateTime.UtcNow;
-        user.StatusId = UserStatus.Deleted.Id;
+        actor.StatusId = UserStatus.Deleted.Id;
 
         await db.UserSessions
-            .Where(x => x.UserId == user.Id && x.RevokedAt == null)
+            .Where(x => x.UserId == actor.Id && x.RevokedAt == null)
             .ExecuteUpdateAsync(x => x
                 .SetProperty(s => s.RevokedAt, now)
                 .SetProperty(s => s.RevokeReason, "user_deleted"), ct);
         await db.UserApiKeys
-            .Where(x => x.UserId == user.Id && x.RevokedAt == null)
+            .Where(x => x.UserId == actor.Id && x.RevokedAt == null)
             .ExecuteUpdateAsync(x => x.SetProperty(k => k.RevokedAt, now), ct);
         await db.OrganizationMemberships
-            .Where(x => x.UserId == user.Id && x.DeletedAt == null)
+            .Where(x => x.UserId == actor.Id && x.DeletedAt == null)
             .ExecuteUpdateAsync(x => x.SetProperty(m => m.DeletedAt, now), ct);
 
         await db.SaveChangesAsync(ct);
-        await audit.RecordAsync("auth.user.delete", user.OrgId, user.Id, "user.delete", targetType: "user", targetId: user.Id.ToString(), ct: ct);
+        await audit.RecordAsync("auth.user.delete", actor.OrgId, actor.Id, "user.delete", targetType: "user", targetId: actor.Id.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 
@@ -287,13 +346,16 @@ public static class MeEndpoints
         ApiKeyStore apiKeys,
         ShipDb db,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateCreateApiKey(req);
         if (validation.Count > 0)
@@ -302,37 +364,40 @@ public static class MeEndpoints
         }
 
         var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
-            user.Id, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
+            actor.Id, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
 
         db.UserApiKeys.Add(apiKey);
         await db.SaveChangesAsync(ct);
-        await audit.RecordAsync("auth.api_key.create", user.OrgId, user.Id, "api_key.create", targetType: "user_api_key", targetId: apiKey.Id.ToString(), ct: ct);
+        await audit.RecordAsync("auth.api_key.create", actor.OrgId, actor.Id, "api_key.create", targetType: "user_api_key", targetId: apiKey.Id.ToString(), ct: ct);
 
         return TypedResults.Created($"/api/v1/me/api-keys/{apiKey.Id}",
             new CreateApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokeApiKeyAsync(
+    private static async Task<IResult> RevokeApiKeyAsync(
         Guid apiKeyId,
         HttpContext httpContext,
         SessionStore sessions,
         ApiKeyStore apiKeys,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
 
-        var success = await apiKeys.RevokeUserApiKeyAsync(apiKeyId, user.Id, ct);
+        var actor = user!;
+
+        var success = await apiKeys.RevokeUserApiKeyAsync(apiKeyId, actor.Id, ct);
         if (!success)
         {
             return TypedResults.NotFound();
         }
 
-        await audit.RecordAsync("auth.api_key.revoke", user.OrgId, user.Id, "api_key.revoke", targetType: "user_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        await audit.RecordAsync("auth.api_key.revoke", actor.OrgId, actor.Id, "api_key.revoke", targetType: "user_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 
@@ -344,13 +409,16 @@ public static class MeEndpoints
         ApiKeyStore apiKeys,
         ShipDb db,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateRotateApiKey(req);
         if (validation.Count > 0)
@@ -358,14 +426,14 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var oldKey = await db.UserApiKeys.FirstOrDefaultAsync(x => x.Id == apiKeyId && x.UserId == user.Id && x.DeletedAt == null && x.RevokedAt == null, ct);
+        var oldKey = await db.UserApiKeys.FirstOrDefaultAsync(x => x.Id == apiKeyId && x.UserId == actor.Id && x.DeletedAt == null && x.RevokedAt == null, ct);
         if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
         {
             return TypedResults.NotFound();
         }
 
         var (plaintextKey, newKey) = apiKeys.GenerateUserApiKey(
-            user.Id,
+            actor.Id,
             string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
             req.Description ?? oldKey.Description,
             req.ScopesJson ?? oldKey.ScopesJson,
@@ -375,7 +443,7 @@ public static class MeEndpoints
         db.UserApiKeys.Add(newKey);
         await db.SaveChangesAsync(ct);
 
-        await audit.RecordAsync("auth.api_key.rotate", user.OrgId, user.Id, "api_key.rotate", targetType: "user_api_key", targetId: oldKey.Id.ToString(), ct: ct);
+        await audit.RecordAsync("auth.api_key.rotate", actor.OrgId, actor.Id, "api_key.rotate", targetType: "user_api_key", targetId: oldKey.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/me/api-keys/{newKey.Id}", new CreateApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt));
     }
 
@@ -407,13 +475,16 @@ public static class MeEndpoints
         SessionStore sessions,
         MfaStore mfa,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateOptionalName(req.Name);
         if (validation.Count > 0)
@@ -421,12 +492,12 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var (factor, secret) = await mfa.StartTotpAsync(user.Id, req.Name, ct);
+        var (factor, secret) = await mfa.StartTotpAsync(actor.Id, req.Name, ct);
         var issuer = Uri.EscapeDataString("NeoShip");
-        var label = Uri.EscapeDataString($"NeoShip:{user.Email}");
+        var label = Uri.EscapeDataString($"NeoShip:{actor.Email}");
         var uri = $"otpauth://totp/{label}?secret={secret}&issuer={issuer}&digits=6&period=30";
 
-        await audit.RecordAsync("auth.mfa.totp.start", user.OrgId, user.Id, "mfa.totp.start", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
+        await audit.RecordAsync("auth.mfa.totp.start", actor.OrgId, actor.Id, "mfa.totp.start", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
         return TypedResults.Ok(new StartTotpResponse(factor.Id, secret, uri));
     }
 
@@ -457,6 +528,12 @@ public static class MeEndpoints
             return TypedResults.NotFound();
         }
 
+        var sessionId = httpContext.RequestServices.GetRequiredService<RequestContext>().SessionId;
+        if (sessionId is not null)
+        {
+            await sessions.MarkMfaVerifiedAsync(sessionId.Value, ct);
+        }
+
         await audit.RecordAsync("auth.mfa.totp.confirm", user.OrgId, user.Id, "mfa.totp.confirm", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
@@ -467,13 +544,16 @@ public static class MeEndpoints
         SessionStore sessions,
         MfaStore mfa,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateFactorId(req.FactorId);
         if (validation.Count > 0)
@@ -481,13 +561,13 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var disabled = await mfa.DisableTotpAsync(user.Id, req.FactorId, ct);
+        var disabled = await mfa.DisableTotpAsync(actor.Id, req.FactorId, ct);
         if (!disabled)
         {
             return TypedResults.NotFound();
         }
 
-        await audit.RecordAsync("auth.mfa.totp.disable", user.OrgId, user.Id, "mfa.totp.disable", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
+        await audit.RecordAsync("auth.mfa.totp.disable", actor.OrgId, actor.Id, "mfa.totp.disable", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 
@@ -497,13 +577,16 @@ public static class MeEndpoints
         SessionStore sessions,
         MfaStore mfa,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateRecoveryCodeCount(req.Count);
         if (validation.Count > 0)
@@ -511,26 +594,29 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var codes = await mfa.RegenerateRecoveryCodesAsync(user.Id, req.Count ?? 10, ct);
-        await audit.RecordAsync("auth.mfa.recovery_codes.regenerate", user.OrgId, user.Id, "mfa.recovery_codes.regenerate", ct: ct);
+        var codes = await mfa.RegenerateRecoveryCodesAsync(actor.Id, req.Count ?? 10, ct);
+        await audit.RecordAsync("auth.mfa.recovery_codes.regenerate", actor.OrgId, actor.Id, "mfa.recovery_codes.regenerate", ct: ct);
         return TypedResults.Ok(new RegenerateRecoveryCodesResponse(codes));
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult>> RevokeRecoveryCodesAsync(
+    private static async Task<IResult> RevokeRecoveryCodesAsync(
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
 
-        await mfa.RevokeRecoveryCodesAsync(user.Id, ct);
-        await audit.RecordAsync("auth.mfa.recovery_codes.revoke", user.OrgId, user.Id, "mfa.recovery_codes.revoke", ct: ct);
+        var actor = user!;
+
+        await mfa.RevokeRecoveryCodesAsync(actor.Id, ct);
+        await audit.RecordAsync("auth.mfa.recovery_codes.revoke", actor.OrgId, actor.Id, "mfa.recovery_codes.revoke", ct: ct);
         return TypedResults.Ok();
     }
 
@@ -575,20 +661,23 @@ public static class MeEndpoints
             x.LastUsedAt)).ToList());
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound, StatusCodeHttpResult, Conflict<string>>> UnlinkExternalIdentityAsync(
+    private static async Task<IResult> UnlinkExternalIdentityAsync(
         Guid externalIdentityId,
         HttpContext httpContext,
         SessionStore sessions,
         SsoStore sso,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
 
-        var result = await sso.UnlinkExternalIdentityAsync(user.Id, externalIdentityId, ct);
+        var actor = user!;
+
+        var result = await sso.UnlinkExternalIdentityAsync(actor.Id, externalIdentityId, ct);
         return result switch
         {
             SsoExternalIdentityUnlinkResult.Success => TypedResults.Ok(),
@@ -793,13 +882,16 @@ public static class MeEndpoints
         PasskeyStore passkeys,
         PasskeyChallengeStore challenges,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
+
+        var actor = user!;
 
         var validation = ValidateFinishPasskeyRegistration(req);
         if (validation.Count > 0)
@@ -807,38 +899,41 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var options = challenges.TakeRegistration(req.ChallengeId, user.Id);
+        var options = challenges.TakeRegistration(req.ChallengeId, actor.Id);
         if (options is null)
         {
             return TypedResults.NotFound();
         }
 
-        var factor = await passkeys.FinishRegistrationAsync(user.Id, req.Name, options, req.Response, ct);
-        await audit.RecordAsync("auth.passkey.register", user.OrgId, user.Id, "passkey.register", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
+        var factor = await passkeys.FinishRegistrationAsync(actor.Id, req.Name, options, req.Response, ct);
+        await audit.RecordAsync("auth.passkey.register", actor.OrgId, actor.Id, "passkey.register", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
         return TypedResults.Ok(new PasskeyResponse(factor.Id, factor.Name, factor.CreatedAt, factor.LastUsedAt));
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> RevokePasskeyAsync(
+    private static async Task<IResult> RevokePasskeyAsync(
         Guid factorId,
         HttpContext httpContext,
         SessionStore sessions,
         PasskeyStore passkeys,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
-        var user = await AuthenticateAsync(httpContext, sessions, ct);
-        if (user is null)
+        var (user, failure) = await RequireRecentSessionAsync(httpContext, sessions, configuration, ct);
+        if (failure is not null)
         {
-            return TypedResults.Unauthorized();
+            return failure;
         }
 
-        var revoked = await passkeys.RevokeAsync(user.Id, factorId, ct);
+        var actor = user!;
+
+        var revoked = await passkeys.RevokeAsync(actor.Id, factorId, ct);
         if (!revoked)
         {
             return TypedResults.NotFound();
         }
 
-        await audit.RecordAsync("auth.passkey.revoke", user.OrgId, user.Id, "passkey.revoke", targetType: "mfa_factor", targetId: factorId.ToString(), ct: ct);
+        await audit.RecordAsync("auth.passkey.revoke", actor.OrgId, actor.Id, "passkey.revoke", targetType: "mfa_factor", targetId: factorId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 

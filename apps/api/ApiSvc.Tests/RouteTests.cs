@@ -413,6 +413,38 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateUserApiKey_WithStaleSession_ReturnsStepUpRequired()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-stale@example.com", "User Key Stale");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+        await app.WithDbAsync(async db =>
+        {
+            var session = await db.UserSessions.SingleAsync(x => x.UserId == userId, TestContext.Current.CancellationToken);
+            session.CreatedAt = DateTime.UtcNow.AddHours(-1);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"cli\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("step_up_required", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.UserApiKeys.AnyAsync(x => x.UserId == userId, TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task RotateUserApiKey_RevokesOldKeyAndReturnsNewPlaintextKey()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -493,6 +525,57 @@ public sealed class RouteTests
         var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
         Assert.True(fields.TryGetProperty("factorId", out _));
         Assert.True(fields.TryGetProperty("code", out _));
+    }
+
+    [Fact]
+    public async Task ConfirmTotp_WithStaleSession_AllowsSensitiveMutation()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var factorId = Guid.CreateVersion7();
+        var secret = Enumerable.Range(1, 20).Select(i => (byte)i).ToArray();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-totp-stepup@example.com", "Totp Stepup");
+            userId = user.Id;
+            db.UserMfaFactors.Add(new UserMfaFactor
+            {
+                Id = factorId,
+                UserId = user.Id,
+                Name = "Phone",
+                Type = MfaFactorType.Totp.Id,
+                ValueEncrypted = secret,
+                CreatedAt = DateTime.UtcNow,
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+        await app.WithDbAsync(async db =>
+        {
+            var session = await db.UserSessions.SingleAsync(x => x.UserId == userId, TestContext.Current.CancellationToken);
+            session.CreatedAt = DateTime.UtcNow.AddHours(-1);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+        var code = MfaStore.ComputeTotp(secret, DateTimeOffset.UtcNow);
+
+        using var confirmRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/mfa/totp/confirm");
+        confirmRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        confirmRequest.Content = new StringContent($"{{\"factorId\":\"{factorId}\",\"code\":\"{code}\"}}", Encoding.UTF8, "application/json");
+        using var confirmResponse = await app.Client.SendAsync(confirmRequest, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+
+        using var keyRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/api-keys");
+        keyRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        keyRequest.Content = new StringContent("{\"name\":\"cli\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var keyResponse = await app.Client.SendAsync(keyRequest, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, keyResponse.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            var session = await db.UserSessions.SingleAsync(x => x.UserId == userId, TestContext.Current.CancellationToken);
+            Assert.NotNull(session.MfaVerifiedAt);
+            Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.Name == "cli", TestContext.Current.CancellationToken));
+        });
     }
 
     [Fact]
