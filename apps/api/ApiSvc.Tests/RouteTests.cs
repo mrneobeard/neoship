@@ -485,9 +485,36 @@ public sealed class RouteTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         await app.WithDbAsync(async db =>
         {
-            Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.Name == "cli", TestContext.Current.CancellationToken));
+            var key = await db.UserApiKeys.SingleAsync(x => x.UserId == userId && x.Name == "cli", TestContext.Current.CancellationToken);
+            Assert.NotNull(key.ExpiresAt);
+            Assert.InRange(key.ExpiresAt!.Value, DateTime.UtcNow.AddDays(89), DateTime.UtcNow.AddDays(91));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.api_key.create", TestContext.Current.CancellationToken));
         });
+    }
+
+    [Fact]
+    public async Task CreateUserApiKey_WhenExpiryExceedsPolicy_ReturnsValidationError()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-max@example.com", "User Key Max");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+        var expiresAt = DateTime.UtcNow.AddDays(400).ToString("O");
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\"cli\",\"scopesJson\":\"[]\",\"expiresAt\":\"{expiresAt}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("expiresAt", out _));
     }
 
     [Fact]
@@ -998,6 +1025,44 @@ public sealed class RouteTests
         {
             Assert.False(await db.ServiceAccounts.AnyAsync(x => x.CreatedBy == userId, TestContext.Current.CancellationToken));
             Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateServiceAccountApiKey_AppliesDefaultExpiry()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-key-default-expiry@example.com", "Service Account Key Default Expiry");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            db.ServiceAccounts.Add(new ServiceAccount
+            {
+                Id = serviceAccountId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "default-key-bot",
+                NameUpcase = "DEFAULT-KEY-BOT",
+                Description = "Default key bot",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{serviceAccountId}/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"ci\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            var key = await db.ServiceAccountApiKeys.SingleAsync(x => x.ServiceAccountId == serviceAccountId && x.Name == "ci", TestContext.Current.CancellationToken);
+            Assert.NotNull(key.ExpiresAt);
+            Assert.InRange(key.ExpiresAt!.Value, DateTime.UtcNow.AddDays(89), DateTime.UtcNow.AddDays(91));
         });
     }
 

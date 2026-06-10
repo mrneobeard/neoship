@@ -13,6 +13,8 @@ namespace NeoShip.ApiSvc.Endpoints;
 public static class OrgEndpoints
 {
     private const double DefaultStepUpWindowMinutes = 15;
+    private const int DefaultApiKeyLifetimeDays = 90;
+    private const int MaxApiKeyLifetimeDays = 365;
 
     public static RouteGroupBuilder MapOrgEndpoints(this IEndpointRouteBuilder routes)
     {
@@ -1638,6 +1640,7 @@ public static class OrgEndpoints
         ShipDb db,
         ServiceAccountStore store,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -1652,7 +1655,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var validation = ValidateServiceAccountApiKey(req);
+        var validation = ValidateServiceAccountApiKey(req, configuration);
         if (validation.Count > 0)
         {
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
@@ -1664,8 +1667,9 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
+        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt, configuration);
         var (plaintextKey, apiKey) = store.GenerateApiKey(
-            serviceAccountId, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
+            serviceAccountId, req.Name, req.Description, req.ScopesJson, expiresAt);
 
         db.ServiceAccountApiKeys.Add(apiKey);
         await db.SaveChangesAsync(ct);
@@ -1676,7 +1680,7 @@ public static class OrgEndpoints
             new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
     }
 
-    private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req)
+    private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req, IConfiguration configuration)
     {
         var errors = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
 
@@ -1688,6 +1692,10 @@ public static class OrgEndpoints
         if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
         {
             errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
         }
 
         return errors;
@@ -1757,6 +1765,7 @@ public static class OrgEndpoints
         ShipDb db,
         ServiceAccountStore store,
         AuditStore audit,
+        IConfiguration configuration,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -1771,7 +1780,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var validation = ValidateRotateServiceAccountApiKey(req);
+        var validation = ValidateRotateServiceAccountApiKey(req, configuration);
         if (validation.Count > 0)
         {
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
@@ -1791,12 +1800,13 @@ public static class OrgEndpoints
             return TypedResults.NotFound();
         }
 
+        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt ?? oldKey.ExpiresAt, configuration);
         var (plaintextKey, newKey) = store.GenerateApiKey(
             serviceAccountId,
             string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
             req.Description ?? oldKey.Description,
             req.ScopesJson ?? oldKey.ScopesJson,
-            req.ExpiresAt ?? oldKey.ExpiresAt);
+            expiresAt);
 
         oldKey.RevokedAt = DateTime.UtcNow;
         db.ServiceAccountApiKeys.Add(newKey);
@@ -1808,7 +1818,7 @@ public static class OrgEndpoints
             new CreateServiceAccountApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt));
     }
 
-    private static Dictionary<string, string[]> ValidateRotateServiceAccountApiKey(RotateServiceAccountApiKeyRequest req)
+    private static Dictionary<string, string[]> ValidateRotateServiceAccountApiKey(RotateServiceAccountApiKeyRequest req, IConfiguration configuration)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -1831,9 +1841,19 @@ public static class OrgEndpoints
         {
             errors["expiresAt"] = ["Expiration must be in the future when provided."];
         }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
 
         return errors;
     }
+
+    private static DateTime ResolveApiKeyExpiresAt(DateTime? requestedExpiresAt, IConfiguration configuration)
+        => requestedExpiresAt ?? DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:DefaultLifetimeDays", DefaultApiKeyLifetimeDays));
+
+    private static DateTime MaxApiKeyExpiresAt(IConfiguration configuration)
+        => DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:MaxLifetimeDays", MaxApiKeyLifetimeDays));
 
     private static async Task<IResult> ListServiceAccountApiKeyClaimsAsync(
         string orgSlug,

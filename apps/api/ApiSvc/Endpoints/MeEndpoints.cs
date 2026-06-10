@@ -16,6 +16,8 @@ namespace NeoShip.ApiSvc.Endpoints;
 public static class MeEndpoints
 {
     private const double DefaultStepUpWindowMinutes = 15;
+    private const int DefaultApiKeyLifetimeDays = 90;
+    private const int MaxApiKeyLifetimeDays = 365;
 
     /// <summary>
     /// The HTTP context item key that stores the authenticated user API key identifier.
@@ -357,14 +359,16 @@ public static class MeEndpoints
 
         var actor = user!;
 
-        var validation = ValidateCreateApiKey(req);
+        var validation = ValidateCreateApiKey(req, configuration);
         if (validation.Count > 0)
         {
             return ValidationError(httpContext, validation);
         }
 
+        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt, configuration);
+
         var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
-            actor.Id, req.Name, req.Description, req.ScopesJson, req.ExpiresAt);
+            actor.Id, req.Name, req.Description, req.ScopesJson, expiresAt);
 
         db.UserApiKeys.Add(apiKey);
         await db.SaveChangesAsync(ct);
@@ -420,7 +424,7 @@ public static class MeEndpoints
 
         var actor = user!;
 
-        var validation = ValidateRotateApiKey(req);
+        var validation = ValidateRotateApiKey(req, configuration);
         if (validation.Count > 0)
         {
             return ValidationError(httpContext, validation);
@@ -432,12 +436,13 @@ public static class MeEndpoints
             return TypedResults.NotFound();
         }
 
+        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt ?? oldKey.ExpiresAt, configuration);
         var (plaintextKey, newKey) = apiKeys.GenerateUserApiKey(
             actor.Id,
             string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
             req.Description ?? oldKey.Description,
             req.ScopesJson ?? oldKey.ScopesJson,
-            req.ExpiresAt ?? oldKey.ExpiresAt);
+            expiresAt);
 
         oldKey.RevokedAt = DateTime.UtcNow;
         db.UserApiKeys.Add(newKey);
@@ -723,7 +728,7 @@ public static class MeEndpoints
     private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
         => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
 
-    private static Dictionary<string, string[]> ValidateCreateApiKey(CreateApiKeyRequest req)
+    private static Dictionary<string, string[]> ValidateCreateApiKey(CreateApiKeyRequest req, IConfiguration configuration)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -746,11 +751,15 @@ public static class MeEndpoints
         {
             errors["expiresAt"] = ["Expiration must be in the future when provided."];
         }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
 
         return errors;
     }
 
-    private static Dictionary<string, string[]> ValidateRotateApiKey(RotateApiKeyRequest req)
+    private static Dictionary<string, string[]> ValidateRotateApiKey(RotateApiKeyRequest req, IConfiguration configuration)
     {
         var errors = new Dictionary<string, string[]>();
 
@@ -773,9 +782,19 @@ public static class MeEndpoints
         {
             errors["expiresAt"] = ["Expiration must be in the future when provided."];
         }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
 
         return errors;
     }
+
+    private static DateTime ResolveApiKeyExpiresAt(DateTime? requestedExpiresAt, IConfiguration configuration)
+        => requestedExpiresAt ?? DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:DefaultLifetimeDays", DefaultApiKeyLifetimeDays));
+
+    private static DateTime MaxApiKeyExpiresAt(IConfiguration configuration)
+        => DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:MaxLifetimeDays", MaxApiKeyLifetimeDays));
 
     private static Dictionary<string, string[]> ValidateOptionalName(string? name)
         => ValidateNameDescription(name, description: null, requireName: false);
