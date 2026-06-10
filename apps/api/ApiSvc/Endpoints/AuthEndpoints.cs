@@ -12,25 +12,27 @@ namespace NeoShip.ApiSvc.Endpoints;
 public static class AuthEndpoints
 {
     public const string SessionCookieName = "neoship_sid";
+    public const string LoginRateLimitPolicy = "auth-login";
+    public const string SensitiveRateLimitPolicy = "auth-sensitive";
 
     public static RouteGroupBuilder MapAuthEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/v1/auth");
 
         group.MapPost("/signup", SignupAsync);
-        group.MapPost("/login", LoginAsync);
+        group.MapPost("/login", LoginAsync).RequireRateLimiting(LoginRateLimitPolicy);
         group.MapGet("/sso/{orgSlug}/begin", BeginSsoAsync);
         group.MapGet("/sso/callback", FinishSsoAsync);
-        group.MapPost("/passkeys/begin-login", BeginPasskeyLoginAsync);
-        group.MapPost("/passkeys/finish-login", FinishPasskeyLoginAsync);
-        group.MapPost("/api-keys/login", LoginWithApiKeyAsync);
+        group.MapPost("/passkeys/begin-login", BeginPasskeyLoginAsync).RequireRateLimiting(LoginRateLimitPolicy);
+        group.MapPost("/passkeys/finish-login", FinishPasskeyLoginAsync).RequireRateLimiting(LoginRateLimitPolicy);
+        group.MapPost("/api-keys/login", LoginWithApiKeyAsync).RequireRateLimiting(LoginRateLimitPolicy);
         group.MapPost("/logout", LogoutAsync);
 
-        group.MapPost("/password-reset/request", RequestPasswordResetAsync);
-        group.MapPost("/password-reset/confirm", ConfirmPasswordResetAsync);
+        group.MapPost("/password-reset/request", RequestPasswordResetAsync).RequireRateLimiting(SensitiveRateLimitPolicy);
+        group.MapPost("/password-reset/confirm", ConfirmPasswordResetAsync).RequireRateLimiting(SensitiveRateLimitPolicy);
 
-        group.MapPost("/email-verification/request", RequestEmailVerificationAsync);
-        group.MapPost("/email-verification/confirm", ConfirmEmailVerificationAsync);
+        group.MapPost("/email-verification/request", RequestEmailVerificationAsync).RequireRateLimiting(SensitiveRateLimitPolicy);
+        group.MapPost("/email-verification/confirm", ConfirmEmailVerificationAsync).RequireRateLimiting(SensitiveRateLimitPolicy);
 
         group.MapPost("/token-exchange", TokenExchangeAsync);
 

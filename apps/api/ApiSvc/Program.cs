@@ -1,11 +1,14 @@
 using System.Diagnostics;
+using System.Threading.RateLimiting;
 
 using Fido2NetLib;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.RateLimiting;
 
 using NeoShip.ApiSvc;
 using NeoShip.ApiSvc.Endpoints;
+using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -28,6 +31,39 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddMemoryCache();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        await context.HttpContext.Response.WriteAsJsonAsync(
+            new ApiErrorEnvelope(
+                new ApiError("rate_limited", "Too many requests."),
+                ApiMeta.FromHttpContext(context.HttpContext)),
+            ct);
+    };
+
+    options.AddPolicy(AuthEndpoints.LoginRateLimitPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(httpContext),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true,
+        }));
+
+    options.AddPolicy(AuthEndpoints.SensitiveRateLimitPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        PartitionKey(httpContext),
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true,
+        }));
+});
 builder.Services.AddSingleton(sp => new Fido2(new Fido2Configuration
 {
     ServerDomain = sp.GetRequiredService<IConfiguration>()["Auth:Passkeys:ServerDomain"] ?? "localhost",
@@ -77,6 +113,7 @@ app.UseSerilogRequestLogging();
 
 app.UseMiddleware<NeoShip.ApiSvc.Middleware.TlsRequiredMiddleware>();
 app.UseMiddleware<NeoShip.ApiSvc.Middleware.RequestContextMiddleware>();
+app.UseRateLimiter();
 
 if (app.Environment.IsDevelopment())
 {
@@ -116,3 +153,14 @@ app.MapOrgEndpoints();
 app.MapDefaultEndpoints();
 
 app.Run();
+
+static string PartitionKey(HttpContext httpContext)
+{
+    var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].ToString();
+    if (!string.IsNullOrWhiteSpace(forwardedFor))
+    {
+        return forwardedFor.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "unknown";
+    }
+
+    return httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}

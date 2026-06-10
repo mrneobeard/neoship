@@ -2,11 +2,14 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
 using Fido2NetLib;
 
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -130,6 +133,28 @@ public sealed class RouteTests
         {
             Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "auth.login.failed" || x.Type == "auth.login.success", TestContext.Current.CancellationToken));
         });
+    }
+
+    [Fact]
+    public async Task Login_IsRateLimitedAfterRepeatedAttempts()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        HttpResponseMessage? response = null;
+
+        for (var i = 0; i < 6; i++)
+        {
+            response?.Dispose();
+            response = await app.Client.PostAsync(
+                "/api/v1/auth/login",
+                new StringContent("{\"email\":\"missing-login@example.com\",\"password\":\"not-the-password\"}", Encoding.UTF8, "application/json"),
+                TestContext.Current.CancellationToken);
+        }
+
+        using (response)
+        {
+            Assert.NotNull(response);
+            Assert.Equal(HttpStatusCode.TooManyRequests, response!.StatusCode);
+        }
     }
 
     [Fact]
@@ -1517,6 +1542,28 @@ public sealed class RouteTests
                         services.AddProblemDetails();
                         services.AddLogging();
                         services.AddMemoryCache();
+                        services.AddRateLimiter(options =>
+                        {
+                            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                            options.AddPolicy(AuthEndpoints.LoginRateLimitPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                                _ => new FixedWindowRateLimiterOptions
+                                {
+                                    PermitLimit = 5,
+                                    Window = TimeSpan.FromMinutes(1),
+                                    QueueLimit = 0,
+                                    AutoReplenishment = true,
+                                }));
+                            options.AddPolicy(AuthEndpoints.SensitiveRateLimitPolicy, httpContext => RateLimitPartition.GetFixedWindowLimiter(
+                                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                                _ => new FixedWindowRateLimiterOptions
+                                {
+                                    PermitLimit = 10,
+                                    Window = TimeSpan.FromMinutes(1),
+                                    QueueLimit = 0,
+                                    AutoReplenishment = true,
+                                }));
+                        });
                         services.AddSingleton(connection);
                         services.AddDbContext<ShipDb>((sp, options) => options
                             .UseSqlite(sp.GetRequiredService<SqliteConnection>())
@@ -1557,6 +1604,7 @@ public sealed class RouteTests
                     .Configure(app =>
                     {
                         app.UseRouting();
+                        app.UseRateLimiter();
                         app.UseEndpoints(endpoints =>
                         {
                             endpoints.MapAuthEndpoints();
