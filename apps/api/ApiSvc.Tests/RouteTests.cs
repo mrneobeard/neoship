@@ -390,6 +390,81 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateServiceAccount_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-invalid@example.com", "Service Account Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/service-accounts");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\" \" ,\"description\":\"{new string('x', 1025)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("description", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.ServiceAccounts.AnyAsync(x => x.CreatedBy == userId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateServiceAccountApiKey_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-key-invalid@example.com", "Service Account Key Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            db.ServiceAccounts.Add(new ServiceAccount
+            {
+                Id = serviceAccountId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "key-bot",
+                NameUpcase = "KEY-BOT",
+                Description = "Key bot",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{serviceAccountId}/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\" \" ,\"description\":\"{new string('x', 1025)}\",\"scopesJson\":\"not-json\",\"expiresAt\":\"2020-01-01T00:00:00Z\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("description", out _));
+        Assert.True(fields.TryGetProperty("scopesJson", out _));
+        Assert.True(fields.TryGetProperty("expiresAt", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.ServiceAccountApiKeys.AnyAsync(x => x.ServiceAccountId == serviceAccountId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListServiceAccountClaims_AllowsScopedServiceAccountBearer()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -476,6 +551,50 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task AddServiceAccountClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-claim-invalid@example.com", "Service Account Claim Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            var serviceAccount = new ServiceAccount
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "claim-invalid-bot",
+                NameUpcase = "CLAIM-INVALID-BOT",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            };
+            serviceAccountId = serviceAccount.Id;
+            db.ServiceAccounts.Add(serviceAccount);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{serviceAccountId}/claims");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"permission\":\"not-valid\",\"scopeKind\":999,\"scopeId\":\"{new string('x', 161)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("permission", out _));
+        Assert.True(fields.TryGetProperty("scopeKind", out _));
+        Assert.True(fields.TryGetProperty("scopeId", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.ServiceAccountClaims.AnyAsync(x => x.ServiceAccountId == serviceAccountId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.claim.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListServiceAccountApiKeyClaims_AllowsScopedServiceAccountBearer()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -546,6 +665,40 @@ public sealed class RouteTests
         {
             Assert.True(await db.ServiceAccountApiKeyClaims.AnyAsync(x => x.ServiceAccountApiKeyId == seed.ApiKeyId, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.claim.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task AddServiceAccountApiKeyClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-sa-key-claim-invalid@example.com", "Service Account Key Claim Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/claims");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"permission\":\"not-valid\",\"scopeKind\":999,\"scopeId\":\"{new string('x', 161)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("permission", out _));
+        Assert.True(fields.TryGetProperty("scopeKind", out _));
+        Assert.True(fields.TryGetProperty("scopeId", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.ServiceAccountApiKeyClaims.AnyAsync(x => x.ServiceAccountApiKeyId == seed.ApiKeyId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.claim.add", TestContext.Current.CancellationToken));
         });
     }
 

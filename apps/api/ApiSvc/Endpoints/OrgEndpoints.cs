@@ -1354,6 +1354,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var sa = await store.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
         await audit.RecordAsync("org.service_accounts.create", org.Id, auth.User.Id, "service_account.create", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
 
@@ -1388,6 +1394,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateServiceAccountInput(req.Name, req.Description, requireName: false);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var sa = await store.UpdateAsync(org.Id, serviceAccountId, req.Name, req.Description, ct);
         if (sa is null)
         {
@@ -1397,6 +1409,23 @@ public static class OrgEndpoints
         await audit.RecordAsync("org.service_accounts.update", org.Id, auth.User!.Id, "service_account.update", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
 
         return TypedResults.Ok(new ServiceAccountResponse(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt));
+    }
+
+    private static Dictionary<string, string[]> ValidateServiceAccountInput(string? name, string? description, bool requireName)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (description is not null && description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        return errors;
     }
 
     private static async Task<IResult> DisableServiceAccountAsync(
@@ -1544,6 +1573,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateServiceAccountApiKey(req);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
         if (sa is null)
         {
@@ -1560,6 +1595,41 @@ public static class OrgEndpoints
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{apiKey.Id}",
             new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
+    }
+
+    private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req)
+    {
+        var errors = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
+
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidJsonArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static async Task<IResult> RevokeServiceAccountApiKeyAsync(
@@ -1654,9 +1724,10 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (!PermissionKey.TryParse(req.Permission, out var key))
+        var validation = ValidatePermissionGrant(req.Permission, req.ScopeKind, req.ScopeId, out var key);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Invalid permission key.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
@@ -1760,9 +1831,10 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (!PermissionKey.TryParse(req.Permission, out var key))
+        var validation = ValidatePermissionGrant(req.Permission, req.ScopeKind, req.ScopeId, out var key);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Invalid permission key.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
@@ -1774,6 +1846,27 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.service_accounts.claim.add", org.Id, auth.User!.Id, "service_account.claim.add", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
         return TypedResults.Ok(new ServiceAccountClaimResponse(claim.Id, claim.Type, claim.Value));
+    }
+
+    private static Dictionary<string, string[]> ValidatePermissionGrant(string permission, PermissionScopeKind scopeKind, string? scopeId, out PermissionKey key)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!PermissionKey.TryParse(permission, out key))
+        {
+            errors["permission"] = ["Permission must be a registered resource.action key."];
+        }
+
+        if (!Enum.IsDefined(scopeKind))
+        {
+            errors["scopeKind"] = ["Scope kind is invalid."];
+        }
+
+        if (scopeId is not null && scopeId.Length > 160)
+        {
+            errors["scopeId"] = ["Scope ID must be 160 characters or fewer when provided."];
+        }
+
+        return errors;
     }
 
     private static async Task<IResult> RemoveServiceAccountClaimAsync(
