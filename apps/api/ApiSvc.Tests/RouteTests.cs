@@ -281,6 +281,41 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task DeleteMe_SoftDeletesUserAndRevokesAccess()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-delete-me@example.com", "Delete Me");
+            userId = user.Id;
+            db.OrganizationMemberships.Add(new OrganizationMembership
+            {
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+            });
+            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var (_, apiKey) = store.GenerateUserApiKey(user.Id, "cli", null, "[]", null);
+            db.UserApiKeys.Add(apiKey);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/v1/me/");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal(UserStatus.Deleted.Id, (await db.Users.SingleAsync(x => x.Id == userId, TestContext.Current.CancellationToken)).StatusId);
+            Assert.True(await db.UserSessions.AnyAsync(x => x.UserId == userId && x.RevokedAt != null, TestContext.Current.CancellationToken));
+            Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.RevokedAt != null, TestContext.Current.CancellationToken));
+            Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.DeletedAt != null, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.user.delete", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task CreateUserApiKey_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();

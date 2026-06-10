@@ -165,7 +165,7 @@ public class AuthStore
             return (LoginResult.InvalidCredentials, null, null, null);
         }
 
-        if (user.StatusId == UserStatus.Suspended.Id)
+        if (user.StatusId != UserStatus.Active.Id)
         {
             this.logger.LogWarning("Login attempt for suspended user: {UserId}", user.Id);
             activity?.SetTag(OTelConstants.AuthResult, "account_suspended");
@@ -274,7 +274,7 @@ public class AuthStore
 
         var user = apiKey.User;
 
-        if (user.StatusId == UserStatus.Suspended.Id)
+        if (user.StatusId != UserStatus.Active.Id)
         {
             activity?.SetTag(OTelConstants.AuthResult, "account_suspended");
             await this.audit.RecordAsync("auth.api_key_login.failed", user.OrgId, user.Id, "api_key_login",

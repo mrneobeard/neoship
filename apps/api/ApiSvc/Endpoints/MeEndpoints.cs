@@ -25,6 +25,7 @@ public static class MeEndpoints
         var group = routes.MapGroup("/api/v1/me");
 
         group.MapGet("/", GetMeAsync);
+        group.MapDelete("/", DeleteMeAsync);
         group.MapPost("/orgs/{orgId:guid}/switch", SwitchOrgAsync);
         group.MapGet("/sessions", GetSessionsAsync);
         group.MapPost("/sessions/{sessionId:guid}/revoke", RevokeSessionAsync);
@@ -120,6 +121,39 @@ public static class MeEndpoints
         }
 
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult>> DeleteMeAsync(
+        HttpContext httpContext,
+        SessionStore sessions,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var now = DateTime.UtcNow;
+        user.StatusId = UserStatus.Deleted.Id;
+
+        await db.UserSessions
+            .Where(x => x.UserId == user.Id && x.RevokedAt == null)
+            .ExecuteUpdateAsync(x => x
+                .SetProperty(s => s.RevokedAt, now)
+                .SetProperty(s => s.RevokeReason, "user_deleted"), ct);
+        await db.UserApiKeys
+            .Where(x => x.UserId == user.Id && x.RevokedAt == null)
+            .ExecuteUpdateAsync(x => x.SetProperty(k => k.RevokedAt, now), ct);
+        await db.OrganizationMemberships
+            .Where(x => x.UserId == user.Id && x.DeletedAt == null)
+            .ExecuteUpdateAsync(x => x.SetProperty(m => m.DeletedAt, now), ct);
+
+        await db.SaveChangesAsync(ct);
+        await audit.RecordAsync("auth.user.delete", user.OrgId, user.Id, "user.delete", targetType: "user", targetId: user.Id.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<Results<Ok<OrganizationResponse>, UnauthorizedHttpResult, NotFound>> SwitchOrgAsync(

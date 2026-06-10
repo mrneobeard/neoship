@@ -96,7 +96,7 @@ public sealed class PasskeyStore
     {
         var emailUpcase = email.ToUpperInvariant();
         var user = await db.Users.FirstOrDefaultAsync(x => x.EmailUpcase == emailUpcase, ct);
-        if (user is null || user.StatusId == UserStatus.Suspended.Id)
+        if (user is null || user.StatusId != UserStatus.Active.Id)
         {
             return null;
         }
@@ -154,7 +154,7 @@ public sealed class PasskeyStore
                     && x.WebAuthnCredentialIdDigest == credentialDigest,
                 ct);
 
-        if (factor?.User is null || factor.User.StatusId == UserStatus.Suspended.Id)
+        if (factor?.User is null || factor.User.StatusId != UserStatus.Active.Id)
         {
             return null;
         }

@@ -52,6 +52,8 @@ public class ApiKeyStore
             .FirstOrDefaultAsync(k => k.KeyDigest == digest
                 && k.DeletedAt == null
                 && k.RevokedAt == null
+                && k.User != null
+                && k.User.StatusId == UserStatus.Active.Id
                 && (k.ExpiresAt == null || k.ExpiresAt > DateTime.UtcNow), ct);
 
         if (key is null || key.User is null)
