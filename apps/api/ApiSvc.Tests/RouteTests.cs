@@ -1513,6 +1513,44 @@ public sealed class RouteTests
         });
     }
 
+    [Fact]
+    public async Task DeleteOrganization_RequiresConfirmationAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-org-delete@example.com", "Org Delete");
+            userId = user.Id;
+            db.OrganizationMemberships.Add(new OrganizationMembership
+            {
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+            });
+            GrantUserOrgPermission(db, user.Id, "org.settings.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var badRequest = new HttpRequestMessage(HttpMethod.Delete, "/api/v1/orgs/default");
+        badRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        badRequest.Content = new StringContent("{\"confirmation\":\"wrong\"}", Encoding.UTF8, "application/json");
+        using var badResponse = await app.Client.SendAsync(badRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, badResponse.StatusCode);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, "/api/v1/orgs/default");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"confirmation\":\"default\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal(OrganizationStatus.PendingDeleted.Id, (await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken)).StatusId);
+            Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.DeletedAt != null, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.delete", TestContext.Current.CancellationToken));
+        });
+    }
+
     private static User SeedUser(ShipDb db, string email, string name = "Route User")
     {
         var user = new User(Guid.CreateVersion7(), email, name)
@@ -1673,6 +1711,7 @@ public sealed class RouteTests
                         {
                             endpoints.MapAuthEndpoints();
                             endpoints.MapMeEndpoints();
+                            endpoints.MapTenantEndpoints();
                             endpoints.MapOrgEndpoints();
                         });
                     }))

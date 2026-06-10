@@ -143,6 +143,33 @@ public sealed class OrganizationStore
     }
 
     /// <summary>
+    /// Marks an organization pending deletion and revokes active memberships.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The deleted <see cref="Organization"/>, or <see langword="null"/>.</returns>
+    public async Task<Organization?> DeleteAsync(Guid orgId, CancellationToken ct)
+    {
+        var org = await db.Orgs.FirstOrDefaultAsync(o => o.Id == orgId, ct);
+        if (org is null)
+        {
+            return null;
+        }
+
+        var now = DateTime.UtcNow;
+        org.StatusId = OrganizationStatus.PendingDeleted.Id;
+        org.UpdatedAt = now;
+
+        await db.OrganizationMemberships
+            .Where(x => x.OrgId == orgId && x.DeletedAt == null)
+            .ExecuteUpdateAsync(x => x.SetProperty(m => m.DeletedAt, now), ct);
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("Organization marked pending deletion: {OrgId}", org.Id);
+        return org;
+    }
+
+    /// <summary>
     /// Updates organization authentication policy switches.
     /// </summary>
     /// <param name="orgId">The organization identifier.</param>

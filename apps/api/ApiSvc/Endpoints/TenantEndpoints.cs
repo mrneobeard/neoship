@@ -30,6 +30,7 @@ public static class TenantEndpoints
         group.MapPost("/", CreateOrganizationAsync);
         group.MapGet("/{orgSlug}", GetOrganizationAsync);
         group.MapPatch("/{orgSlug}", UpdateOrganizationAsync);
+        group.MapDelete("/{orgSlug}", DeleteOrganizationAsync);
 
         return group;
     }
@@ -39,6 +40,8 @@ public static class TenantEndpoints
     private sealed record CreateOrganizationRequest(string Name, string Slug);
 
     private sealed record UpdateOrganizationRequest(string? Name);
+
+    private sealed record DeleteOrganizationRequest(string Confirmation);
 
     private static OrganizationResponse ToResponse(Organization org)
         => new(org.Id, org.Name, org.Slug, org.Status.Name, org.TenantMode.Name, org.CreatedAt, org.UpdatedAt);
@@ -176,6 +179,57 @@ public static class TenantEndpoints
         await audit.RecordAsync("org.update", org.Id, user.Id, "org.update", targetType: "org", targetId: org.Id.ToString(), ct: ct);
 
         return TypedResults.Ok(new ApiEnvelope<OrganizationResponse>(ToResponse(updated), ApiMeta.FromHttpContext(httpContext)));
+    }
+
+    private static async Task<IResult> DeleteOrganizationAsync(
+        string orgSlug,
+        [FromBody] DeleteOrganizationRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        OrganizationStore organizations,
+        PermissionResolver permissions,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication required.");
+        }
+
+        var org = await organizations.GetBySlugAsync(orgSlug, ct);
+        if (org is null)
+        {
+            return Error(httpContext, StatusCodes.Status404NotFound, "tenant_not_found", "Organization not found.");
+        }
+
+        if (!await organizations.UserCanAccessAsync(user.Id, org.Id, ct))
+        {
+            return Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
+        }
+
+        var allowed = await permissions.UserHasAsync(user.Id, PermissionKey.Create("org.settings", "write"), PermissionScopeKind.Organization, org.Slug, ct);
+        if (!allowed)
+        {
+            return Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
+        }
+
+        if (!string.Equals(req.Confirmation?.Trim(), org.Slug, StringComparison.Ordinal))
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?>
+            {
+                ["fields"] = new Dictionary<string, string[]> { ["confirmation"] = ["Confirmation must match the organization slug."] },
+            });
+        }
+
+        var deleted = await organizations.DeleteAsync(org.Id, ct);
+        if (deleted is null)
+        {
+            return Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Organization not found.");
+        }
+
+        await audit.RecordAsync("org.delete", org.Id, user.Id, "org.delete", targetType: "org", targetId: org.Id.ToString(), ct: ct);
+        return TypedResults.Ok(new ApiEnvelope<OrganizationResponse>(ToResponse(deleted), ApiMeta.FromHttpContext(httpContext)));
     }
 
     private static Dictionary<string, string[]> ValidateOrganizationInput(string? name, string? slug, bool validateSlug = true)
