@@ -1350,6 +1350,38 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateIdentityProvider_WithGooglePresetFillsOidcMetadata()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-idp-google@example.com", "IDP Google");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Google\",\"preset\":\"google\",\"clientId\":\"client-id\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("OIDC", body, StringComparison.Ordinal);
+        Assert.Contains("https://accounts.google.com", body, StringComparison.Ordinal);
+        Assert.Contains("https://oauth2.googleapis.com/token", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            var provider = await db.UserIdentityProviders.SingleAsync(x => x.Name == "Google", TestContext.Current.CancellationToken);
+            Assert.Equal(UserIdentityProviderType.OIDC.Id, provider.ProviderTypeId);
+            Assert.Equal("https://accounts.google.com", provider.IssuerUrl);
+            Assert.Contains("oauth2.googleapis.com/token", provider.MetadataJson, StringComparison.Ordinal);
+        });
+    }
+
+    [Fact]
     public async Task CreateIdentityProvider_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1364,7 +1396,7 @@ public sealed class RouteTests
 
         using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
-        request.Content = new StringContent("{\"name\":\" \" ,\"providerType\":\"ldap\",\"issuerUrl\":\"http://idp.example.com\",\"clientId\":\" \" ,\"metadataJson\":\"not-json\"}", Encoding.UTF8, "application/json");
+        request.Content = new StringContent("{\"name\":\" \" ,\"providerType\":\"ldap\",\"preset\":\"unknown\",\"issuerUrl\":\"http://idp.example.com\",\"clientId\":\" \" ,\"metadataJson\":\"not-json\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
@@ -1373,6 +1405,7 @@ public sealed class RouteTests
         var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
         Assert.True(fields.TryGetProperty("name", out _));
         Assert.True(fields.TryGetProperty("providerType", out _));
+        Assert.True(fields.TryGetProperty("preset", out _));
         Assert.True(fields.TryGetProperty("issuerUrl", out _));
         Assert.True(fields.TryGetProperty("clientId", out _));
         Assert.True(fields.TryGetProperty("metadataJson", out _));

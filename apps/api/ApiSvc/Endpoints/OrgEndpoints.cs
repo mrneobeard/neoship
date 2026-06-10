@@ -2042,7 +2042,8 @@ public static class OrgEndpoints
 
     public record CreateIdentityProviderRequest(
         string Name,
-        string ProviderType,
+        string? ProviderType,
+        string? Preset,
         string? IssuerUrl,
         string? ClientId,
         string? ClientSecret,
@@ -2079,6 +2080,30 @@ public static class OrgEndpoints
         };
 
         return providerType.Id != UserIdentityProviderType.Unknown.Id;
+    }
+
+    private sealed record IdentityProviderPreset(UserIdentityProviderType ProviderType, string? IssuerUrl, string MetadataJson);
+
+    private static bool TryGetIdentityProviderPreset(string? value, out IdentityProviderPreset preset)
+    {
+        preset = value?.Trim().ToLowerInvariant() switch
+        {
+            "github" => new IdentityProviderPreset(
+                UserIdentityProviderType.OAUTH2,
+                null,
+                "{\"authorization_endpoint\":\"https://github.com/login/oauth/authorize\",\"token_endpoint\":\"https://github.com/login/oauth/access_token\",\"user_endpoint\":\"https://api.github.com/user\",\"email_endpoint\":\"https://api.github.com/user/emails\",\"default_scopes\":[\"read:user\",\"user:email\"]}"),
+            "google" => new IdentityProviderPreset(
+                UserIdentityProviderType.OIDC,
+                "https://accounts.google.com",
+                "{\"authorization_endpoint\":\"https://accounts.google.com/o/oauth2/v2/auth\",\"token_endpoint\":\"https://oauth2.googleapis.com/token\",\"default_scopes\":[\"openid\",\"email\",\"profile\"]}"),
+            "microsoft" => new IdentityProviderPreset(
+                UserIdentityProviderType.OIDC,
+                "https://login.microsoftonline.com/common/v2.0",
+                "{\"authorization_endpoint\":\"https://login.microsoftonline.com/common/oauth2/v2.0/authorize\",\"token_endpoint\":\"https://login.microsoftonline.com/common/oauth2/v2.0/token\",\"default_scopes\":[\"openid\",\"email\",\"profile\"]}"),
+            _ => new IdentityProviderPreset(UserIdentityProviderType.Unknown, null, string.Empty),
+        };
+
+        return preset.ProviderType.Id != UserIdentityProviderType.Unknown.Id;
     }
 
     private static bool IsValidIssuerUrl(string? issuerUrl)
@@ -2134,13 +2159,22 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var validation = ValidateCreateIdentityProvider(req, out var providerType);
+        var validation = ValidateCreateIdentityProvider(req, out var providerType, out var preset);
         if (validation.Count > 0)
         {
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var provider = await providers.CreateAsync(org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
+        var provider = await providers.CreateAsync(
+            org.Id,
+            auth.User!.Id,
+            req.Name,
+            providerType,
+            req.IssuerUrl ?? preset?.IssuerUrl,
+            req.ClientId,
+            req.ClientSecret,
+            req.MetadataJson ?? preset?.MetadataJson,
+            ct);
         await audit.RecordAsync("org.identity_providers.create", org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
 
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/identity-providers/{provider.Id}", ToIdentityProviderResponse(provider));
@@ -2217,22 +2251,54 @@ public static class OrgEndpoints
         return TypedResults.Ok(ToIdentityProviderResponse(provider));
     }
 
-    private static Dictionary<string, string[]> ValidateCreateIdentityProvider(CreateIdentityProviderRequest req, out UserIdentityProviderType providerType)
+    private static Dictionary<string, string[]> ValidateCreateIdentityProvider(
+        CreateIdentityProviderRequest req,
+        out UserIdentityProviderType providerType,
+        out IdentityProviderPreset? preset)
     {
         var errors = new Dictionary<string, string[]>();
         providerType = UserIdentityProviderType.Unknown;
+        preset = null;
 
         if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160)
         {
             errors["name"] = ["Name is required and must be 160 characters or fewer."];
         }
 
-        if (string.IsNullOrWhiteSpace(req.ProviderType) || !TryParseProviderType(req.ProviderType, out providerType))
+        if (!string.IsNullOrWhiteSpace(req.Preset))
+        {
+            if (!TryGetIdentityProviderPreset(req.Preset, out var parsedPreset))
+            {
+                errors["preset"] = ["Preset must be github, google, or microsoft when provided."];
+            }
+            else
+            {
+                preset = parsedPreset;
+                providerType = parsedPreset.ProviderType;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(req.ProviderType) && preset is null)
         {
             errors["providerType"] = ["Provider type must be oidc, oauth2, or saml."];
         }
+        else if (!string.IsNullOrWhiteSpace(req.ProviderType))
+        {
+            if (!TryParseProviderType(req.ProviderType, out var parsedProviderType))
+            {
+                errors["providerType"] = ["Provider type must be oidc, oauth2, or saml."];
+            }
+            else if (preset is not null && parsedProviderType.Id != preset.ProviderType.Id)
+            {
+                errors["providerType"] = ["Provider type must match the selected preset."];
+            }
+            else
+            {
+                providerType = parsedProviderType;
+            }
+        }
 
-        AddIdentityProviderCommonErrors(errors, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson);
+        AddIdentityProviderCommonErrors(errors, req.IssuerUrl ?? preset?.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson ?? preset?.MetadataJson);
         return errors;
     }
 
