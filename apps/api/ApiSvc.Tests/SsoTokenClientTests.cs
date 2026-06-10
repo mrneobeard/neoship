@@ -21,6 +21,36 @@ namespace NeoShip.ApiSvc.Tests;
 public class SsoTokenClientTests
 {
     /// <summary>
+    /// Verifies OAuth2 profile fetch uses the verified primary provider email.
+    /// </summary>
+    [Fact]
+    public async Task FetchAsync_ReturnsVerifiedOAuth2ProfileEmail()
+    {
+        var handler = new SequenceHandler(
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"id\":123,\"login\":\"octo\",\"name\":\"Octo Cat\",\"email\":null}"),
+            },
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("[{\"email\":\"octo@example.com\",\"verified\":true,\"primary\":true}]"),
+            });
+        var client = new SsoOAuth2ProfileClient(new HttpClient(handler));
+        var provider = CreateProvider();
+        provider.ProviderTypeId = UserIdentityProviderType.OAUTH2.Id;
+        provider.MetadataJson = "{\"user_endpoint\":\"https://api.github.com/user\",\"email_endpoint\":\"https://api.github.com/user/emails\"}";
+
+        var profile = await client.FetchAsync(provider, "access-token", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(profile);
+        Assert.Equal("123", profile!.Subject);
+        Assert.Equal("octo@example.com", profile.Email);
+        Assert.True(profile.EmailVerified);
+        Assert.Equal("Octo Cat", profile.Name);
+        Assert.Equal(2, handler.Requests.Count);
+    }
+
+    /// <summary>
     /// Verifies token exchange posts required OIDC fields and returns the ID token.
     /// </summary>
     [Fact]
@@ -140,6 +170,24 @@ public class SsoTokenClientTests
             this.RequestUri = request.RequestUri;
             this.Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
             return this.response;
+        }
+    }
+
+    private sealed class SequenceHandler : HttpMessageHandler
+    {
+        private readonly Queue<HttpResponseMessage> responses;
+
+        public SequenceHandler(params HttpResponseMessage[] responses)
+        {
+            this.responses = new Queue<HttpResponseMessage>(responses);
+        }
+
+        public List<Uri?> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            this.Requests.Add(request.RequestUri);
+            return Task.FromResult(this.responses.Dequeue());
         }
     }
 }

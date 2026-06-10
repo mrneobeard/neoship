@@ -2179,6 +2179,7 @@ public sealed class RouteTests
                         services.AddSingleton<SsoChallengeStore>();
                         services.AddSingleton<ISsoTokenClient, FakeSsoTokenClient>();
                         services.AddSingleton<ISsoTokenValidator>(fakeTokenValidator);
+                        services.AddSingleton<ISsoOAuth2ProfileClient, FakeSsoOAuth2ProfileClient>();
                         services.AddScoped<SsoStore>();
                     })
                     .Configure(app =>
@@ -2280,5 +2281,11 @@ public sealed class RouteTests
         {
             return Task.FromResult(this.identity);
         }
+    }
+
+    private sealed class FakeSsoOAuth2ProfileClient : ISsoOAuth2ProfileClient
+    {
+        public Task<SsoOAuth2Profile?> FetchAsync(UserIdentityProvider provider, string accessToken, CancellationToken ct = default)
+            => Task.FromResult<SsoOAuth2Profile?>(new SsoOAuth2Profile(accessToken, $"{accessToken}@example.com", true, accessToken));
     }
 }

@@ -241,6 +241,48 @@ public class SsoStoreTests
     }
 
     /// <summary>
+    /// Verifies OAuth2 finish provisions a user from a verified profile.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_ProvisionsOAuth2UserForVerifiedProfile()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var adminId = Guid.NewGuid();
+        db.Users.Add(new User(adminId, "oauth-owner@example.com", "OAuth Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = adminId,
+            Name = "GitHub",
+            ProviderTypeId = UserIdentityProviderType.OAUTH2.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(),
+            new FakeSsoOAuth2ProfileClient(new SsoOAuth2Profile("github-subject", "github-user@example.com", true, "GitHub User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.NotNull(user);
+        Assert.Equal("github-user@example.com", user!.Email);
+        Assert.True(await db.UserExternalIdentities.AnyAsync(x => x.UserId == user.Id && x.Subject == "github-subject", TestContext.Current.CancellationToken));
+        Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Verifies OIDC finish prefers an existing external identity link over email matching.
     /// </summary>
     [Fact]
@@ -507,7 +549,7 @@ public class SsoStoreTests
     {
         public Task<SsoTokenResponse?> ExchangeAsync(UserIdentityProvider provider, string code, string redirectUri, CancellationToken ct = default)
         {
-            return Task.FromResult<SsoTokenResponse?>(new SsoTokenResponse("id-token"));
+            return Task.FromResult<SsoTokenResponse?>(new SsoTokenResponse("id-token", "access-token"));
         }
     }
 
@@ -523,6 +565,21 @@ public class SsoStoreTests
         public Task<SsoExternalIdentity?> ValidateAsync(UserIdentityProvider provider, string idToken, string nonce, CancellationToken ct = default)
         {
             return Task.FromResult(this.identity);
+        }
+    }
+
+    private sealed class FakeSsoOAuth2ProfileClient : ISsoOAuth2ProfileClient
+    {
+        private readonly SsoOAuth2Profile? profile;
+
+        public FakeSsoOAuth2ProfileClient(SsoOAuth2Profile? profile)
+        {
+            this.profile = profile;
+        }
+
+        public Task<SsoOAuth2Profile?> FetchAsync(UserIdentityProvider provider, string accessToken, CancellationToken ct = default)
+        {
+            return Task.FromResult(this.profile);
         }
     }
 }

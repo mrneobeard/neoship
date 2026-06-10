@@ -22,6 +22,7 @@ public sealed class SsoStore
     private readonly SsoChallengeStore challenges;
     private readonly ISsoTokenClient tokenClient;
     private readonly ISsoTokenValidator tokenValidator;
+    private readonly ISsoOAuth2ProfileClient? oauth2ProfileClient;
 
     /// <summary>
     /// Initializes a new <see cref="SsoStore"/> instance.
@@ -30,12 +31,14 @@ public sealed class SsoStore
     /// <param name="challenges">The SSO challenge store.</param>
     /// <param name="tokenClient">The OIDC token client.</param>
     /// <param name="tokenValidator">The OIDC token validator.</param>
-    public SsoStore(ShipDb db, SsoChallengeStore challenges, ISsoTokenClient tokenClient, ISsoTokenValidator tokenValidator)
+    /// <param name="oauth2ProfileClient">The optional OAuth2 profile client.</param>
+    public SsoStore(ShipDb db, SsoChallengeStore challenges, ISsoTokenClient tokenClient, ISsoTokenValidator tokenValidator, ISsoOAuth2ProfileClient? oauth2ProfileClient = null)
     {
         this.db = db;
         this.challenges = challenges;
         this.tokenClient = tokenClient;
         this.tokenValidator = tokenValidator;
+        this.oauth2ProfileClient = oauth2ProfileClient;
     }
 
     /// <summary>
@@ -61,7 +64,7 @@ public sealed class SsoStore
 
         var query = this.db.UserIdentityProviders
             .Where(x => x.OrgId == org.Id
-                && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
+                && (x.ProviderTypeId == UserIdentityProviderType.OIDC.Id || x.ProviderTypeId == UserIdentityProviderType.OAUTH2.Id)
                 && x.StatusId == UserIdentityProviderStatus.Active.Id);
 
         if (providerId.HasValue)
@@ -110,7 +113,7 @@ public sealed class SsoStore
 
         var provider = await this.db.UserIdentityProviders.FirstOrDefaultAsync(x => x.Id == challenge.ProviderId
             && x.OrgId == challenge.OrgId
-            && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
+            && (x.ProviderTypeId == UserIdentityProviderType.OIDC.Id || x.ProviderTypeId == UserIdentityProviderType.OAUTH2.Id)
             && x.StatusId == UserIdentityProviderStatus.Active.Id, ct);
         if (provider is null)
         {
@@ -129,7 +132,7 @@ public sealed class SsoStore
             return null;
         }
 
-        var externalIdentity = await this.tokenValidator.ValidateAsync(provider, tokenResponse.IdToken, challenge.Nonce, ct);
+        var externalIdentity = await this.ResolveExternalIdentityAsync(provider, tokenResponse, challenge.Nonce, ct);
         if (externalIdentity is null || !externalIdentity.EmailVerified)
         {
             return null;
@@ -212,6 +215,24 @@ public sealed class SsoStore
 
         await transaction.CommitAsync(ct);
         return user;
+    }
+
+    private async Task<SsoExternalIdentity?> ResolveExternalIdentityAsync(UserIdentityProvider provider, SsoTokenResponse tokenResponse, string nonce, CancellationToken ct)
+    {
+        if (provider.ProviderTypeId == UserIdentityProviderType.OIDC.Id)
+        {
+            return string.IsNullOrWhiteSpace(tokenResponse.IdToken)
+                ? null
+                : await this.tokenValidator.ValidateAsync(provider, tokenResponse.IdToken, nonce, ct);
+        }
+
+        if (provider.ProviderTypeId != UserIdentityProviderType.OAUTH2.Id || this.oauth2ProfileClient is null || string.IsNullOrWhiteSpace(tokenResponse.AccessToken))
+        {
+            return null;
+        }
+
+        var profile = await this.oauth2ProfileClient.FetchAsync(provider, tokenResponse.AccessToken, ct);
+        return profile is null ? null : new SsoExternalIdentity(profile.Subject, profile.Email, profile.EmailVerified, profile.Name);
     }
 
     /// <summary>

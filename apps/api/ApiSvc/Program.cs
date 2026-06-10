@@ -114,6 +114,7 @@ builder.Services.AddSingleton<PasskeyChallengeStore>();
 builder.Services.AddSingleton<SsoChallengeStore>();
 builder.Services.AddHttpClient<ISsoTokenClient, SsoTokenClient>();
 builder.Services.AddHttpClient<ISsoTokenValidator, SsoTokenValidator>();
+builder.Services.AddHttpClient<ISsoOAuth2ProfileClient, SsoOAuth2ProfileClient>();
 builder.Services.AddScoped<SsoStore>();
 
 var app = builder.Build();
