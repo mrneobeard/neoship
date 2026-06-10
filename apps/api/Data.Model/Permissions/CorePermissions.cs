@@ -19,6 +19,8 @@ public static class CorePermissions
         new PermissionDefinition(PermissionKey.Create("auth.mfa", "write"), "Manage MFA settings", PermissionScopeKind.Resource),
         new PermissionDefinition(PermissionKey.Create("org.settings", "read"), "Read organization settings", PermissionScopeKind.Organization),
         new PermissionDefinition(PermissionKey.Create("org.settings", "write"), "Update organization settings", PermissionScopeKind.Organization),
+        new PermissionDefinition(PermissionKey.Create("org.members", "read"), "Read organization members and invites", PermissionScopeKind.Organization),
+        new PermissionDefinition(PermissionKey.Create("org.members", "write"), "Invite and manage organization members", PermissionScopeKind.Organization),
         new PermissionDefinition(PermissionKey.Create("org.roles", "read"), "Read roles", PermissionScopeKind.Organization),
         new PermissionDefinition(PermissionKey.Create("org.roles", "write"), "Create and update roles", PermissionScopeKind.Organization),
         new PermissionDefinition(PermissionKey.Create("org.groups", "read"), "Read groups", PermissionScopeKind.Organization),

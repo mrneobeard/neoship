@@ -18,6 +18,10 @@ public static class OrgEndpoints
 
         group.MapGet("/permissions", ListPermissionsAsync);
 
+        group.MapGet("/invites", ListInvitesAsync);
+        group.MapPost("/invites", CreateInviteAsync);
+        group.MapPost("/invites/{inviteId:guid}/revoke", RevokeInviteAsync);
+
         group.MapGet("/roles", ListRolesAsync);
         group.MapPost("/roles", CreateRoleAsync);
         group.MapGet("/roles/{roleId:guid}", GetRoleAsync);
@@ -96,6 +100,32 @@ public static class OrgEndpoints
     /// Represents a registered permission definition.
     /// </summary>
     public record PermissionDefinitionResponse(string Key, string Resource, string Action, string Description, List<PermissionScopeKind> AllowedScopes);
+
+    /// <summary>
+    /// Represents an organization invite response.
+    /// </summary>
+    public record OrganizationInviteResponse(
+        Guid Id,
+        string Email,
+        DateTime CreatedAt,
+        DateTime ExpiresAt,
+        DateTime? AcceptedAt,
+        DateTime? RevokedAt);
+
+    /// <summary>
+    /// Represents an organization invite creation response.
+    /// </summary>
+    public record CreateOrganizationInviteResponse(
+        Guid Id,
+        string Email,
+        string Token,
+        DateTime CreatedAt,
+        DateTime ExpiresAt);
+
+    /// <summary>
+    /// Represents an organization invite creation request.
+    /// </summary>
+    public record CreateOrganizationInviteRequest(string Email, List<Guid>? RoleIds, List<Guid>? GroupIds);
 
     /// <summary>
     /// Represents organization authentication policy settings.
@@ -252,6 +282,9 @@ public static class OrgEndpoints
             definition.Description,
             definition.AllowedScopes.ToList());
 
+    private static OrganizationInviteResponse ToInviteResponse(OrganizationInvite invite)
+        => new(invite.Id, invite.Email, invite.CreatedAt, invite.ExpiresAt, invite.AcceptedAt, invite.RevokedAt);
+
     private static RoleResponse ToRoleResponse(Role role)
         => new(
             role.Id,
@@ -363,6 +396,97 @@ public static class OrgEndpoints
             .ToList();
 
         return TypedResults.Ok(result);
+    }
+
+    private static async Task<IResult> ListInvitesAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        OrganizationInviteStore invites,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "read"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var list = await invites.ListAsync(org.Id, ct);
+        return TypedResults.Ok(list.Select(ToInviteResponse).ToList());
+    }
+
+    private static async Task<IResult> CreateInviteAsync(
+        string orgSlug,
+        [FromBody] CreateOrganizationInviteRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        OrganizationInviteStore invites,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        if (string.IsNullOrWhiteSpace(req.Email))
+        {
+            return TypedResults.BadRequest("Email is required.");
+        }
+
+        var (invite, token) = await invites.CreateAsync(org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
+        await audit.RecordAsync("org.invites.create", org.Id, auth.User.Id, "org.invite.create", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/orgs/{orgSlug}/invites/{invite.Id}", new CreateOrganizationInviteResponse(invite.Id, invite.Email, token, invite.CreatedAt, invite.ExpiresAt));
+    }
+
+    private static async Task<IResult> RevokeInviteAsync(
+        string orgSlug,
+        Guid inviteId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        OrganizationInviteStore invites,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.members", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var revoked = await invites.RevokeAsync(org.Id, inviteId, ct);
+        if (!revoked)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.invites.revoke", org.Id, auth.User!.Id, "org.invite.revoke", targetType: "organization_invite", targetId: inviteId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<IResult> ListRolesAsync(

@@ -37,6 +37,20 @@ public sealed class OrganizationInviteStore
     }
 
     /// <summary>
+    /// Lists organization invites.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The organization invites.</returns>
+    public async Task<List<OrganizationInvite>> ListAsync(Guid orgId, CancellationToken ct = default)
+    {
+        return await this.db.OrganizationInvites
+            .Where(x => x.OrgId == orgId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
     /// Creates an organization invite.
     /// </summary>
     /// <param name="orgId">The organization identifier.</param>

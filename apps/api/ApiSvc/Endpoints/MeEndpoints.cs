@@ -32,6 +32,7 @@ public static class MeEndpoints
 
         group.MapGet("/external-identities", GetExternalIdentitiesAsync);
         group.MapDelete("/external-identities/{externalIdentityId:guid}", UnlinkExternalIdentityAsync);
+        group.MapPost("/invites/accept", AcceptInviteAsync);
 
         group.MapPost("/mfa/totp/start", StartTotpAsync);
         group.MapPost("/mfa/totp/confirm", ConfirmTotpAsync);
@@ -279,6 +280,8 @@ public static class MeEndpoints
 
     private sealed record ExternalIdentityResponse(Guid Id, long ProviderId, string? ProviderName, string Subject, string? Email, DateTime CreatedAt, DateTime? LastUsedAt);
 
+    private sealed record AcceptInviteRequest(string Token);
+
     private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
@@ -429,6 +432,30 @@ public static class MeEndpoints
             SsoExternalIdentityUnlinkResult.PolicyDenied => TypedResults.StatusCode(StatusCodes.Status403Forbidden),
             _ => TypedResults.Conflict("Configure another sign-in method before unlinking this identity."),
         };
+    }
+
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> AcceptInviteAsync(
+        [FromBody] AcceptInviteRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        OrganizationInviteStore invites,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var invite = await invites.AcceptAsync(req.Token, user.Id, ct);
+        if (invite is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.invites.accept", invite.OrgId, user.Id, "org.invite.accept", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<Results<Ok<BeginPasskeyRegistrationResponse>, UnauthorizedHttpResult>> BeginPasskeyRegistrationAsync(

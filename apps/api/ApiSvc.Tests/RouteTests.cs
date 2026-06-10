@@ -709,6 +709,93 @@ public sealed class RouteTests
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    [Fact]
+    public async Task CreateInvite_WithHumanWritePermissionReturnsTokenAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-invite-writer@example.com", "Invite Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"email\":\"invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("invited@example.com", body, StringComparison.Ordinal);
+        Assert.Contains("token", body, StringComparison.OrdinalIgnoreCase);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.OrganizationInvites.AnyAsync(x => x.Email == "invited@example.com", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateInvite_RejectsServiceAccountBearerEvenWithMembersWriteClaim()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.members.write");
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        request.Content = new StringContent("{\"email\":\"invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AcceptInvite_CreatesMembershipAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        const string rawToken = "invite-token";
+        await app.SeedAsync(db =>
+        {
+            var inviter = SeedUser(db, "route-invite-owner@example.com", "Invite Owner");
+            var invited = SeedUser(db, "route-invited@example.com", "Invited User");
+            userId = invited.Id;
+            db.OrganizationInvites.Add(new OrganizationInvite
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                InvitedByUserId = inviter.Id,
+                Email = invited.Email,
+                EmailUpcase = invited.EmailUpcase,
+                TokenDigest = TokenStore.ComputeDigestBase64(rawToken),
+                PendingRoleIdsJson = "[]",
+                PendingGroupIdsJson = "[]",
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+                ExpiresAt = DateTime.UtcNow.AddDays(7),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/invites/accept");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"token\":\"invite-token\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.accept", TestContext.Current.CancellationToken));
+        });
+    }
+
     private static User SeedUser(ShipDb db, string email, string name = "Route User")
     {
         var user = new User(Guid.CreateVersion7(), email, name)
