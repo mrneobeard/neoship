@@ -1727,7 +1727,7 @@ public sealed class SshClient : IDisposable
     {
         var normalized = path.Replace('\\', '/');
         var index = normalized.LastIndexOf('/');
-        return index >= 0 ? normalized[(index + 1) ..] : normalized;
+        return index >= 0 ? normalized[(index + 1)..] : normalized;
     }
 
     private static string EscapeForSingleQuotedShell(string value)

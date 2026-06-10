@@ -5,7 +5,7 @@ namespace NeoBeard.Options;
 /// </summary>
 /// <typeparam name="T">The value type.</typeparam>
 public readonly struct ValueOption<T> : IOption, IEquatable<ValueOption<T>>, IEquatable<T>
-    where T: notnull
+    where T : notnull
 {
     private readonly T value;
 
@@ -54,7 +54,7 @@ public readonly struct ValueOption<T> : IOption, IEquatable<ValueOption<T>>, IEq
     /// <param name="value">Value to wrap.</param>
     /// <returns>Value option containing value.</returns>
     public static implicit operator ValueOption<T>(T value) => new(value);
-    
+
     /// <summary>
     /// Converts none marker to empty option.
     /// </summary>
@@ -181,7 +181,7 @@ public readonly struct ValueOption<T> : IOption, IEquatable<ValueOption<T>>, IEq
     {
         if (this.hasValue)
             return map(this.value);
-            
+
         return factory();
     }
 
@@ -212,7 +212,7 @@ public readonly struct ValueOption<T> : IOption, IEquatable<ValueOption<T>>, IEq
 
         return false;
     }
-    
+
     /// <summary>
     /// Returns this value option or fallback value option.
     /// </summary>
@@ -254,7 +254,7 @@ public readonly struct ValueOption<T> : IOption, IEquatable<ValueOption<T>>, IEq
 
         return default!;
     }
-    
+
     /// <summary>
     /// Gets value or fallback from factory.
     /// </summary>

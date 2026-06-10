@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
-using NeoBeard.Ssh;
 using System.Text;
+
+using NeoBeard.Ssh;
 
 namespace NeoBeard.Age;
 

@@ -468,7 +468,7 @@ public sealed class Result<T> : IUnion, IResult<T>
     public T ValueOrDefault(Func<T> defaultValueFactory)
     {
         if (this.ok)
-            return this.value; 
+            return this.value;
 
         return defaultValueFactory();
     }
@@ -481,7 +481,7 @@ public sealed class Result<T> : IUnion, IResult<T>
     public T ValueOrDefault(T defaultValue)
     {
         if (this.ok)
-            return this.value; 
+            return this.value;
 
         return defaultValue;
     }

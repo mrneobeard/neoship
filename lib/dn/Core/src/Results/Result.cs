@@ -403,7 +403,7 @@ public sealed class Result : IResult
         {
             var value = await action(cancellationToken).ConfigureAwait(false);
             return new(value);
-        } 
+        }
         catch (Exception ex)
         {
             return ex;
@@ -448,7 +448,7 @@ public sealed class Result : IResult
         {
             var value = await action(cancellationToken);
             return new(value);
-        } 
+        }
         catch (Exception ex)
         {
             return new Result<T, E>(errorFactory(ex));
@@ -569,7 +569,7 @@ public sealed class Result : IResult
 
         return errorMap(this.error);
     }
-    
+
     /// <summary>
     /// Maps success to <typeparamref name="U"/> and errors to <typeparamref name="E"/>.
     /// </summary>

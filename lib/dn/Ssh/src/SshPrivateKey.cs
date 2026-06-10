@@ -340,13 +340,13 @@ internal abstract class SshPrivateKey
             if (beginEnd < 0)
                 throw new FormatException("PEM begin marker is invalid.");
 
-            var label = text[(begin + 11) ..beginEnd];
+            var label = text[(begin + 11)..beginEnd];
             var endMarker = "-----END " + label + "-----";
             var end = text.IndexOf(endMarker, beginEnd, StringComparison.Ordinal);
             if (end < 0)
                 throw new FormatException("PEM end marker is missing.");
 
-            var lines = text[(beginEnd + 5) ..end].Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            var lines = text[(beginEnd + 5)..end].Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
             var headers = new Dictionary<string, string>(StringComparer.Ordinal);
             var base64 = new StringBuilder();
             var inBody = false;
@@ -356,7 +356,7 @@ internal abstract class SshPrivateKey
                 var colon = line.IndexOf(':');
                 if (!inBody && colon > 0)
                 {
-                    headers[line[..colon]] = line[(colon + 1) ..].Trim();
+                    headers[line[..colon]] = line[(colon + 1)..].Trim();
                     continue;
                 }
 

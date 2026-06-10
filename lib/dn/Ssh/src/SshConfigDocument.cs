@@ -181,7 +181,7 @@ public sealed class SshConfigDocument
                     continue;
 
                 var key = token[..index];
-                var value = token[(index + 1) ..];
+                var value = token[(index + 1)..];
                 env[key] = value;
             }
         }

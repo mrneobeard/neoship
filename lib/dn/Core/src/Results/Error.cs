@@ -46,7 +46,7 @@ public readonly struct Error : IError
     public Error(IError cause, string? message = null, string? code = null)
     {
         this.Message = message ?? cause.Message;
-        this.Code =  code ?? cause.Code;
+        this.Code = code ?? cause.Code;
         this.Exception = cause.Exception;
         this.Cause = cause;
     }
@@ -176,7 +176,7 @@ public readonly struct Error : IError
     /// throw ex;
     /// </code>
     /// </example>
-    public Exception ToException() 
+    public Exception ToException()
         => this.Exception ?? new ResultException(this.Message, this);
 
     /// <summary>
@@ -207,7 +207,7 @@ public readonly struct Error<T> : IError<T>
     /// <param name="value">The typed error payload.</param>
     /// <param name="message">Optional message.</param>
     /// <param name="code">Optional error code.</param>
-    public Error(T value, string? message = null, string? code = null) 
+    public Error(T value, string? message = null, string? code = null)
     {
         this.Value = value;
         this.Message = message ?? value?.ToString() ?? string.Empty;
@@ -241,7 +241,7 @@ public readonly struct Error<T> : IError<T>
     {
         this.Value = value;
         this.Message = message ?? cause.Message;
-        this.Code =  code ?? cause.Code;
+        this.Code = code ?? cause.Code;
         this.Exception = cause.Exception;
         this.Cause = cause;
     }
@@ -356,7 +356,7 @@ public readonly struct Error<T> : IError<T>
     /// Converts this typed error into an <see cref="Exception"/>.
     /// </summary>
     /// <returns>The associated <see cref="Exception"/> if present; otherwise a new <see cref="ResultException"/>.</returns>
-    public Exception ToException() 
+    public Exception ToException()
         => this.Exception ?? new ResultException(this.Message, this);
 
     /// <summary>

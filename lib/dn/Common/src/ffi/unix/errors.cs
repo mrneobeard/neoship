@@ -181,7 +181,7 @@ internal static partial class FFI
                 message = buffer;
             }
 
-            return Marshal.PtrToStringUTF8((IntPtr)message) !;
+            return Marshal.PtrToStringUTF8((IntPtr)message)!;
         }
 
 #if SERIAL_PORTS

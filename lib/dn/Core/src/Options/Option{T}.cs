@@ -9,7 +9,7 @@ namespace NeoBeard.Options;
 /// </summary>
 /// <typeparam name="T">Option value type.</typeparam>
 public sealed class Option<T> : IUnion, IOption
-    where T: notnull
+    where T : notnull
 {
     private readonly T value;
 
@@ -262,7 +262,7 @@ public sealed class Option<T> : IUnion, IOption
     public T ValueOrDefault(Func<T> defaultValueFactory)
     {
         if (this.hasValue)
-            return this.value; 
+            return this.value;
 
         return defaultValueFactory();
     }
@@ -275,7 +275,7 @@ public sealed class Option<T> : IUnion, IOption
     public T ValueOrDefault(T defaultValue)
     {
         if (this.hasValue)
-            return this.value; 
+            return this.value;
 
         return defaultValue;
     }

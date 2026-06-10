@@ -407,7 +407,7 @@ public readonly struct HashType : IEquatable<HashType>
     /// </code>
     /// </example>
     /// </remarks>
-    public bool SupportsHmac() => this.Id is >= Md5Id and <= Blake2S256Id and not(Sha224Id or Sha3224Id);
+    public bool SupportsHmac() => this.Id is >= Md5Id and <= Blake2S256Id and not (Sha224Id or Sha3224Id);
 
     /// <summary>
     /// Determines whether this hash type supports PBKDF2 key derivation.
@@ -421,7 +421,7 @@ public readonly struct HashType : IEquatable<HashType>
     /// </code>
     /// </example>
     /// </remarks>
-    public bool SupportsPbkdf2() => this.Id is >= Sha1Id and <= Sha3512Id and not(Sha224Id or Sha3224Id);
+    public bool SupportsPbkdf2() => this.Id is >= Sha1Id and <= Sha3512Id and not (Sha224Id or Sha3224Id);
 
     /// <summary>
     /// Creates an HMAC algorithm instance for this hash type with the specified key.

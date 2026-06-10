@@ -1,6 +1,6 @@
-using Xunit;
-
 using NeoBeard.Results;
+
+using Xunit;
 
 namespace NeoBeard.Results.Tests;
 

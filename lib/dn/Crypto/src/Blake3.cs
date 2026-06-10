@@ -358,14 +358,14 @@ public sealed class Blake3 : HashAlgorithm
         var fullWords = bytes.Length / sizeof(uint);
         for (var i = 0; i < fullWords; i++)
         {
-            words[i] = BinaryPrimitives.ReadUInt32LittleEndian(bytes[(i * sizeof(uint)) ..]);
+            words[i] = BinaryPrimitives.ReadUInt32LittleEndian(bytes[(i * sizeof(uint))..]);
         }
 
         var remaining = bytes.Length % sizeof(uint);
         if (remaining > 0)
         {
             Span<byte> last = stackalloc byte[sizeof(uint)];
-            bytes[(fullWords * sizeof(uint)) ..].CopyTo(last);
+            bytes[(fullWords * sizeof(uint))..].CopyTo(last);
             words[fullWords] = BinaryPrimitives.ReadUInt32LittleEndian(last);
         }
     }
@@ -401,7 +401,7 @@ public sealed class Blake3 : HashAlgorithm
                 for (var i = 0; i < 16; i++)
                 {
 
-                    BinaryPrimitives.WriteUInt32LittleEndian(block[(i * sizeof(uint)) ..], words[i]);
+                    BinaryPrimitives.WriteUInt32LittleEndian(block[(i * sizeof(uint))..], words[i]);
                 }
 
                 var take = Math.Min(64, outputLength - offset);

@@ -8,9 +8,9 @@ public static class Option
     /// <typeparam name="T">The type of the option.</typeparam>
     /// <returns>The empty option.</returns>
     public static Option<T> None<T>()
-        where T: notnull
+        where T : notnull
         => Option<T>.NoneValue;
-    
+
     /// <summary>
     /// Creates a new option with a value.
     /// </summary>
@@ -18,7 +18,7 @@ public static class Option
     /// <param name="value">The value of the option.</param>
     /// <returns>The option with the value.</returns>
     public static Option<T> Some<T>(T value)
-        where T: notnull
+        where T : notnull
         => Option<T>.Some(value);
 
     /// <summary>
@@ -45,7 +45,7 @@ public static class ValueOption
     /// <typeparam name="T">The type of the value option.</typeparam>
     /// <returns>The empty value option.</returns>
     public static ValueOption<T> None<T>()
-        where T: notnull
+        where T : notnull
         => ValueOption<T>.NoneValue;
 
     /// <summary>
@@ -55,7 +55,7 @@ public static class ValueOption
     /// <param name="value">The value of the value option.</param>
     /// <returns>The value option with the value.</returns>
     public static ValueOption<T> Some<T>(T value)
-        where T: notnull
+        where T : notnull
         => ValueOption<T>.Some(value);
 
     /// <summary>
@@ -65,7 +65,7 @@ public static class ValueOption
     /// <param name="value">The value of the value option.</param>
     /// <returns>The value option with the value.</returns>
     public static ValueOption<T> From<T>(T? value)
-        where T: notnull
+        where T : notnull
     {
         if (value is T value2)
             return new(value2);

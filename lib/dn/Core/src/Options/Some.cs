@@ -13,7 +13,7 @@ namespace NeoBeard.Options;
 /// </example>
 /// </remarks>
 public readonly struct Some<T>
-    where T: notnull
+    where T : notnull
 {
     /// <summary>
     /// Initializes a new <see cref="Some{T}"/> instance with a present value.
@@ -78,7 +78,7 @@ public readonly struct Some<T>
 }
 
 public readonly struct None<T>
-    where T: notnull
+    where T : notnull
 {
     public static None<T> Value { get; } = new();
 
@@ -157,6 +157,6 @@ public readonly struct None
     /// if (None.IsNone(null)) { /* true */ }
     /// </code>
     /// </example>
-    public static bool IsNone(object? value) 
+    public static bool IsNone(object? value)
         => value is None || value is Never || value is DBNull || value is ValueTuple || value is null || value is IOption o && o.HasNoValue;
 }

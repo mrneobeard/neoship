@@ -16,7 +16,7 @@ namespace NeoBeard.Results;
 /// </example>
 /// </remarks>
 [Union]
-public class Result<T,  E> : IUnion, IResult<T, E>
+public class Result<T, E> : IUnion, IResult<T, E>
 {
     private readonly Error<E> error;
 
@@ -42,7 +42,7 @@ public class Result<T,  E> : IUnion, IResult<T, E>
     public Result(Error<E> error)
     {
         this.error = error;
-        this.value = default;  
+        this.value = default;
         this.ok = false;
     }
 
@@ -125,7 +125,7 @@ public class Result<T,  E> : IUnion, IResult<T, E>
         var e = result.error;
 
         if (e.Cause is not null)
-            return  new Error(e.Cause, e.Message, e.Code);
+            return new Error(e.Cause, e.Message, e.Code);
 
         if (e.Exception is not null)
             return new Error(e.Exception, e.Message, e.Code);
@@ -146,7 +146,7 @@ public class Result<T,  E> : IUnion, IResult<T, E>
         var e = result.error;
 
         if (e.Cause is not null)
-            return  new Error(e.Cause, e.Message, e.Code);
+            return new Error(e.Cause, e.Message, e.Code);
 
         if (e.Exception is not null)
             return new Error(e.Exception, e.Message, e.Code);
@@ -521,7 +521,7 @@ public class Result<T,  E> : IUnion, IResult<T, E>
     public T ValueOrDefault(Func<T> defaultValueFactory)
     {
         if (this.ok)
-            return this.value!; 
+            return this.value!;
 
         return defaultValueFactory();
     }
@@ -534,7 +534,7 @@ public class Result<T,  E> : IUnion, IResult<T, E>
     public T ValueOrDefault(T defaultValue)
     {
         if (this.ok)
-            return this.value!; 
+            return this.value!;
 
         return defaultValue;
     }

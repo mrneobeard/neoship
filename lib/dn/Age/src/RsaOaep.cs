@@ -68,7 +68,7 @@ internal static class RsaOaep
         if (index >= db.Length || db[index] != 1)
             throw new CryptographicException("The RSA OAEP padding is invalid.");
 
-        return db[(index + 1) ..];
+        return db[(index + 1)..];
     }
 
     private static byte[] Mgf1(byte[] seed, int length)

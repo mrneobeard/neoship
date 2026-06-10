@@ -372,7 +372,7 @@ public sealed class Blake2B : HashAlgorithm
 
         for (var i = 0; i < 8; i++)
         {
-            this.h[i] ^= BinaryPrimitives.ReadUInt64LittleEndian(parameter[(i * 8) ..]);
+            this.h[i] ^= BinaryPrimitives.ReadUInt64LittleEndian(parameter[(i * 8)..]);
         }
 
         if (this.key is { Length: > 0 })
