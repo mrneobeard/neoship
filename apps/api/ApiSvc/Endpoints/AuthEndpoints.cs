@@ -98,6 +98,9 @@ public static class AuthEndpoints
         if (result == LoginResult.AccountLocked)
             return TypedResults.StatusCode(423);
 
+        if (result == LoginResult.AuthMethodNotAllowed)
+            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
+
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
             return TypedResults.Unauthorized();
 

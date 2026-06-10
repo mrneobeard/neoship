@@ -184,6 +184,27 @@ public class MigrationTests
     }
 
     [Fact]
+    public async Task Login_WhenSsoIsRequired_ReturnsAuthMethodNotAllowed()
+    {
+        var (db, ctx) = CreateDatabase();
+        var auth = CreateAuthStore(db, ctx);
+
+        await auth.SignupAsync(
+            "sso-required@example.com", "SSO Required", "password123",
+            Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+        var org = await db.Orgs.SingleAsync(o => o.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+        org.RequireSso = true;
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var (result, user, _, _) = await auth.LoginAsync(
+            "sso-required@example.com", "password123",
+            Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+
+        Assert.Equal(LoginResult.AuthMethodNotAllowed, result);
+        Assert.Null(user);
+    }
+
+    [Fact]
     public async Task Signup_DuplicateEmail_ReturnsEmailAlreadyExists()
     {
         var (db, ctx) = CreateDatabase();

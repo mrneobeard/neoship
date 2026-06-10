@@ -19,6 +19,7 @@ public enum LoginResult
     InvalidCredentials,
     AccountLocked,
     AccountSuspended,
+    AuthMethodNotAllowed,
 }
 
 public class AuthStore
@@ -159,6 +160,16 @@ public class AuthStore
             await this.audit.RecordAsync("auth.login.failed", orgId, user.Id, "login",
                 dataJson: "{\"reason\":\"account_suspended\"}", ct: ct);
             return (LoginResult.AccountSuspended, null, null, null);
+        }
+
+        var org = await this.db.Orgs.FirstOrDefaultAsync(o => o.Id == user.OrgId, ct);
+        if (org is null || org.RequireSso || !org.AllowPasswordAuth)
+        {
+            this.logger.LogWarning("Password login blocked by organization policy: {UserId}", user.Id);
+            activity?.SetTag(OTelConstants.AuthResult, "password_auth_policy_denied");
+            await this.audit.RecordAsync("auth.login.failed", user.OrgId, user.Id, "login",
+                dataJson: "{\"reason\":\"password_auth_policy_denied\"}", ct: ct);
+            return (LoginResult.AuthMethodNotAllowed, null, null, null);
         }
 
         var auth = await this.db.UserPasswordAuths.FirstOrDefaultAsync(a => a.UserId == user.Id, ct);

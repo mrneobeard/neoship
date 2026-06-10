@@ -152,4 +152,38 @@ public class PasskeyStoreTests
         Assert.Equal(user.Id, result.Value.User.Id);
         Assert.Single(result.Value.Options.AllowCredentials);
     }
+
+    /// <summary>
+    /// Verifies organization policy can block passkey login.
+    /// </summary>
+    [Fact]
+    public async Task BeginLoginAsync_WhenSsoIsRequired_ReturnsNull()
+    {
+        await using var db = CreateDatabase();
+        var org = await db.Orgs.SingleAsync(o => o.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+        org.RequireSso = true;
+        var user = new User(Guid.NewGuid(), "blocked-passkey@example.com", "Blocked Passkey User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        db.UserMfaFactors.Add(new UserMfaFactor
+        {
+            Id = Guid.CreateVersion7(),
+            UserId = user.Id,
+            Name = "Laptop",
+            Type = MfaFactorType.Passkey.Id,
+            WebAuthnCredentialId = [1, 2, 3],
+            WebAuthnCredentialIdDigest = PasskeyStore.ComputeCredentialIdDigest([1, 2, 3]),
+            WebAuthnPublicKeyCredentialData = [4, 5, 6],
+            CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            VerifiedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+        });
+        db.Users.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var result = await store.BeginLoginAsync(user.Email, TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+    }
 }

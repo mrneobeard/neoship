@@ -6,6 +6,7 @@
 - `/api/v1` prefix
 - camelCase payloads
 - OpenAPI 3.1 generated from source-controlled definitions
+- IAM completion requires OpenAPI generation/validation for IAM routes
 - org-scoped routes use `/api/v1/orgs/{orgSlug}/...`
 
 Use `api-contract.md` for response envelopes, error envelopes, HTTP semantics, idempotency, async operations, concurrency, and compatibility rules.
@@ -102,6 +103,7 @@ Conform public names to canonical C# types where practical.
 - use `Idempotency-Key` on mutating create-style endpoints where retries are likely
 - list responses use the `pagination` envelope from `api-contract.md`
 - public payloads are language-neutral JSON, not framework-specific result shapes
+- IAM completion requires canonical `api-contract.md` envelopes across IAM routes; this is not deferred cleanup
 
 ## Error Codes
 
@@ -158,5 +160,10 @@ If JWT exchange exists:
 - `me` endpoints always resolve current actor and tenant context first
 - org-scoped routes never trust an org id in request body
 - routes with heavy logic, security decisions, or key product flows must have route-level tests, not only store/unit tests
+- route-level API tests should use `Microsoft.AspNetCore.TestHost` with in-memory dependencies when possible; this verifies Minimal API routing, binding, DI, auth resolution, cookies, and status codes without requiring a full external host
+- service-account bearer access must have route-level tests for allowed read, missing permission, and disabled parent account cases; store tests alone are not enough because the route auth helper combines bearer parsing, key authentication, and permission resolution
+- service-account write routes must have route-level coverage showing bearer service accounts are rejected and human-user writes create audit events
+- service-account claim routes follow the same rule: bearer service accounts may read with scoped permission, but claim mutations require a human user and must emit audit events
+- service-account API-key claim routes, permission registry, role reads, and identity-provider reads must be covered for scoped bearer access; their mutation routes must reject service-account bearers even when the bearer has matching write claims
 - tests should move toward shared fixtures for seed data; in-code fixtures are fine initially, YAML/data-file fixtures are acceptable when they reduce duplication
 - release-grade validation should include automated E2E coverage against each supported DB provider

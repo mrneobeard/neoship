@@ -9,6 +9,8 @@ Canonical truth remains the database model in `apps/api/Data.Model`.
 ## Cache Backends
 
 - default backend for single-node/dev: in-memory cache
+- IAM completion can ship with in-memory as the default backend
+- Redis must be selectable through Aspire/local-development configuration and an environment/config switch for testing distributed behavior when needed
 - default backend for distributed installs: Redis
 - prefer Redis when cache state must survive process restarts or scale out
 

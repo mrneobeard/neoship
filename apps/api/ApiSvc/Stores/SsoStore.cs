@@ -54,6 +54,11 @@ public sealed class SsoStore
             return null;
         }
 
+        if (!org.AllowOidcSso)
+        {
+            return null;
+        }
+
         var query = this.db.UserIdentityProviders
             .Where(x => x.OrgId == org.Id
                 && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
@@ -108,6 +113,12 @@ public sealed class SsoStore
             && x.ProviderTypeId == UserIdentityProviderType.OIDC.Id
             && x.StatusId == UserIdentityProviderStatus.Active.Id, ct);
         if (provider is null)
+        {
+            return null;
+        }
+
+        var org = await this.db.Orgs.FirstOrDefaultAsync(x => x.Id == challenge.OrgId, ct);
+        if (org is null || !org.AllowOidcSso)
         {
             return null;
         }

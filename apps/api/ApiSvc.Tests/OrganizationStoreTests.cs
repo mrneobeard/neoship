@@ -140,4 +140,33 @@ public class OrganizationStoreTests
         Assert.Equal("UPDATED", org.NameUpcase);
         Assert.NotNull(org.UpdatedAt);
     }
+
+    /// <summary>
+    /// Verifies that updating organization auth policy changes only supplied switches.
+    /// </summary>
+    [Fact]
+    public async Task UpdateAuthPolicyAsync_ChangesSuppliedSwitches()
+    {
+        await using var db = CreateDatabase();
+        var store = new OrganizationStore(db, NullLogger<OrganizationStore>.Instance);
+
+        var org = await store.UpdateAuthPolicyAsync(
+            Constants.DefaultOrganizationId,
+            allowPasswordAuth: false,
+            allowPasskeyAuth: null,
+            allowOidcSso: false,
+            allowSamlSso: null,
+            requireSso: true,
+            allowSelfServiceExternalIdentityUnlink: false,
+            TestContext.Current.CancellationToken);
+
+        Assert.NotNull(org);
+        Assert.False(org!.AllowPasswordAuth);
+        Assert.True(org.AllowPasskeyAuth);
+        Assert.False(org.AllowOidcSso);
+        Assert.True(org.AllowSamlSso);
+        Assert.True(org.RequireSso);
+        Assert.False(org.AllowSelfServiceExternalIdentityUnlink);
+        Assert.NotNull(org.UpdatedAt);
+    }
 }

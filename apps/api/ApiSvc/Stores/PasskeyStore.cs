@@ -101,6 +101,12 @@ public sealed class PasskeyStore
             return null;
         }
 
+        var org = await db.Orgs.FirstOrDefaultAsync(x => x.Id == user.OrgId, ct);
+        if (org is null || org.RequireSso || !org.AllowPasskeyAuth)
+        {
+            return null;
+        }
+
         var credentials = await db.UserMfaFactors
             .Where(x => x.UserId == user.Id && x.Type == MfaFactorType.Passkey.Id)
             .Select(x => new PublicKeyCredentialDescriptor(x.WebAuthnCredentialId))
@@ -149,6 +155,12 @@ public sealed class PasskeyStore
                 ct);
 
         if (factor?.User is null || factor.User.StatusId == UserStatus.Suspended.Id)
+        {
+            return null;
+        }
+
+        var org = await db.Orgs.FirstOrDefaultAsync(x => x.Id == factor.User.OrgId, ct);
+        if (org is null || org.RequireSso || !org.AllowPasskeyAuth)
         {
             return null;
         }

@@ -117,6 +117,39 @@ public class SsoStoreTests
     }
 
     /// <summary>
+    /// Verifies organization policy can block OIDC begin.
+    /// </summary>
+    [Fact]
+    public async Task BeginOidcAsync_WhenOidcIsDisabled_ReturnsNull()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var store = new SsoStore(db, new SsoChallengeStore(cache), new FakeSsoTokenClient(), new FakeSsoTokenValidator());
+        var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
+        org.AllowOidcSso = false;
+        var userId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "sso-disabled@example.com", "SSO Disabled")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+            MetadataJson = "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\"}",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var result = await store.BeginOidcAsync("default", null, "https://app.example.com/api/v1/auth/sso/callback", TestContext.Current.CancellationToken);
+
+        Assert.Null(result);
+    }
+
+    /// <summary>
     /// Verifies OIDC finish signs in an existing active user by verified email.
     /// </summary>
     [Fact]
@@ -380,6 +413,46 @@ public class SsoStoreTests
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", false, "SSO User")));
+
+        var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
+
+        Assert.Null(user);
+    }
+
+    /// <summary>
+    /// Verifies organization policy can block OIDC callback even after a challenge exists.
+    /// </summary>
+    [Fact]
+    public async Task FinishOidcAsync_WhenOidcIsDisabled_ReturnsNull()
+    {
+        await using var db = CreateDatabase();
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var challenges = new SsoChallengeStore(cache);
+        var org = await db.Orgs.SingleAsync(TestContext.Current.CancellationToken);
+        org.AllowOidcSso = false;
+        var userId = Guid.NewGuid();
+        db.Users.Add(new User(userId, "sso-callback-disabled@example.com", "SSO Disabled")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        });
+        db.UserIdentityProviders.Add(new UserIdentityProvider
+        {
+            Id = 10,
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = userId,
+            Name = "Acme OIDC",
+            ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+            StatusId = UserIdentityProviderStatus.Active.Id,
+            ClientId = "client-id",
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
+        var store = new SsoStore(
+            db,
+            challenges,
+            new FakeSsoTokenClient(),
+            new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-callback-disabled@example.com", true, "SSO User")));
 
         var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 

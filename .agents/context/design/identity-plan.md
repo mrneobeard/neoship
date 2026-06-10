@@ -6,6 +6,10 @@ Plan identity for NeoShip from the actual C# model in `apps/api/Data.Model`.
 
 Research docs from `~/repos/neo/research/docs/apps/neocloud/book` are useful, but the C# model is the canonical source. Older spec language should conform to the newer C# types and names.
 
+IAM completion is backend/API-first. UI screens are deferred until the project, server, SSH, remote script, and local/remote Docker Compose foundations exist, followed by a deliberate product-design pass.
+
+IAM completion includes CLI tooling for bootstrap/admin operations, including first org/admin setup. A GUI/Avalonia admin tool is deferred. The CLI should use the public APIs where practical and obey the caller's access.
+
 ## Canonical Model Inventory
 
 Current identity-related model classes:
@@ -46,6 +50,16 @@ Current identity-related model classes:
 - Keep `UserEmail` as the canonical email-history and verification record.
 - Do not introduce a separate `user_email_identities` table unless `UserEmail` proves insufficient.
 - Add missing password and verification metadata to `User` and `UserPasswordAuth` rather than creating parallel identity tables.
+- IAM completion includes self-service profile update and verified email-change flows, not only login/reset verification.
+- IAM completion keeps one primary login email per user; `UserEmail` tracks history, pending changes, and verification state.
+- Multiple verified login emails and account linking are deferred, but future account linking should support multi-org switching and safe identity merging.
+- IAM completion requires user/org deletion or anonymization flows in addition to suspension and credential revocation.
+- Deletion defaults to soft-delete with access revocation.
+- Soft-delete records must carry a scheduled hard-delete/anonymize date.
+- Hard-delete/anonymize timing is configurable globally, by org policy, and by an override supplied at deletion time.
+- Org admins may self-service org deletion after an explicit confirmation flow.
+- Org deletion follows the same soft-delete then later hard-delete/anonymize model.
+- Org data export is a required pre-go-live todo, not an IAM-completion requirement; audit logs are retained for breach, abuse, and unlawful-activity investigation unless a later legal/compliance policy says otherwise.
 
 ### Sessions
 
@@ -57,6 +71,17 @@ Current identity-related model classes:
 ### API Keys, JWT, And Basic Auth
 
 - Keep `UserApiKey` and `ServiceAccountApiKey` as the durable API credential models.
+- API keys are single-org scoped by default for IAM completion.
+- Before go-live, API keys must be able to represent the actor's allowed org scope when the actor has multi-org or administrative access; keys must never exceed the user/service account's own accessible org set.
+- API keys use a configurable default expiration from global/org settings.
+- Non-expiring API keys are allowed only through explicit override when policy permits.
+- User API keys must support narrow scopes/claims so a key can be less powerful than the user.
+- User API key creation may optionally snapshot all current user roles/permissions at creation time; that snapshot is point-in-time and does not automatically grow with later user grants.
+- Service-account API keys follow the same model: narrowable scopes/claims plus optional point-in-time snapshot of current service-account permissions.
+- IAM completion requires explicit API-key rotation flows; create-new/revoke-old alone is not enough.
+- API keys can be rotated only while the old key has not expired.
+- Rotation must support old-key handling modes: revoke immediately, keep existing `ExpiresAt`, or move `ExpiresAt` earlier.
+- Rotation must never extend the old key's `ExpiresAt` later than its current value.
 - Add optional short-lived encrypted JWT access tokens as an exchange/output format, not the canonical source of authority.
 - Recommendation:
   - Browser UI: `UserSession` cookie.
@@ -76,7 +101,11 @@ Current identity-related model classes:
 ### Roles, Groups, Claims
 
 - Keep `Role`, `Group`, `RoleClaim`, `UserClaim`, `ServiceAccountClaim`, `UserApiKeyClaim`, and `ServiceAccountApiKeyClaim`.
-- Define permissions as code/module constants first, not as a central permission table.
+- IAM completion requires built-in owner, admin, and member role semantics for org management decisions such as invites, deletion, and policy changes.
+- Define permissions from builtin modules/plugins, then ingest them into an assignable registry for custom roles and augmented existing roles.
+- Admins assign registered permissions; they should not create arbitrary freeform permission keys through IAM admin routes.
+- Registry persistence may be a table updated by builtin module migrations or plugin/module install/uninstall hooks.
+- IAM completion requires builtin permission registry only; plugin/module permission ingestion can be pre-go-live follow-up.
 - Standardize claim naming to permission-style values such as `deployments.create`.
 - Store roles, groups, memberships, and grants in DB.
 - Let modules/plugins contribute extra permission definitions and seeded roles.
@@ -92,6 +121,29 @@ Current identity-related model classes:
 - If naming must stay close to current C#:
   - repurpose `UserIdentityProvider` into a user external-login link
   - add a new org-scoped provider config entity
+- Current staged implementation keeps `UserIdentityProvider` as the org-scoped provider config and adds `UserExternalIdentity` for the user-to-provider subject link; this avoids blocking OIDC route work on a larger model split while preserving the split in behavior.
+- OIDC login should support policy-controlled auto-provisioning on first successful SSO login when the provider/org allows it and the external identity has a verified email.
+- Auto-provisioning must create the user, membership, and external identity link together; exact provider-subject links still take precedence over email matching.
+- IAM completion requires OIDC and OAuth2 provider login flows.
+- OAuth2 completion targets common provider presets first, such as GitHub, Google, and Microsoft, plus minimal configurable endpoints/scopes where needed.
+- WorkOS/Auth0 should use OIDC metadata when possible.
+- A fully generic OAuth2 claim-mapping engine is deferred.
+- SAML is deferred to later enterprise SSO work.
+
+### Organization Auth Policy
+
+- Keep auth-policy switches on `Organization` for now: password, passkey, OIDC SSO, SAML SSO, require SSO, and self-service external identity unlink.
+- Defaults are permissive so a new/default organization does not lock out the initial operator.
+- Self-service unlink checks policy and refuses to remove the last usable sign-in method; this fails safe and avoids creating admin-only recovery situations.
+- Add explicit org-admin API routes for reading/updating policy because provider lifecycle routes alone do not show the effective sign-in policy.
+- Enforce policy in the store layer as well as route tests: password login returns an explicit method-not-allowed result when blocked, passkey begin/finish returns no auth result, and OIDC begin/callback returns no SSO result when OIDC is disabled.
+- Re-check SSO policy at callback time because policy can change after the authorization challenge is issued.
+
+### Route Test Infrastructure
+
+- Use `Microsoft.AspNetCore.TestHost` for route-level API tests.
+- Reason: direct handler/store tests miss route binding, DI resolution, auth cookie/bearer behavior, response status mapping, and `Set-Cookie` behavior.
+- Keep route tests focused on security decisions and core flows; use in-memory SQLite and fake external providers/token validators unless the test is specifically provider/E2E validation.
 
 ### Audit And Security Events
 
@@ -181,9 +233,23 @@ There is tension between the research docs and the current C# model.
 Recommended staged approach:
 
 1. keep `User.OrgId` as the home/default org
-2. ship identity MVP with one active org per user if necessary
-3. add additive `Membership` entity before invitations, enterprise SSO mapping, and org switching
+2. IAM completion includes true multi-org membership, invites, and org switching rather than deferring them
+3. add additive `Membership` entity before enterprise SSO mapping and org switching
 4. do not remove `User.OrgId`; keep it as the primary org/home org even after membership exists
+5. invitations are explicit email invites for IAM completion; verified-domain auto-join rules are deferred
+6. invites may include pending role/group assignments, but those assignments are applied only after invite acceptance and the user's first login into the org
+7. default invite expiration is 7 days
+
+### Cross-Org Administration
+
+- Default users and service accounts are scoped by org membership; roles, groups, and permissions are assigned per organization.
+- Default service accounts belong to exactly one organization.
+- Before go-live, add an administrative/owner organization model for legitimate cross-org operations.
+- The platform administrative org can create special service accounts that manage across the installation.
+- A primary/customer org can own or link subsidiary orgs.
+- Cross-org service accounts created by a primary org may run only against orgs that primary org owns or is explicitly linked to manage.
+- UI can later make repeated per-org role assignment easier, but the authorization model remains per-org grants.
+- Do not allow arbitrary cross-org service accounts without the administrative/owner-org relationship; this is a privileged feature, not default IAM behavior.
 
 ## Entity-Level Implementation Plan
 

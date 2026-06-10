@@ -408,7 +408,7 @@ public static class MeEndpoints
             x.LastUsedAt)).ToList());
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound, ForbidHttpResult, Conflict<string>>> UnlinkExternalIdentityAsync(
+    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound, StatusCodeHttpResult, Conflict<string>>> UnlinkExternalIdentityAsync(
         Guid externalIdentityId,
         HttpContext httpContext,
         SessionStore sessions,
@@ -426,7 +426,7 @@ public static class MeEndpoints
         {
             SsoExternalIdentityUnlinkResult.Success => TypedResults.Ok(),
             SsoExternalIdentityUnlinkResult.NotFound => TypedResults.NotFound(),
-            SsoExternalIdentityUnlinkResult.PolicyDenied => TypedResults.Forbid(),
+            SsoExternalIdentityUnlinkResult.PolicyDenied => TypedResults.StatusCode(StatusCodes.Status403Forbidden),
             _ => TypedResults.Conflict("Configure another sign-in method before unlinking this identity."),
         };
     }

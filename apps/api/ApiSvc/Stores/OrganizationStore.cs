@@ -135,6 +135,47 @@ public sealed class OrganizationStore
     }
 
     /// <summary>
+    /// Updates organization authentication policy switches.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="allowPasswordAuth">The optional password sign-in allowance.</param>
+    /// <param name="allowPasskeyAuth">The optional passkey sign-in allowance.</param>
+    /// <param name="allowOidcSso">The optional OIDC SSO sign-in allowance.</param>
+    /// <param name="allowSamlSso">The optional SAML SSO sign-in allowance.</param>
+    /// <param name="requireSso">The optional SSO requirement.</param>
+    /// <param name="allowSelfServiceExternalIdentityUnlink">The optional self-service external identity unlink allowance.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The updated <see cref="Organization"/>, or <see langword="null"/>.</returns>
+    public async Task<Organization?> UpdateAuthPolicyAsync(
+        Guid orgId,
+        bool? allowPasswordAuth,
+        bool? allowPasskeyAuth,
+        bool? allowOidcSso,
+        bool? allowSamlSso,
+        bool? requireSso,
+        bool? allowSelfServiceExternalIdentityUnlink,
+        CancellationToken ct)
+    {
+        var org = await db.Orgs.FirstOrDefaultAsync(o => o.Id == orgId, ct);
+        if (org is null)
+        {
+            return null;
+        }
+
+        org.AllowPasswordAuth = allowPasswordAuth ?? org.AllowPasswordAuth;
+        org.AllowPasskeyAuth = allowPasskeyAuth ?? org.AllowPasskeyAuth;
+        org.AllowOidcSso = allowOidcSso ?? org.AllowOidcSso;
+        org.AllowSamlSso = allowSamlSso ?? org.AllowSamlSso;
+        org.RequireSso = requireSso ?? org.RequireSso;
+        org.AllowSelfServiceExternalIdentityUnlink = allowSelfServiceExternalIdentityUnlink ?? org.AllowSelfServiceExternalIdentityUnlink;
+        org.UpdatedAt = DateTime.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation("Organization auth policy updated: {OrgId}", org.Id);
+        return org;
+    }
+
+    /// <summary>
     /// Determines whether the user can access the organization.
     /// </summary>
     /// <param name="userId">The user identifier.</param>

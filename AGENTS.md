@@ -16,3 +16,4 @@
 - Add or update route tests for key API behavior, especially routes with heavy logic, security decisions, or core product flows.
 - Prefer reusable fixtures for seed data as tests grow. In-code fixtures are fine now; YAML or another data format is acceptable later when useful.
 - Build toward automated E2E coverage across each supported DB provider, especially before major merges and releases.
+- DB validation workflow: SQLite/current-provider tests are acceptable for fast before-commit loops; SQLite, PostgreSQL, and SQL Server automation should run before major releases and pull requests that touch DB logic.

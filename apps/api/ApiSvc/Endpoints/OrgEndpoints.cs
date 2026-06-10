@@ -13,6 +13,9 @@ public static class OrgEndpoints
     {
         var group = routes.MapGroup("/api/v1/orgs/{orgSlug}");
 
+        group.MapGet("/auth-policy", GetAuthPolicyAsync);
+        group.MapPatch("/auth-policy", UpdateAuthPolicyAsync);
+
         group.MapGet("/permissions", ListPermissionsAsync);
 
         group.MapGet("/roles", ListRolesAsync);
@@ -21,7 +24,7 @@ public static class OrgEndpoints
         group.MapPatch("/roles/{roleId:guid}", UpdateRoleAsync);
         group.MapDelete("/roles/{roleId:guid}", DeleteRoleAsync);
         group.MapPost("/roles/{roleId:guid}/claims", AddRoleClaimAsync);
-        group.MapDelete("/roles/{roleId:guid}/claims/{claimId:ulong}", RemoveRoleClaimAsync);
+        group.MapDelete("/roles/{roleId:guid}/claims/{claimId}", RemoveRoleClaimAsync);
         group.MapPost("/roles/{roleId:guid}/users/{userId:guid}", AttachRoleUserAsync);
         group.MapDelete("/roles/{roleId:guid}/users/{userId:guid}", DetachRoleUserAsync);
 
@@ -49,7 +52,7 @@ public static class OrgEndpoints
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
         group.MapGet("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", ListServiceAccountApiKeyClaimsAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", AddServiceAccountApiKeyClaimAsync);
-        group.MapDelete("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims/{claimId:ulong}", RemoveServiceAccountApiKeyClaimAsync);
+        group.MapDelete("/service-accounts/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims/{claimId}", RemoveServiceAccountApiKeyClaimAsync);
         group.MapGet("/service-accounts/{serviceAccountId:guid}/claims", ListServiceAccountClaimsAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/claims", AddServiceAccountClaimAsync);
         group.MapDelete("/service-accounts/{serviceAccountId:guid}/claims/{claimId:guid}", RemoveServiceAccountClaimAsync);
@@ -95,6 +98,40 @@ public static class OrgEndpoints
     public record PermissionDefinitionResponse(string Key, string Resource, string Action, string Description, List<PermissionScopeKind> AllowedScopes);
 
     /// <summary>
+    /// Represents organization authentication policy settings.
+    /// </summary>
+    /// <param name="AllowPasswordAuth">Whether password sign-in is allowed.</param>
+    /// <param name="AllowPasskeyAuth">Whether passkey sign-in is allowed.</param>
+    /// <param name="AllowOidcSso">Whether OIDC SSO sign-in is allowed.</param>
+    /// <param name="AllowSamlSso">Whether SAML SSO sign-in is allowed.</param>
+    /// <param name="RequireSso">Whether SSO is required.</param>
+    /// <param name="AllowSelfServiceExternalIdentityUnlink">Whether users may unlink external identities themselves.</param>
+    public record AuthPolicyResponse(
+        bool AllowPasswordAuth,
+        bool AllowPasskeyAuth,
+        bool AllowOidcSso,
+        bool AllowSamlSso,
+        bool RequireSso,
+        bool AllowSelfServiceExternalIdentityUnlink);
+
+    /// <summary>
+    /// Represents organization authentication policy updates.
+    /// </summary>
+    /// <param name="AllowPasswordAuth">The optional password sign-in allowance.</param>
+    /// <param name="AllowPasskeyAuth">The optional passkey sign-in allowance.</param>
+    /// <param name="AllowOidcSso">The optional OIDC SSO sign-in allowance.</param>
+    /// <param name="AllowSamlSso">The optional SAML SSO sign-in allowance.</param>
+    /// <param name="RequireSso">The optional SSO requirement.</param>
+    /// <param name="AllowSelfServiceExternalIdentityUnlink">The optional self-service external identity unlink allowance.</param>
+    public record UpdateAuthPolicyRequest(
+        bool? AllowPasswordAuth,
+        bool? AllowPasskeyAuth,
+        bool? AllowOidcSso,
+        bool? AllowSamlSso,
+        bool? RequireSso,
+        bool? AllowSelfServiceExternalIdentityUnlink);
+
+    /// <summary>
     /// Represents a group response.
     /// </summary>
     public record GroupResponse(Guid Id, string Name, string? Email, string? Description, int MemberCount, int ServiceAccountMemberCount, int RoleCount);
@@ -129,7 +166,7 @@ public static class OrgEndpoints
             var userAllowed = await HasOrgPermissionAsync(httpContext, permissions, user.Id, permission, orgSlug, ct);
             if (!userAllowed)
             {
-                return (null, TypedResults.Forbid());
+                return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
             }
 
             return (user, null);
@@ -143,13 +180,13 @@ public static class OrgEndpoints
 
         if (!allowServiceAccount)
         {
-            return (null, TypedResults.Forbid());
+            return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
         }
 
         var allowed = await HasServiceAccountOrgPermissionAsync(permissions, serviceAccountKey.Id, permission, orgSlug, ct);
         if (!allowed)
         {
-            return (null, TypedResults.Forbid());
+            return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
         }
 
         return (null, null);
@@ -224,6 +261,79 @@ public static class OrgEndpoints
 
     private static GroupResponse ToGroupResponse(Group group)
         => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count);
+
+    private static AuthPolicyResponse ToAuthPolicyResponse(Organization org)
+        => new(
+            org.AllowPasswordAuth,
+            org.AllowPasskeyAuth,
+            org.AllowOidcSso,
+            org.AllowSamlSso,
+            org.RequireSso,
+            org.AllowSelfServiceExternalIdentityUnlink);
+
+    private static async Task<IResult> GetAuthPolicyAsync(
+        string orgSlug,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        ShipDb db,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.settings", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        return TypedResults.Ok(ToAuthPolicyResponse(org));
+    }
+
+    private static async Task<IResult> UpdateAuthPolicyAsync(
+        string orgSlug,
+        [FromBody] UpdateAuthPolicyRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        PermissionResolver permissions,
+        OrganizationStore orgs,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var org = await ResolveOrgAsync(orgSlug, db, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var auth = await RequireOrgPermissionAsync(httpContext, sessions, permissions, orgSlug, PermissionKey.Create("org.settings", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var updated = await orgs.UpdateAuthPolicyAsync(
+            org.Id,
+            req.AllowPasswordAuth,
+            req.AllowPasskeyAuth,
+            req.AllowOidcSso,
+            req.AllowSamlSso,
+            req.RequireSso,
+            req.AllowSelfServiceExternalIdentityUnlink,
+            ct);
+        if (updated is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.auth_policy.update", org.Id, auth.User!.Id, "org.auth_policy.update", targetType: "organization", targetId: org.Id.ToString(), ct: ct);
+        return TypedResults.Ok(ToAuthPolicyResponse(updated));
+    }
 
     private static async Task<IResult> ListPermissionsAsync(
         string orgSlug,
