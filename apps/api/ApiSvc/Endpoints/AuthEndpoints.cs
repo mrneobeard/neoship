@@ -196,6 +196,7 @@ public static class AuthEndpoints
         PasskeyChallengeStore challenges,
         PermissionResolver permissions,
         SessionStore sessions,
+        AuditStore audit,
         CancellationToken ct)
     {
         var validation = ValidateFinishPasskeyLogin(req);
@@ -222,6 +223,7 @@ public static class AuthEndpoints
         var (session, rawToken) = await sessions.CreateSessionAsync(user.Id, user.OrgId, permissionSet, ct);
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
+        await audit.RecordAsync("auth.passkey.login", user.OrgId, user.Id, "passkey.login", ct: ct);
 
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
     }

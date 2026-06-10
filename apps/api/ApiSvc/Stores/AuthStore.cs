@@ -315,10 +315,18 @@ public class AuthStore
         var emailUpcase = email.ToUpperInvariant();
 
         var user = await this.db.Users.FirstOrDefaultAsync(u => u.EmailUpcase == emailUpcase, ct);
-        if (user is null) return;
+        if (user is null)
+        {
+            await this.audit.RecordAsync("auth.password_reset.request", null, null, "password_reset.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
+            return;
+        }
 
         var auth = await this.db.UserPasswordAuths.FirstOrDefaultAsync(a => a.UserId == user.Id, ct);
-        if (auth is null) return;
+        if (auth is null)
+        {
+            await this.audit.RecordAsync("auth.password_reset.request", user.OrgId, user.Id, "password_reset.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
+            return;
+        }
 
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var digest = TokenStore.ComputeDigestBase64(rawToken);
@@ -328,6 +336,7 @@ public class AuthStore
         await this.db.SaveChangesAsync(ct);
 
         this.logger.LogInformation("Password reset requested for user {UserId}", user.Id);
+        await this.audit.RecordAsync("auth.password_reset.request", user.OrgId, user.Id, "password_reset.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
     }
 
     public async Task<bool> ConfirmPasswordResetAsync(string token, string newPassword, CancellationToken ct = default)
@@ -365,6 +374,7 @@ public class AuthStore
 
         if (userEmail is null)
         {
+            await this.audit.RecordAsync("auth.email_verification.request", null, null, "email_verification.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
             return;
         }
 
@@ -374,6 +384,7 @@ public class AuthStore
         userEmail.VerificationTokenDigest = digest;
         userEmail.VerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
         await this.db.SaveChangesAsync(ct);
+        await this.audit.RecordAsync("auth.email_verification.request", null, userEmail.UserId, "email_verification.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
     }
 
     public async Task<bool> ConfirmEmailVerificationAsync(string token, CancellationToken ct = default)

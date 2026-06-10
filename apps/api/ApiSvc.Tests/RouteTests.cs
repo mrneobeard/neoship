@@ -155,6 +155,40 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task PasswordResetRequest_WritesGenericAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/password-reset/request",
+            new StringContent("{\"email\":\"unknown-reset@example.com\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.password_reset.request", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task EmailVerificationRequest_WritesGenericAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/email-verification/request",
+            new StringContent("{\"email\":\"unknown-verify@example.com\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.email_verification.request", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task FinishSso_SetsSessionCookieAndWritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync(new SsoExternalIdentity("subject", "route-sso-user@example.com", true, "SSO User"));
