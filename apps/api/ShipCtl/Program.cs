@@ -208,7 +208,7 @@ static IReadOnlyList<string> BootstrapPermissions()
 
 static void PrintUsage()
 {
-    Console.WriteLine("NeoShip Admin CLI");
+    Console.WriteLine("NeoShip shipctl");
     Console.WriteLine("Usage:");
     Console.WriteLine("  bootstrap-admin --email <email> --password <password> [--name <name>] [--org default] [--org-name Default] [--db neoship.db]");
 }

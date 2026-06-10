@@ -5,6 +5,7 @@
     <TargetFramework>$(Fx)</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AssemblyName>shipctl</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

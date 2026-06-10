@@ -1,8 +1,8 @@
 <Solution>
   <Folder Name="/apps/" />
   <Folder Name="/apps/api/" />
-  <Folder Name="/apps/api/AdminCli/">
-    <Project Path="apps/api/AdminCli/NeoShip.AdminCli.csproj" />
+  <Folder Name="/apps/api/ShipCtl/">
+    <Project Path="apps/api/ShipCtl/NeoShip.ShipCtl.csproj" />
   </Folder>
   <Folder Name="/apps/api/ApiSvc/">
     <Project Path="apps/api/ApiSvc/NeoShip.ApiSvc.csproj" />
