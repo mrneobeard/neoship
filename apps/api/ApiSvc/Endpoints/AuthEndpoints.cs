@@ -86,7 +86,7 @@ public static class AuthEndpoints
         if (result == SignupResult.EmailAlreadyExists || user is null)
             return TypedResults.Conflict("Email already registered.");
 
-        return TypedResults.Created($"/api/v1/me", new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+        return TypedResults.Created($"/api/v1/me", Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
 
     public record LoginRequest(string Email, string Password);
@@ -132,7 +132,7 @@ public static class AuthEndpoints
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 
-        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+        return TypedResults.Ok(Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
 
     private static async Task<IResult> BeginPasskeyLoginAsync(
@@ -156,10 +156,10 @@ public static class AuthEndpoints
 
         var (user, options) = result.Value;
         var challengeId = challenges.StoreLogin(user.Id, options);
-        return TypedResults.Ok(new BeginPasskeyLoginResponse(challengeId, options.ToJson()));
+        return TypedResults.Ok(Envelope(httpContext, new BeginPasskeyLoginResponse(challengeId, options.ToJson())));
     }
 
-    private static async Task<Results<Ok<BeginSsoResponse>, NotFound>> BeginSsoAsync(
+    private static async Task<IResult> BeginSsoAsync(
         string orgSlug,
         [FromQuery] long? providerId,
         HttpContext httpContext,
@@ -173,10 +173,10 @@ public static class AuthEndpoints
             return TypedResults.NotFound();
         }
 
-        return TypedResults.Ok(new BeginSsoResponse(result.ProviderId, result.AuthorizationUrl, result.State, result.ExpiresAt));
+        return TypedResults.Ok(Envelope(httpContext, new BeginSsoResponse(result.ProviderId, result.AuthorizationUrl, result.State, result.ExpiresAt)));
     }
 
-    private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult>> FinishSsoAsync(
+    private static async Task<IResult> FinishSsoAsync(
         [FromQuery] string state,
         [FromQuery] string code,
         HttpContext httpContext,
@@ -198,7 +198,7 @@ public static class AuthEndpoints
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
         await audit.RecordAsync("auth.sso.login", user.OrgId, user.Id, "sso.login", targetType: "user", targetId: user.Id.ToString(), ct: ct);
 
-        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+        return TypedResults.Ok(Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
 
     private static async Task<IResult> FinishPasskeyLoginAsync(
@@ -237,7 +237,7 @@ public static class AuthEndpoints
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
         await audit.RecordAsync("auth.passkey.login", user.OrgId, user.Id, "passkey.login", ct: ct);
 
-        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+        return TypedResults.Ok(Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
 
     /// <summary>
@@ -271,10 +271,10 @@ public static class AuthEndpoints
 
         SetSessionCookie(httpContext.Response, rawToken, session.ExpiresAt);
 
-        return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+        return TypedResults.Ok(Envelope(httpContext, new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl)));
     }
 
-    private static async Task<Ok> LogoutAsync(
+    private static async Task<Ok<ApiEnvelope<object>>> LogoutAsync(
         HttpContext httpContext,
         AuthStore auth,
         CancellationToken ct)
@@ -290,7 +290,7 @@ public static class AuthEndpoints
         }
 
         ClearSessionCookie(httpContext.Response);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record PasswordResetRequest(string Email);
@@ -308,7 +308,7 @@ public static class AuthEndpoints
         }
 
         await auth.RequestPasswordResetAsync(req.Email, ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record PasswordResetConfirm(string Token, string NewPassword);
@@ -326,7 +326,7 @@ public static class AuthEndpoints
         }
 
         var success = await auth.ConfirmPasswordResetAsync(req.Token, req.NewPassword, ct);
-        return success ? TypedResults.Ok() : TypedResults.Unauthorized();
+        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : TypedResults.Unauthorized();
     }
 
     public record EmailVerificationRequest(string Email);
@@ -344,7 +344,7 @@ public static class AuthEndpoints
         }
 
         await auth.RequestEmailVerificationAsync(req.Email, ct);
-        return TypedResults.Ok();
+        return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
 
     public record EmailVerificationConfirm(string Token);
@@ -362,7 +362,7 @@ public static class AuthEndpoints
         }
 
         var success = await auth.ConfirmEmailVerificationAsync(req.Token, ct);
-        return success ? TypedResults.Ok() : TypedResults.Unauthorized();
+        return success ? TypedResults.Ok(Envelope<object>(httpContext, null)) : TypedResults.Unauthorized();
     }
 
     public record TokenExchangeResponse(string Token, string TokenType, long ExpiresIn);
@@ -389,6 +389,9 @@ public static class AuthEndpoints
                 new ApiError("validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields }),
                 ApiMeta.FromHttpContext(httpContext)),
             statusCode: StatusCodes.Status422UnprocessableEntity);
+
+    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
+        => new(data, ApiMeta.FromHttpContext(httpContext));
 
     private static Dictionary<string, string[]> ValidateSignup(SignupRequest req)
     {

@@ -52,6 +52,9 @@ public sealed class RouteTests
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.TryGetProperty("data", out _));
+        Assert.True(json.RootElement.TryGetProperty("meta", out _));
         Assert.Contains("https://idp.example.com/oauth2/authorize?", body, StringComparison.Ordinal);
         Assert.Contains("client_id=client-id", body, StringComparison.Ordinal);
     }
