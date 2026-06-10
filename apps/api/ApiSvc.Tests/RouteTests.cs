@@ -197,6 +197,31 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task PasswordResetRequest_SendsResetEmailForExistingPasswordUser()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-reset-mail@example.com", "Reset Mail");
+            db.UserPasswordAuths.Add(new UserPasswordAuth
+            {
+                UserId = user.Id,
+                PasswordHash = new PasswordStore().Hash("current-password"),
+            });
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/password-reset/request",
+            new StringContent("{\"email\":\"route-reset-mail@example.com\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var message = Assert.Single(app.EmailSender.Messages);
+        Assert.Equal("route-reset-mail@example.com", message.To);
+        Assert.Contains("reset-password?token=", message.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EmailVerificationRequest_WritesGenericAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1528,6 +1553,8 @@ public sealed class RouteTests
 
         public HttpClient Client { get; }
 
+        public TestEmailSender EmailSender => this.host.Services.GetRequiredService<TestEmailSender>();
+
         public static async Task<RouteTestApp> CreateAsync(SsoExternalIdentity? externalIdentity = null)
         {
             var connection = new SqliteConnection("Data Source=:memory:");
@@ -1576,6 +1603,8 @@ public sealed class RouteTests
                         services.AddSingleton<PasswordStore>();
                         services.AddSingleton<TokenStore>();
                         services.AddSingleton<TokenExchangeStore>();
+                        services.AddSingleton<TestEmailSender>();
+                        services.AddSingleton<IEmailSender>(sp => sp.GetRequiredService<TestEmailSender>());
                         services.AddScoped<SessionStore>();
                         services.AddScoped<AuthStore>();
                         services.AddScoped<AuditStore>();

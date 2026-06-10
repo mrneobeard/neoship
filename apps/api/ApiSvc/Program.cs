@@ -86,6 +86,16 @@ builder.Services.AddScoped<PermissionResolver>();
 builder.Services.AddSingleton<PasswordStore>();
 builder.Services.AddSingleton<TokenStore>();
 builder.Services.AddSingleton<TokenExchangeStore>();
+builder.Services.AddSingleton<IEmailSender>(sp =>
+{
+    var provider = sp.GetRequiredService<IConfiguration>()["Email:Provider"] ?? "logging";
+    return provider.Trim().ToLowerInvariant() switch
+    {
+        "smtp" => ActivatorUtilities.CreateInstance<SmtpEmailSender>(sp),
+        "test" => ActivatorUtilities.CreateInstance<TestEmailSender>(sp),
+        _ => ActivatorUtilities.CreateInstance<LoggingEmailSender>(sp),
+    };
+});
 
 builder.Services.AddScoped<SessionStore>();
 builder.Services.AddScoped<AuthStore>();

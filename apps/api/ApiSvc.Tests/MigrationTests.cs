@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using NeoShip.ApiSvc.Stores;
@@ -47,7 +48,11 @@ public class MigrationTests
         var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
         var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
         var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
-        return new AuthStore(db, passwords, sessions, audit, apiKeys, permissions, ctx, NullLogger<AuthStore>.Instance);
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Email:PublicBaseUrl"] = "https://localhost",
+        }).Build();
+        return new AuthStore(db, passwords, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
     }
 
     [Fact]

@@ -30,6 +30,8 @@ public class AuthStore
     private readonly AuditStore audit;
     private readonly ApiKeyStore apiKeys;
     private readonly PermissionResolver permissions;
+    private readonly IEmailSender emails;
+    private readonly IConfiguration configuration;
 
     private readonly RequestContext requestContext;
     private readonly ILogger<AuthStore> logger;
@@ -43,11 +45,12 @@ public class AuthStore
     /// <param name="sessions">The session store.</param>
     /// <param name="audit">The audit store.</param>
     /// <param name="apiKeys">The API key store.</param>
-    /// <param name="apiKeys">The API key store.</param>
     /// <param name="permissions">The permission resolver.</param>
+    /// <param name="emails">The email sender.</param>
+    /// <param name="configuration">The application configuration.</param>
     /// <param name="requestContext">The request context.</param>
     /// <param name="logger">The logger.</param>
-    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, PermissionResolver permissions, RequestContext requestContext, ILogger<AuthStore> logger)
+    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, PermissionResolver permissions, IEmailSender emails, IConfiguration configuration, RequestContext requestContext, ILogger<AuthStore> logger)
     {
         this.db = db;
         this.passwords = passwords;
@@ -55,6 +58,8 @@ public class AuthStore
         this.audit = audit;
         this.apiKeys = apiKeys;
         this.permissions = permissions;
+        this.emails = emails;
+        this.configuration = configuration;
         this.requestContext = requestContext;
         this.logger = logger;
     }
@@ -335,6 +340,11 @@ public class AuthStore
         auth.ResetTokenExpiresAt = DateTime.UtcNow.AddMinutes(15);
         await this.db.SaveChangesAsync(ct);
 
+        await this.emails.SendAsync(new EmailMessage(
+            user.Email,
+            "Reset your NeoShip password",
+            $"Use this link to reset your password: {this.PublicBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}"), ct);
+
         this.logger.LogInformation("Password reset requested for user {UserId}", user.Id);
         await this.audit.RecordAsync("auth.password_reset.request", user.OrgId, user.Id, "password_reset.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
     }
@@ -384,8 +394,16 @@ public class AuthStore
         userEmail.VerificationTokenDigest = digest;
         userEmail.VerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
         await this.db.SaveChangesAsync(ct);
+
+        await this.emails.SendAsync(new EmailMessage(
+            userEmail.Email,
+            "Verify your NeoShip email",
+            $"Use this link to verify your email: {this.PublicBaseUrl}/verify-email?token={Uri.EscapeDataString(rawToken)}"), ct);
+
         await this.audit.RecordAsync("auth.email_verification.request", null, userEmail.UserId, "email_verification.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
     }
+
+    private string PublicBaseUrl => (this.configuration["Email:PublicBaseUrl"] ?? "https://localhost").TrimEnd('/');
 
     public async Task<bool> ConfirmEmailVerificationAsync(string token, CancellationToken ct = default)
     {
