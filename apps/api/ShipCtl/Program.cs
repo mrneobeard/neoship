@@ -121,6 +121,8 @@ else
     membership.AcceptedAt = membership.AcceptedAt == default ? DateTime.UtcNow : membership.AcceptedAt;
 }
 
+await BuiltInRoleStore.AssignAsync(db, org.Id, org.Slug, user.Id, BuiltInRoleStore.OwnerRoleName);
+
 foreach (var permission in BootstrapPermissions())
 {
     if (!await db.UserClaims.AnyAsync(x => x.UserId == user.Id && x.Type == permission && x.Value == $"organization:{org.Slug}"))

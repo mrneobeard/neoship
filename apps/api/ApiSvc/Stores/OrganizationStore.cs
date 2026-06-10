@@ -108,6 +108,8 @@ public sealed class OrganizationStore
         });
         user.OrgId = org.Id;
 
+        await BuiltInRoleStore.AssignAsync(db, org.Id, org.Slug, userId, BuiltInRoleStore.OwnerRoleName, ct);
+
         await db.SaveChangesAsync(ct);
         logger.LogInformation("Organization created: {OrgId} slug={Slug} userId={UserId}", org.Id, org.Slug, userId);
 

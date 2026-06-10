@@ -67,6 +67,8 @@ public class OrganizationStoreTests
         Assert.NotNull(org);
         Assert.Equal("acme-team", org!.Slug);
         Assert.Equal(org.Id, db.Users.Single(u => u.Id == user.Id).OrgId);
+        Assert.True(await db.Roles.AnyAsync(x => x.OrgId == org.Id && x.Name == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
+        Assert.True(await db.Users.Where(x => x.Id == user.Id).SelectMany(x => x.Roles).AnyAsync(x => x.Name == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

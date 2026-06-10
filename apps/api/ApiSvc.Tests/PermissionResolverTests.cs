@@ -98,6 +98,27 @@ public class PermissionResolverTests
     }
 
     [Fact]
+    public async Task BuiltInRoleStore_AssignsOwnerPermissions()
+    {
+        var (db, resolver) = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "builtin-owner@example.com", "Built In Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        db.Users.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        await BuiltInRoleStore.AssignAsync(db, Constants.DefaultOrganizationId, "default", user.Id, BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken);
+
+        var permissions = await resolver.ResolveUserAsync(user.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(permissions.Allows(PermissionKey.Create("org.settings", "write"), PermissionScopeKind.Organization, "default"));
+        Assert.True(permissions.Allows(PermissionKey.Create("org.identity_providers", "write"), PermissionScopeKind.Organization, "default"));
+        Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.AdminRoleName, TestContext.Current.CancellationToken));
+        Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.MemberRoleName, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task ServiceAccountResolver_IncludesDirectClaims()
     {
         var (db, resolver) = CreateDatabase();
