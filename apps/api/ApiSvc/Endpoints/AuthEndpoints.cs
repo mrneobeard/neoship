@@ -80,6 +80,9 @@ public static class AuthEndpoints
         var (result, user, _, _) = await auth.SignupAsync(
             req.Email, req.Name, req.Password, Constants.DefaultOrganizationId, ct);
 
+        if (result == SignupResult.AuthMethodNotAllowed)
+            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
+
         if (result == SignupResult.EmailAlreadyExists || user is null)
             return TypedResults.Conflict("Email already registered.");
 
@@ -259,6 +262,9 @@ public static class AuthEndpoints
 
         if (result == LoginResult.AccountLocked)
             return TypedResults.StatusCode(423);
+
+        if (result == LoginResult.AuthMethodNotAllowed)
+            return TypedResults.StatusCode(StatusCodes.Status403Forbidden);
 
         if (result != LoginResult.Success || user is null || session is null || rawToken is null)
             return TypedResults.Unauthorized();

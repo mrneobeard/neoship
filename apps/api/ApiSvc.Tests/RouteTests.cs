@@ -131,6 +131,29 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task Signup_WhenPasswordAuthIsDisabled_ReturnsForbidden()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        await app.SeedAsync(db =>
+        {
+            var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
+            org.AllowPasswordAuth = false;
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/signup",
+            new StringContent("{\"email\":\"blocked-signup@example.com\",\"name\":\"Blocked\",\"password\":\"password123456\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.Users.AnyAsync(x => x.Email == "blocked-signup@example.com", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.signup.failed", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task Signup_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -260,6 +283,61 @@ public sealed class RouteTests
         var message = Assert.Single(app.EmailSender.Messages);
         Assert.Equal("route-reset-mail@example.com", message.To);
         Assert.Contains("reset-password?token=", message.Body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PasswordResetRequest_WhenPasswordAuthDisabled_DoesNotSendResetEmail()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-reset-disabled@example.com", "Reset Disabled");
+            db.UserPasswordAuths.Add(new UserPasswordAuth
+            {
+                UserId = user.Id,
+                PasswordHash = new PasswordStore().Hash("current-password"),
+            });
+            var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
+            org.AllowPasswordAuth = false;
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/password-reset/request",
+            new StringContent("{\"email\":\"route-reset-disabled@example.com\"}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Empty(app.EmailSender.Messages);
+        await app.WithDbAsync(async db =>
+        {
+            var auth = await db.UserPasswordAuths.SingleAsync(TestContext.Current.CancellationToken);
+            Assert.Null(auth.ResetTokenDigest);
+        });
+    }
+
+    [Fact]
+    public async Task ApiKeyLogin_WhenSsoRequired_ReturnsForbidden()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-api-key-policy@example.com", "API Key Policy");
+            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var (rawKey, apiKey) = store.GenerateUserApiKey(user.Id, "cli", null, "[]", DateTime.UtcNow.AddDays(1));
+            plaintextKey = rawKey;
+            db.UserApiKeys.Add(apiKey);
+            var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
+            org.RequireSso = true;
+        });
+
+        using var response = await app.Client.PostAsync(
+            "/api/v1/auth/api-keys/login",
+            new StringContent($"{{\"apiKey\":\"{plaintextKey}\"}}", Encoding.UTF8, "application/json"),
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.False(response.Headers.TryGetValues("Set-Cookie", out _));
     }
 
     [Fact]

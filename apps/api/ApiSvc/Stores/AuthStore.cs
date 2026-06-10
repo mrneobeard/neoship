@@ -11,6 +11,7 @@ public enum SignupResult
 {
     Success,
     EmailAlreadyExists,
+    AuthMethodNotAllowed,
 }
 
 public enum LoginResult
@@ -74,6 +75,15 @@ public class AuthStore
     {
         using var activity = activitySource.StartActivity("auth.signup", ActivityKind.Internal);
         activity?.SetTag(OTelConstants.AuthAction, "signup");
+
+        var org = await this.db.Orgs.FirstOrDefaultAsync(o => o.Id == orgId, ct);
+        if (org is null || org.RequireSso || !org.AllowPasswordAuth)
+        {
+            activity?.SetTag(OTelConstants.AuthResult, "password_auth_policy_denied");
+            await this.audit.RecordAsync("auth.signup.failed", orgId, null, "signup",
+                dataJson: "{\"reason\":\"password_auth_policy_denied\"}", ct: ct);
+            return (SignupResult.AuthMethodNotAllowed, null, null, null);
+        }
 
         var emailUpcase = email.ToUpperInvariant();
 
@@ -309,6 +319,15 @@ public class AuthStore
             return (LoginResult.AccountSuspended, null, null, null);
         }
 
+        var org = await this.db.Orgs.FirstOrDefaultAsync(o => o.Id == user.OrgId, ct);
+        if (org is null || org.RequireSso)
+        {
+            activity?.SetTag(OTelConstants.AuthResult, "api_key_login_policy_denied");
+            await this.audit.RecordAsync("auth.api_key_login.failed", user.OrgId, user.Id, "api_key_login",
+                dataJson: "{\"reason\":\"api_key_login_policy_denied\"}", ct: ct);
+            return (LoginResult.AuthMethodNotAllowed, null, null, null);
+        }
+
         var permissions = await this.permissions.ResolveUserAsync(user.Id, ct);
         var (session, rawToken) = await this.sessions.CreateSessionAsync(user.Id, user.OrgId, permissions, ct);
 
@@ -360,6 +379,12 @@ public class AuthStore
             return;
         }
 
+        if (!await this.OrgAllowsPasswordMutationAsync(user.OrgId, ct))
+        {
+            await this.audit.RecordAsync("auth.password_reset.request", user.OrgId, user.Id, "password_reset.request", dataJson: "{\"result\":\"accepted\"}", ct: ct);
+            return;
+        }
+
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
         var digest = TokenStore.ComputeDigestBase64(rawToken);
 
@@ -388,6 +413,12 @@ public class AuthStore
 
         if (auth is null) return false;
 
+        var user = await this.db.Users.FirstOrDefaultAsync(x => x.Id == auth.UserId, ct);
+        if (user is null || !await this.OrgAllowsPasswordMutationAsync(user.OrgId, ct))
+        {
+            return false;
+        }
+
         auth.PasswordHash = this.passwords.Hash(newPassword);
         auth.ResetTokenDigest = null;
         auth.ResetTokenExpiresAt = null;
@@ -400,6 +431,12 @@ public class AuthStore
         activity?.SetTag(OTelConstants.AuthResult, "success");
         await this.audit.RecordAsync("auth.password_reset", null, auth.UserId, "password_reset", ct: ct);
         return true;
+    }
+
+    private async Task<bool> OrgAllowsPasswordMutationAsync(Guid orgId, CancellationToken ct)
+    {
+        var org = await this.db.Orgs.FirstOrDefaultAsync(x => x.Id == orgId, ct);
+        return org is not null && !org.RequireSso && org.AllowPasswordAuth;
     }
 
     public async Task RequestEmailVerificationAsync(string email, CancellationToken ct = default)
