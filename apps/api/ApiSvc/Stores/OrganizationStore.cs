@@ -198,6 +198,36 @@ public sealed class OrganizationStore
     }
 
     /// <summary>
+    /// Switches a user's current organization when they have active membership.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The switched organization, or <see langword="null"/>.</returns>
+    public async Task<Organization?> SwitchCurrentAsync(Guid userId, Guid orgId, CancellationToken ct)
+    {
+        var membership = await db.OrganizationMemberships
+            .Include(x => x.Org)
+            .FirstOrDefaultAsync(x => x.UserId == userId && x.OrgId == orgId && x.DeletedAt == null, ct);
+        if (membership?.Org is null)
+        {
+            return null;
+        }
+
+        var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId, ct);
+        if (user is null)
+        {
+            return null;
+        }
+
+        user.OrgId = orgId;
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation("User switched current organization: user={UserId} org={OrgId}", userId, orgId);
+        return membership.Org;
+    }
+
+    /// <summary>
     /// Normalizes an organization slug.
     /// </summary>
     /// <param name="slug">The source slug.</param>

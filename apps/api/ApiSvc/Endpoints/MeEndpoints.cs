@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -23,6 +24,7 @@ public static class MeEndpoints
         var group = routes.MapGroup("/api/v1/me");
 
         group.MapGet("/", GetMeAsync);
+        group.MapPost("/orgs/{orgId:guid}/switch", SwitchOrgAsync);
         group.MapGet("/sessions", GetSessionsAsync);
         group.MapPost("/sessions/{sessionId:guid}/revoke", RevokeSessionAsync);
 
@@ -103,6 +105,8 @@ public static class MeEndpoints
 
     public record UserResponse(Guid Id, string Email, string Name, string? AvatarUrl);
 
+    private sealed record OrganizationResponse(Guid Id, string Name, string Slug);
+
     private static async Task<Results<Ok<UserResponse>, UnauthorizedHttpResult>> GetMeAsync(
         HttpContext httpContext,
         SessionStore sessions,
@@ -115,6 +119,30 @@ public static class MeEndpoints
         }
 
         return TypedResults.Ok(new UserResponse(user.Id, user.Email, user.Name, user.AvatarUrl));
+    }
+
+    private static async Task<Results<Ok<OrganizationResponse>, UnauthorizedHttpResult, NotFound>> SwitchOrgAsync(
+        Guid orgId,
+        HttpContext httpContext,
+        SessionStore sessions,
+        OrganizationStore organizations,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var org = await organizations.SwitchCurrentAsync(user.Id, orgId, ct);
+        if (org is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("org.switch", org.Id, user.Id, "org.switch", targetType: "org", targetId: org.Id.ToString(), ct: ct);
+        return TypedResults.Ok(new OrganizationResponse(org.Id, org.Name, org.Slug));
     }
 
     public record SessionResponse(
@@ -434,7 +462,7 @@ public static class MeEndpoints
         };
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> AcceptInviteAsync(
+    private static async Task<IResult> AcceptInviteAsync(
         [FromBody] AcceptInviteRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -448,6 +476,12 @@ public static class MeEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var validation = ValidateAcceptInvite(req);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var invite = await invites.AcceptAsync(req.Token, user.Id, ct);
         if (invite is null)
         {
@@ -456,6 +490,20 @@ public static class MeEndpoints
 
         await audit.RecordAsync("org.invites.accept", invite.OrgId, user.Id, "org.invite.accept", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
         return TypedResults.Ok();
+    }
+
+    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
+        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
+
+    private static Dictionary<string, string[]> ValidateAcceptInvite(AcceptInviteRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (string.IsNullOrWhiteSpace(req.Token))
+        {
+            errors["token"] = ["Token is required."];
+        }
+
+        return errors;
     }
 
     private static async Task<Results<Ok<BeginPasskeyRegistrationResponse>, UnauthorizedHttpResult>> BeginPasskeyRegistrationAsync(

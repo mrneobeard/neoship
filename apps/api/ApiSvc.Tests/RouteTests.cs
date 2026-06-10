@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 
 using Fido2NetLib;
 
@@ -662,6 +663,40 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateIdentityProvider_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-idp-invalid@example.com", "IDP Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\" \" ,\"providerType\":\"ldap\",\"issuerUrl\":\"http://idp.example.com\",\"clientId\":\" \" ,\"metadataJson\":\"not-json\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("providerType", out _));
+        Assert.True(fields.TryGetProperty("issuerUrl", out _));
+        Assert.True(fields.TryGetProperty("clientId", out _));
+        Assert.True(fields.TryGetProperty("metadataJson", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.UserIdentityProviders.AnyAsync(x => x.UserId == userId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.identity_providers.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListRoles_AllowsScopedServiceAccountBearer()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -707,6 +742,111 @@ public sealed class RouteTests
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateRole_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-invalid@example.com", "Role Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/roles");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\" \" ,\"description\":\"{new string('x', 1025)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("description", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.Roles.AnyAsync(x => x.CreatedBy == userId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task AddRoleClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var roleId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-claim-invalid@example.com", "Role Claim Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+            db.Roles.Add(new Role
+            {
+                Id = roleId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "Writer",
+                NameUpcase = "WRITER",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/roles/{roleId}/claims");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"permission\":\"not-valid\",\"scopeKind\":999,\"scopeId\":\"{new string('x', 161)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("permission", out _));
+        Assert.True(fields.TryGetProperty("scopeKind", out _));
+        Assert.True(fields.TryGetProperty("scopeId", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.RoleClaims.AnyAsync(x => x.RoleId == roleId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.claim.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateGroup_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-invalid@example.com", "Group Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/groups");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\" \" ,\"email\":\"not-email\",\"description\":\"{new string('x', 1025)}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("email", out _));
+        Assert.True(fields.TryGetProperty("description", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.Groups.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.groups.create", TestContext.Current.CancellationToken));
+        });
     }
 
     [Fact]
@@ -757,6 +897,38 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateInvite_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-invite-invalid@example.com", "Invite Invalid");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"email\":\"not-email\",\"roleIds\":[\"00000000-0000-0000-0000-000000000000\"],\"groupIds\":[\"11111111-1111-1111-1111-111111111111\",\"11111111-1111-1111-1111-111111111111\"]}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("email", out _));
+        Assert.True(fields.TryGetProperty("roleIds", out _));
+        Assert.True(fields.TryGetProperty("groupIds", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.OrganizationInvites.AnyAsync(x => x.InvitedByUserId == userId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task AcceptInvite_CreatesMembershipAndWritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -793,6 +965,79 @@ public sealed class RouteTests
         {
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == userId && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.accept", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task AcceptInvite_ReturnsValidationErrorBeforeDbLookup()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-invite-token-invalid@example.com", "Invite Token Invalid");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/invites/accept");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"token\":\" \"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields").TryGetProperty("token", out _));
+    }
+
+    [Fact]
+    public async Task SwitchOrg_RequiresMembershipAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var otherOrgId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-switch@example.com", "Switch User");
+            userId = user.Id;
+            db.Orgs.Add(new Organization
+            {
+                Id = otherOrgId,
+                Name = "Other",
+                NameUpcase = "OTHER",
+                Slug = "other",
+                StatusId = OrganizationStatus.Active.Id,
+                TenantModeId = TenantMode.Multi.Id,
+                OrganizationPlanId = 1,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var firstRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/me/orgs/{otherOrgId}/switch");
+        firstRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var firstResponse = await app.Client.SendAsync(firstRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, firstResponse.StatusCode);
+
+        await app.SeedAsync(db =>
+        {
+            db.OrganizationMemberships.Add(new OrganizationMembership
+            {
+                OrgId = otherOrgId,
+                UserId = userId,
+            });
+        });
+
+        using var secondRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/me/orgs/{otherOrgId}/switch");
+        secondRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var secondResponse = await app.Client.SendAsync(secondRequest, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal(otherOrgId, (await db.Users.SingleAsync(x => x.Id == userId, TestContext.Current.CancellationToken)).OrgId);
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.switch", TestContext.Current.CancellationToken));
         });
     }
 

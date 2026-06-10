@@ -98,6 +98,8 @@ Conform public names to canonical C# types where practical.
 
 - use `data` envelope for success
 - use `error` envelope for failures
+- validate request data in the route/store layer before database mutation and return one aggregate validation error containing all detected field violations
+- FluentValidation may be used for non-trivial validators, but keep simple validators local when that avoids unnecessary abstraction
 - use cursor pagination for mutable lists
 - use `filter[...]` and `sort`
 - use `Idempotency-Key` on mutating create-style endpoints where retries are likely

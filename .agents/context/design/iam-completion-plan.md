@@ -138,6 +138,8 @@ Likely areas:
 
 - Convert IAM route responses to `api-contract.md` envelopes.
 - Use error envelopes for failures.
+- Add aggregate validation for IAM request data before database mutation; return all field violations in one validation error instead of failing one field at a time.
+- Use FluentValidation where validators become non-trivial; keep simple local validators where practical.
 - Add cursor pagination/filter/sort helpers for mutable lists.
 - OpenAPI generation/validation is required for IAM routes.
 - Route payloads stay language-neutral JSON.

@@ -184,6 +184,48 @@ public class OrganizationStoreTests
     }
 
     /// <summary>
+    /// Verifies users can switch only to active membership organizations.
+    /// </summary>
+    [Fact]
+    public async Task SwitchCurrentAsync_RequiresActiveMembership()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "switch@example.com", "Switch User")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var otherOrg = new Organization
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = OrganizationStatus.Active.Id,
+            TenantModeId = TenantMode.Multi.Id,
+            OrganizationPlanId = 1,
+            CreatedAt = DateTime.UtcNow,
+        };
+        db.Users.Add(user);
+        db.Orgs.Add(otherOrg);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new OrganizationStore(db, NullLogger<OrganizationStore>.Instance);
+        Assert.Null(await store.SwitchCurrentAsync(user.Id, otherOrg.Id, TestContext.Current.CancellationToken));
+
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = otherOrg.Id,
+            UserId = user.Id,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var switched = await store.SwitchCurrentAsync(user.Id, otherOrg.Id, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(switched);
+        Assert.Equal(otherOrg.Id, db.Users.Single(x => x.Id == user.Id).OrgId);
+    }
+
+    /// <summary>
     /// Verifies that updating an organization changes its name fields.
     /// </summary>
     [Fact]

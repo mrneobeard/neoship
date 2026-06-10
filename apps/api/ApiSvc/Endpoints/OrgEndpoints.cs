@@ -1,7 +1,10 @@
+using System.Text.Json;
+
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -446,14 +449,54 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (string.IsNullOrWhiteSpace(req.Email))
+        var validation = ValidateCreateInvite(req);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Email is required.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var (invite, token) = await invites.CreateAsync(org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
         await audit.RecordAsync("org.invites.create", org.Id, auth.User.Id, "org.invite.create", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/invites/{invite.Id}", new CreateOrganizationInviteResponse(invite.Id, invite.Email, token, invite.CreatedAt, invite.ExpiresAt));
+    }
+
+    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
+        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
+
+    private static Dictionary<string, string[]> ValidateCreateInvite(CreateOrganizationInviteRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var email = req.Email?.Trim() ?? string.Empty;
+
+        if (!IsValidEmail(email))
+        {
+            errors["email"] = ["Email must be a valid email address and 320 characters or fewer."];
+        }
+
+        var roleIds = req.RoleIds ?? [];
+        if (roleIds.Any(x => x == Guid.Empty) || roleIds.Count != roleIds.Distinct().Count())
+        {
+            errors["roleIds"] = ["Role identifiers must be non-empty and unique."];
+        }
+
+        var groupIds = req.GroupIds ?? [];
+        if (groupIds.Any(x => x == Guid.Empty) || groupIds.Count != groupIds.Distinct().Count())
+        {
+            errors["groupIds"] = ["Group identifiers must be non-empty and unique."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (email.Length is < 3 or > 320)
+        {
+            return false;
+        }
+
+        var at = email.IndexOf('@', StringComparison.Ordinal);
+        return at > 0 && at == email.LastIndexOf('@') && at < email.Length - 1 && email[(at + 1)..].Contains('.', StringComparison.Ordinal);
     }
 
     private static async Task<IResult> RevokeInviteAsync(
@@ -537,6 +580,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateRoleInput(req.Name, req.Description, requireName: true);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var role = await roles.CreateAsync(org.Id, auth.User!.Id, req.Name, req.Description, ct);
         await audit.RecordAsync("org.roles.create", org.Id, auth.User.Id, "role.create", targetType: "role", targetId: role.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/roles/{role.Id}", ToRoleResponse(role));
@@ -595,6 +644,12 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        var validation = ValidateRoleInput(req.Name, req.Description, requireName: false);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var role = await roles.UpdateAsync(org.Id, roleId, req.Name, req.Description, ct);
@@ -664,9 +719,10 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (!PermissionKey.TryParse(req.Permission, out var key))
+        var validation = ValidateRoleClaim(req, out var key);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Invalid permission key.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
@@ -678,6 +734,44 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.roles.claim.add", org.Id, auth.User.Id, "role.claim.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
         return TypedResults.Ok();
+    }
+
+    private static Dictionary<string, string[]> ValidateRoleInput(string? name, string? description, bool requireName)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (description is not null && description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateRoleClaim(AddRoleClaimRequest req, out PermissionKey key)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!PermissionKey.TryParse(req.Permission, out key))
+        {
+            errors["permission"] = ["Permission must be a registered resource.action key."];
+        }
+
+        if (!Enum.IsDefined(req.ScopeKind))
+        {
+            errors["scopeKind"] = ["Scope kind is invalid."];
+        }
+
+        if (req.ScopeId is not null && req.ScopeId.Length > 160)
+        {
+            errors["scopeId"] = ["Scope ID must be 160 characters or fewer when provided."];
+        }
+
+        return errors;
     }
 
     private static async Task<IResult> RemoveRoleClaimAsync(
@@ -830,6 +924,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateGroupInput(req.Name, req.Email, req.Description, requireName: true);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var group = await groups.CreateAsync(org.Id, req.Name, req.Email, req.Description, ct);
         await audit.RecordAsync("org.groups.create", org.Id, auth.User!.Id, "group.create", targetType: "group", targetId: group.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/orgs/{orgSlug}/groups/{group.Id}", ToGroupResponse(group));
@@ -890,6 +990,12 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var validation = ValidateGroupInput(req.Name, req.Email, req.Description, requireName: false);
+        if (validation.Count > 0)
+        {
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
         var group = await groups.UpdateAsync(org.Id, groupId, req.Name, req.Email, req.Description, ct);
         if (group is null)
         {
@@ -898,6 +1004,28 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.groups.update", org.Id, auth.User!.Id, "group.update", targetType: "group", targetId: group.Id.ToString(), ct: ct);
         return TypedResults.Ok(ToGroupResponse(group));
+    }
+
+    private static Dictionary<string, string[]> ValidateGroupInput(string? name, string? email, string? description, bool requireName)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (email is not null && !IsValidEmail(email.Trim()))
+        {
+            errors["email"] = ["Email must be a valid email address and 320 characters or fewer when provided."];
+        }
+
+        if (description is not null && description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        return errors;
     }
 
     private static async Task<IResult> DeleteGroupAsync(
@@ -1788,9 +1916,10 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (string.IsNullOrWhiteSpace(req.Name) || !TryParseProviderType(req.ProviderType, out var providerType) || !IsValidIssuerUrl(req.IssuerUrl))
+        var validation = ValidateCreateIdentityProvider(req, out var providerType);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Invalid identity provider request.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var provider = await providers.CreateAsync(org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
@@ -1854,9 +1983,10 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        if (!IsValidIssuerUrl(req.IssuerUrl))
+        var validation = ValidateUpdateIdentityProvider(req);
+        if (validation.Count > 0)
         {
-            return TypedResults.BadRequest("Invalid identity provider request.");
+            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
         var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
@@ -1867,6 +1997,84 @@ public static class OrgEndpoints
 
         await audit.RecordAsync("org.identity_providers.update", org.Id, auth.User!.Id, "identity_provider.update", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
         return TypedResults.Ok(ToIdentityProviderResponse(provider));
+    }
+
+    private static Dictionary<string, string[]> ValidateCreateIdentityProvider(CreateIdentityProviderRequest req, out UserIdentityProviderType providerType)
+    {
+        var errors = new Dictionary<string, string[]>();
+        providerType = UserIdentityProviderType.Unknown;
+
+        if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160)
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (string.IsNullOrWhiteSpace(req.ProviderType) || !TryParseProviderType(req.ProviderType, out providerType))
+        {
+            errors["providerType"] = ["Provider type must be oidc, oauth2, or saml."];
+        }
+
+        AddIdentityProviderCommonErrors(errors, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson);
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateUpdateIdentityProvider(UpdateIdentityProviderRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (req.Name is not null && (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160))
+        {
+            errors["name"] = ["Name must be 160 characters or fewer when provided."];
+        }
+
+        AddIdentityProviderCommonErrors(errors, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson);
+        return errors;
+    }
+
+    private static void AddIdentityProviderCommonErrors(
+        Dictionary<string, string[]> errors,
+        string? issuerUrl,
+        string? clientId,
+        string? clientSecret,
+        string? metadataJson)
+    {
+        if (!IsValidIssuerUrl(issuerUrl))
+        {
+            errors["issuerUrl"] = ["Issuer URL must be an HTTPS URL when provided."];
+        }
+
+        if (clientId is not null && (string.IsNullOrWhiteSpace(clientId) || clientId.Length > 512))
+        {
+            errors["clientId"] = ["Client ID must be 512 characters or fewer when provided."];
+        }
+
+        if (clientSecret is not null && clientSecret.Length > 4096)
+        {
+            errors["clientSecret"] = ["Client secret must be 4096 characters or fewer when provided."];
+        }
+
+        if (!IsValidMetadataJson(metadataJson))
+        {
+            errors["metadataJson"] = ["Metadata JSON must be a valid JSON object when provided."];
+        }
+    }
+
+    private static bool IsValidMetadataJson(string? metadataJson)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metadataJson);
+            return doc.RootElement.ValueKind == JsonValueKind.Object;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static async Task<IResult> EnableIdentityProviderAsync(
