@@ -249,6 +249,7 @@ public static class MeEndpoints
         SessionStore sessions,
         ApiKeyStore apiKeys,
         ShipDb db,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -268,6 +269,7 @@ public static class MeEndpoints
 
         db.UserApiKeys.Add(apiKey);
         await db.SaveChangesAsync(ct);
+        await audit.RecordAsync("auth.api_key.create", user.OrgId, user.Id, "api_key.create", targetType: "user_api_key", targetId: apiKey.Id.ToString(), ct: ct);
 
         return TypedResults.Created($"/api/v1/me/api-keys/{apiKey.Id}",
             new CreateApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt));
@@ -278,6 +280,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         ApiKeyStore apiKeys,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -292,6 +295,7 @@ public static class MeEndpoints
             return TypedResults.NotFound();
         }
 
+        await audit.RecordAsync("auth.api_key.revoke", user.OrgId, user.Id, "api_key.revoke", targetType: "user_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Ok();
     }
 
@@ -322,6 +326,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -341,6 +346,7 @@ public static class MeEndpoints
         var label = Uri.EscapeDataString($"NeoShip:{user.Email}");
         var uri = $"otpauth://totp/{label}?secret={secret}&issuer={issuer}&digits=6&period=30";
 
+        await audit.RecordAsync("auth.mfa.totp.start", user.OrgId, user.Id, "mfa.totp.start", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
         return TypedResults.Ok(new StartTotpResponse(factor.Id, secret, uri));
     }
 
@@ -349,6 +355,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -364,7 +371,14 @@ public static class MeEndpoints
         }
 
         var confirmed = await mfa.ConfirmTotpAsync(user.Id, req.FactorId, req.Code, ct);
-        return confirmed ? TypedResults.Ok() : TypedResults.NotFound();
+        if (!confirmed)
+        {
+            await audit.RecordAsync("auth.mfa.totp.confirm_failed", user.OrgId, user.Id, "mfa.totp.confirm", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("auth.mfa.totp.confirm", user.OrgId, user.Id, "mfa.totp.confirm", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<IResult> DisableTotpAsync(
@@ -372,6 +386,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -387,7 +402,13 @@ public static class MeEndpoints
         }
 
         var disabled = await mfa.DisableTotpAsync(user.Id, req.FactorId, ct);
-        return disabled ? TypedResults.Ok() : TypedResults.NotFound();
+        if (!disabled)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("auth.mfa.totp.disable", user.OrgId, user.Id, "mfa.totp.disable", targetType: "mfa_factor", targetId: req.FactorId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static async Task<IResult> RegenerateRecoveryCodesAsync(
@@ -395,6 +416,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -410,6 +432,7 @@ public static class MeEndpoints
         }
 
         var codes = await mfa.RegenerateRecoveryCodesAsync(user.Id, req.Count ?? 10, ct);
+        await audit.RecordAsync("auth.mfa.recovery_codes.regenerate", user.OrgId, user.Id, "mfa.recovery_codes.regenerate", ct: ct);
         return TypedResults.Ok(new RegenerateRecoveryCodesResponse(codes));
     }
 
@@ -417,6 +440,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         MfaStore mfa,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -426,6 +450,7 @@ public static class MeEndpoints
         }
 
         await mfa.RevokeRecoveryCodesAsync(user.Id, ct);
+        await audit.RecordAsync("auth.mfa.recovery_codes.revoke", user.OrgId, user.Id, "mfa.recovery_codes.revoke", ct: ct);
         return TypedResults.Ok();
     }
 
@@ -531,7 +556,17 @@ public static class MeEndpoints
 
     private static Dictionary<string, string[]> ValidateCreateApiKey(CreateApiKeyRequest req)
     {
-        var errors = ValidateNameDescription(req.Name, req.Description, requireName: true);
+        var errors = new Dictionary<string, string[]>();
+
+        if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 64)
+        {
+            errors["name"] = ["Name is required and must be 64 characters or fewer."];
+        }
+
+        if (req.Description is not null && req.Description.Length > 256)
+        {
+            errors["description"] = ["Description must be 256 characters or fewer when provided."];
+        }
 
         if (!IsValidJsonArray(req.ScopesJson))
         {
@@ -650,6 +685,7 @@ public static class MeEndpoints
         SessionStore sessions,
         PasskeyStore passkeys,
         PasskeyChallengeStore challenges,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -671,6 +707,7 @@ public static class MeEndpoints
         }
 
         var factor = await passkeys.FinishRegistrationAsync(user.Id, req.Name, options, req.Response, ct);
+        await audit.RecordAsync("auth.passkey.register", user.OrgId, user.Id, "passkey.register", targetType: "mfa_factor", targetId: factor.Id.ToString(), ct: ct);
         return TypedResults.Ok(new PasskeyResponse(factor.Id, factor.Name, factor.CreatedAt, factor.LastUsedAt));
     }
 
@@ -679,6 +716,7 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         PasskeyStore passkeys,
+        AuditStore audit,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -688,7 +726,13 @@ public static class MeEndpoints
         }
 
         var revoked = await passkeys.RevokeAsync(user.Id, factorId, ct);
-        return revoked ? TypedResults.Ok() : TypedResults.NotFound();
+        if (!revoked)
+        {
+            return TypedResults.NotFound();
+        }
+
+        await audit.RecordAsync("auth.passkey.revoke", user.OrgId, user.Id, "passkey.revoke", targetType: "mfa_factor", targetId: factorId.ToString(), ct: ct);
+        return TypedResults.Ok();
     }
 
     private static Dictionary<string, string[]> ValidateFinishPasskeyRegistration(FinishPasskeyRegistrationRequest req)

@@ -228,6 +228,56 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateUserApiKey_WritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-audit@example.com", "User Key Audit");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"cli\",\"description\":\"CLI key\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.Name == "cli", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.api_key.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task StartTotp_WritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-totp-audit@example.com", "Totp Audit");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/mfa/totp/start");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Phone\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.UserMfaFactors.AnyAsync(x => x.UserId == userId && x.Name == "Phone", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.mfa.totp.start", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ConfirmTotp_ReturnsAggregateValidationErrorsBeforeDbLookup()
     {
         await using var app = await RouteTestApp.CreateAsync();
