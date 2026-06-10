@@ -1350,6 +1350,39 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateIdentityProvider_WithStaleSessionReturnsStepUpRequired()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-idp-stale@example.com", "IDP Stale");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+        await app.WithDbAsync(async db =>
+        {
+            var session = await db.UserSessions.SingleAsync(x => x.UserId == userId, TestContext.Current.CancellationToken);
+            session.CreatedAt = DateTime.UtcNow.AddHours(-1);
+            await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Acme OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("step_up_required", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.UserIdentityProviders.AnyAsync(x => x.Name == "Acme OIDC", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task CreateIdentityProvider_WithGooglePresetFillsOidcMetadata()
     {
         await using var app = await RouteTestApp.CreateAsync();

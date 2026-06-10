@@ -12,6 +12,8 @@ namespace NeoShip.ApiSvc.Endpoints;
 
 public static class OrgEndpoints
 {
+    private const double DefaultStepUpWindowMinutes = 15;
+
     public static RouteGroupBuilder MapOrgEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/v1/orgs/{orgSlug}");
@@ -207,6 +209,15 @@ public static class OrgEndpoints
                 return (null, TypedResults.StatusCode(StatusCodes.Status403Forbidden));
             }
 
+            if (permission.Action == "write")
+            {
+                var stepUpFailure = await RequireRecentSessionAsync(httpContext, ct);
+                if (stepUpFailure is not null)
+                {
+                    return (null, stepUpFailure);
+                }
+            }
+
             return (user, null);
         }
 
@@ -229,6 +240,38 @@ public static class OrgEndpoints
 
         return (null, null);
     }
+
+    private static async Task<IResult?> RequireRecentSessionAsync(HttpContext httpContext, CancellationToken ct)
+    {
+        if (!httpContext.RequestServices.GetRequiredService<IConfiguration>().GetValue("Auth:StepUp:Enabled", true))
+        {
+            return null;
+        }
+
+        var sessionId = httpContext.RequestServices.GetRequiredService<RequestContext>().SessionId;
+        if (sessionId is null)
+        {
+            return StepUpRequired(httpContext);
+        }
+
+        var session = await httpContext.RequestServices.GetRequiredService<ShipDb>()
+            .UserSessions.FirstOrDefaultAsync(x => x.Id == sessionId.Value, ct);
+        if (session is null)
+        {
+            return StepUpRequired(httpContext);
+        }
+
+        var windowMinutes = httpContext.RequestServices.GetRequiredService<IConfiguration>().GetValue("Auth:StepUp:WindowMinutes", DefaultStepUpWindowMinutes);
+        var window = TimeSpan.FromMinutes(windowMinutes <= 0 ? DefaultStepUpWindowMinutes : windowMinutes);
+        var lastVerifiedAt = session.MfaVerifiedAt is not null && session.MfaVerifiedAt > session.CreatedAt
+            ? session.MfaVerifiedAt.Value
+            : session.CreatedAt;
+
+        return lastVerifiedAt < DateTime.UtcNow.Subtract(window) ? StepUpRequired(httpContext) : null;
+    }
+
+    private static IResult StepUpRequired(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
 
     private static async Task<ServiceAccountApiKey?> AuthenticateServiceAccountApiKeyAsync(HttpContext httpContext, CancellationToken ct)
     {
