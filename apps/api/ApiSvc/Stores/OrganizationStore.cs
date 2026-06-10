@@ -43,9 +43,10 @@ public sealed class OrganizationStore
             return [];
         }
 
-        return await db.Orgs
+        return await db.OrganizationMemberships
             .AsNoTracking()
-            .Where(o => o.Id == user.OrgId)
+            .Where(m => m.UserId == userId && m.DeletedAt == null)
+            .Select(m => m.Org!)
             .OrderBy(o => o.NameUpcase)
             .ThenBy(o => o.Id)
             .ToListAsync(ct);
@@ -98,6 +99,13 @@ public sealed class OrganizationStore
         };
 
         db.Orgs.Add(org);
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = org.Id,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow,
+            AcceptedAt = DateTime.UtcNow,
+        });
         user.OrgId = org.Id;
 
         await db.SaveChangesAsync(ct);
@@ -184,7 +192,9 @@ public sealed class OrganizationStore
     /// <returns><see langword="true"/> when the user can access the organization; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> UserCanAccessAsync(Guid userId, Guid orgId, CancellationToken ct)
     {
-        return await db.Users.AnyAsync(u => u.Id == userId && u.OrgId == orgId, ct);
+        return await db.OrganizationMemberships.AnyAsync(m => m.UserId == userId
+            && m.OrgId == orgId
+            && m.DeletedAt == null, ct);
     }
 
     /// <summary>

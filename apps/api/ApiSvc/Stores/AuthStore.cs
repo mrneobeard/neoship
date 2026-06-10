@@ -112,6 +112,13 @@ public class AuthStore
         };
 
         this.db.Users.Add(user);
+        this.db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = orgId,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow,
+            AcceptedAt = DateTime.UtcNow,
+        });
         this.db.UserEmails.Add(userEmail);
         this.db.UserPasswordAuths.Add(userPasswordAuth);
         await this.db.SaveChangesAsync(ct);

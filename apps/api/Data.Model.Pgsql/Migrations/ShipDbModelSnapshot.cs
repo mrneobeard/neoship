@@ -289,6 +289,46 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.ToTable("orgs", (string)null);
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.OrganizationMembership", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("AcceptedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("accepted_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_organization_memberships");
+
+                    b.HasIndex("OrgId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_organization_memberships_org_id_user_id");
+
+                    b.HasIndex("UserId", "DeletedAt")
+                        .HasDatabaseName("ix_organization_memberships_user_id_deleted_at");
+
+                    b.ToTable("organization_memberships", (string)null);
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.Role", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1434,6 +1474,27 @@ namespace NeoShip.Data.Pgsql.Migrations
                         .HasConstraintName("fk_groups_orgs_org_id");
 
                     b.Navigation("Org");
+                });
+
+            modelBuilder.Entity("NeoShip.Data.Model.OrganizationMembership", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_organization_memberships_orgs_org_id");
+
+                    b.HasOne("NeoShip.Data.Model.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_organization_memberships_users_user_id");
+
+                    b.Navigation("Org");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("NeoShip.Data.Model.Role", b =>

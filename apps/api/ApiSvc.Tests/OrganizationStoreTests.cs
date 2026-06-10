@@ -91,10 +91,10 @@ public class OrganizationStoreTests
     }
 
     /// <summary>
-    /// Verifies that organization access follows the user's current organization.
+    /// Verifies that organization access follows active memberships.
     /// </summary>
     [Fact]
-    public async Task UserCanAccessAsync_UsesUserOrganization()
+    public async Task UserCanAccessAsync_UsesActiveMemberships()
     {
         await using var db = CreateDatabase();
         var user = new User(Guid.NewGuid(), "member@example.com", "Member")
@@ -116,12 +116,71 @@ public class OrganizationStoreTests
 
         db.Users.Add(user);
         db.Orgs.Add(otherOrg);
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = user.Id,
+        });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var store = new OrganizationStore(db, NullLogger<OrganizationStore>.Instance);
 
         Assert.True(await store.UserCanAccessAsync(user.Id, Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
         Assert.False(await store.UserCanAccessAsync(user.Id, otherOrg.Id, TestContext.Current.CancellationToken));
+
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = otherOrg.Id,
+            UserId = user.Id,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await store.UserCanAccessAsync(user.Id, otherOrg.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Verifies that organization lists include all active memberships.
+    /// </summary>
+    [Fact]
+    public async Task ListForUserAsync_ReturnsActiveMembershipOrganizations()
+    {
+        await using var db = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "member-list@example.com", "Member List")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var otherOrg = new Organization
+        {
+            Id = Guid.CreateVersion7(),
+            Name = "Other",
+            NameUpcase = "OTHER",
+            Slug = "other",
+            StatusId = OrganizationStatus.Active.Id,
+            TenantModeId = TenantMode.Multi.Id,
+            OrganizationPlanId = 1,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        db.Users.Add(user);
+        db.Orgs.Add(otherOrg);
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = Constants.DefaultOrganizationId,
+            UserId = user.Id,
+        });
+        db.OrganizationMemberships.Add(new OrganizationMembership
+        {
+            OrgId = otherOrg.Id,
+            UserId = user.Id,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var store = new OrganizationStore(db, NullLogger<OrganizationStore>.Instance);
+        var orgs = await store.ListForUserAsync(user.Id, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, orgs.Count);
+        Assert.Contains(orgs, org => org.Id == Constants.DefaultOrganizationId);
+        Assert.Contains(orgs, org => org.Id == otherOrg.Id);
     }
 
     /// <summary>

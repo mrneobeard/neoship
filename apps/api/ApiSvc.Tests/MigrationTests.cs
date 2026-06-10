@@ -81,6 +81,7 @@ public class MigrationTests
         Assert.NotNull(user);
         Assert.NotNull(rawToken);
         Assert.Equal("new@example.com", user.Email);
+        Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
     }
 
     [Fact]

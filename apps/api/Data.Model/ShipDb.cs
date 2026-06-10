@@ -15,6 +15,8 @@ public class ShipDb : DbContext
 
     public DbSet<UserClaim> UserClaims => Set<UserClaim>();
 
+    public DbSet<OrganizationMembership> OrganizationMemberships => Set<OrganizationMembership>();
+
     public DbSet<UserEmail> UserEmails => Set<UserEmail>();
 
     public DbSet<UserPasswordAuth> UserPasswordAuths => Set<UserPasswordAuth>();
@@ -57,6 +59,12 @@ public class ShipDb : DbContext
         {
             u.HasIndex(x => x.Email).IsUnique();
             u.HasIndex(x => x.EmailUpcase);
+        });
+
+        modelBuilder.Entity<OrganizationMembership>(m =>
+        {
+            m.HasIndex(x => new { x.OrgId, x.UserId }).IsUnique();
+            m.HasIndex(x => new { x.UserId, x.DeletedAt });
         });
 
         modelBuilder.Entity<UserEmail>(e =>
@@ -115,6 +123,12 @@ public class ShipDb : DbContext
         });
 
         // UserClaim: FK auto-detected by convention (UserId)
+
+        modelBuilder.Entity<OrganizationMembership>(m =>
+        {
+            m.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
+            m.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
 
         // User -> UserMfaFactor
         modelBuilder.Entity<UserMfaFactor>(f =>
