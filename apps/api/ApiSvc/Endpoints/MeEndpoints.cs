@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.Json;
 
 using Fido2NetLib;
 
@@ -242,7 +243,7 @@ public static class MeEndpoints
 
     public record CreateApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
 
-    private static async Task<Results<Created<CreateApiKeyResponse>, UnauthorizedHttpResult>> CreateApiKeyAsync(
+    private static async Task<IResult> CreateApiKeyAsync(
         [FromBody] CreateApiKeyRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -254,6 +255,12 @@ public static class MeEndpoints
         if (user is null)
         {
             return TypedResults.Unauthorized();
+        }
+
+        var validation = ValidateCreateApiKey(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
         }
 
         var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
@@ -310,7 +317,7 @@ public static class MeEndpoints
 
     private sealed record AcceptInviteRequest(string Token);
 
-    private static async Task<Results<Ok<StartTotpResponse>, UnauthorizedHttpResult>> StartTotpAsync(
+    private static async Task<IResult> StartTotpAsync(
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -323,6 +330,12 @@ public static class MeEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var validation = ValidateOptionalName(req.Name);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var (factor, secret) = await mfa.StartTotpAsync(user.Id, req.Name, ct);
         var issuer = Uri.EscapeDataString("NeoShip");
         var label = Uri.EscapeDataString($"NeoShip:{user.Email}");
@@ -331,7 +344,7 @@ public static class MeEndpoints
         return TypedResults.Ok(new StartTotpResponse(factor.Id, secret, uri));
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> ConfirmTotpAsync(
+    private static async Task<IResult> ConfirmTotpAsync(
         [FromBody] ConfirmTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -344,11 +357,17 @@ public static class MeEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var validation = ValidateTotpConfirm(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var confirmed = await mfa.ConfirmTotpAsync(user.Id, req.FactorId, req.Code, ct);
         return confirmed ? TypedResults.Ok() : TypedResults.NotFound();
     }
 
-    private static async Task<Results<Ok, UnauthorizedHttpResult, NotFound>> DisableTotpAsync(
+    private static async Task<IResult> DisableTotpAsync(
         [FromBody] DisableTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -361,11 +380,17 @@ public static class MeEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var validation = ValidateFactorId(req.FactorId);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
         var disabled = await mfa.DisableTotpAsync(user.Id, req.FactorId, ct);
         return disabled ? TypedResults.Ok() : TypedResults.NotFound();
     }
 
-    private static async Task<Results<Ok<RegenerateRecoveryCodesResponse>, UnauthorizedHttpResult>> RegenerateRecoveryCodesAsync(
+    private static async Task<IResult> RegenerateRecoveryCodesAsync(
         [FromBody] RegenerateRecoveryCodesRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -376,6 +401,12 @@ public static class MeEndpoints
         if (user is null)
         {
             return TypedResults.Unauthorized();
+        }
+
+        var validation = ValidateRecoveryCodeCount(req.Count);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
         }
 
         var codes = await mfa.RegenerateRecoveryCodesAsync(user.Id, req.Count ?? 10, ct);
@@ -495,6 +526,96 @@ public static class MeEndpoints
     private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
         => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
 
+    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
+        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
+
+    private static Dictionary<string, string[]> ValidateCreateApiKey(CreateApiKeyRequest req)
+    {
+        var errors = ValidateNameDescription(req.Name, req.Description, requireName: true);
+
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateOptionalName(string? name)
+        => ValidateNameDescription(name, description: null, requireName: false);
+
+    private static Dictionary<string, string[]> ValidateNameDescription(string? name, string? description, bool requireName)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (description is not null && description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateTotpConfirm(ConfirmTotpRequest req)
+    {
+        var errors = ValidateFactorId(req.FactorId);
+        if (string.IsNullOrWhiteSpace(req.Code) || req.Code.Length != 6 || !req.Code.All(char.IsAsciiDigit))
+        {
+            errors["code"] = ["Code must be a 6 digit TOTP code."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateFactorId(Guid factorId)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (factorId == Guid.Empty)
+        {
+            errors["factorId"] = ["Factor ID is required."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateRecoveryCodeCount(int? count)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (count is < 1 or > 24)
+        {
+            errors["count"] = ["Count must be between 1 and 24 when provided."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidJsonArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     private static Dictionary<string, string[]> ValidateAcceptInvite(AcceptInviteRequest req)
     {
         var errors = new Dictionary<string, string[]>();
@@ -523,7 +644,7 @@ public static class MeEndpoints
         return TypedResults.Ok(new BeginPasskeyRegistrationResponse(challengeId, options.ToJson()));
     }
 
-    private static async Task<Results<Ok<PasskeyResponse>, UnauthorizedHttpResult, NotFound>> FinishPasskeyRegistrationAsync(
+    private static async Task<IResult> FinishPasskeyRegistrationAsync(
         [FromBody] FinishPasskeyRegistrationRequest req,
         HttpContext httpContext,
         SessionStore sessions,
@@ -535,6 +656,12 @@ public static class MeEndpoints
         if (user is null)
         {
             return TypedResults.Unauthorized();
+        }
+
+        var validation = ValidateFinishPasskeyRegistration(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
         }
 
         var options = challenges.TakeRegistration(req.ChallengeId, user.Id);
@@ -562,5 +689,21 @@ public static class MeEndpoints
 
         var revoked = await passkeys.RevokeAsync(user.Id, factorId, ct);
         return revoked ? TypedResults.Ok() : TypedResults.NotFound();
+    }
+
+    private static Dictionary<string, string[]> ValidateFinishPasskeyRegistration(FinishPasskeyRegistrationRequest req)
+    {
+        var errors = ValidateOptionalName(req.Name);
+        if (req.ChallengeId == Guid.Empty)
+        {
+            errors["challengeId"] = ["Challenge ID is required."];
+        }
+
+        if (req.Response is null)
+        {
+            errors["response"] = ["Passkey attestation response is required."];
+        }
+
+        return errors;
     }
 }

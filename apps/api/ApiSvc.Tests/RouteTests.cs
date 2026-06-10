@@ -197,6 +197,88 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateUserApiKey_ReturnsAggregateValidationErrorsBeforeDbWrite()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-invalid@example.com", "User Key Invalid");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"name\":\" \" ,\"description\":\"{new string('x', 1025)}\",\"scopesJson\":\"not-json\",\"expiresAt\":\"2020-01-01T00:00:00Z\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("description", out _));
+        Assert.True(fields.TryGetProperty("scopesJson", out _));
+        Assert.True(fields.TryGetProperty("expiresAt", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.UserApiKeys.AnyAsync(x => x.UserId == userId, TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task ConfirmTotp_ReturnsAggregateValidationErrorsBeforeDbLookup()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-totp-invalid@example.com", "Totp Invalid");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/mfa/totp/confirm");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"factorId\":\"00000000-0000-0000-0000-000000000000\",\"code\":\"abc\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("factorId", out _));
+        Assert.True(fields.TryGetProperty("code", out _));
+    }
+
+    [Fact]
+    public async Task FinishPasskeyRegistration_ReturnsAggregateValidationErrorsBeforeChallengeLookup()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-passkey-invalid@example.com", "Passkey Invalid");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/passkeys/finish-registration");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"challengeId\":\"00000000-0000-0000-0000-000000000000\",\"name\":\" \" ,\"response\":null}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var fields = json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields");
+        Assert.True(fields.TryGetProperty("challengeId", out _));
+        Assert.True(fields.TryGetProperty("name", out _));
+        Assert.True(fields.TryGetProperty("response", out _));
+    }
+
+    [Fact]
     public async Task GetExternalIdentities_ReturnsLinkedIdentitiesForSession()
     {
         await using var app = await RouteTestApp.CreateAsync();
