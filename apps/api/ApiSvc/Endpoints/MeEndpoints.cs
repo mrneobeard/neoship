@@ -32,6 +32,7 @@ public static class MeEndpoints
 
         group.MapGet("/api-keys", GetApiKeysAsync);
         group.MapPost("/api-keys", CreateApiKeyAsync);
+        group.MapPost("/api-keys/{apiKeyId:guid}/rotate", RotateApiKeyAsync);
         group.MapPost("/api-keys/{apiKeyId:guid}/revoke", RevokeApiKeyAsync);
 
         group.MapGet("/external-identities", GetExternalIdentitiesAsync);
@@ -277,6 +278,8 @@ public static class MeEndpoints
 
     public record CreateApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
 
+    public record RotateApiKeyRequest(string? Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
+
     private static async Task<IResult> CreateApiKeyAsync(
         [FromBody] CreateApiKeyRequest req,
         HttpContext httpContext,
@@ -331,6 +334,49 @@ public static class MeEndpoints
 
         await audit.RecordAsync("auth.api_key.revoke", user.OrgId, user.Id, "api_key.revoke", targetType: "user_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Ok();
+    }
+
+    private static async Task<IResult> RotateApiKeyAsync(
+        Guid apiKeyId,
+        [FromBody] RotateApiKeyRequest req,
+        HttpContext httpContext,
+        SessionStore sessions,
+        ApiKeyStore apiKeys,
+        ShipDb db,
+        AuditStore audit,
+        CancellationToken ct)
+    {
+        var user = await AuthenticateAsync(httpContext, sessions, ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        var validation = ValidateRotateApiKey(req);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var oldKey = await db.UserApiKeys.FirstOrDefaultAsync(x => x.Id == apiKeyId && x.UserId == user.Id && x.DeletedAt == null && x.RevokedAt == null, ct);
+        if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var (plaintextKey, newKey) = apiKeys.GenerateUserApiKey(
+            user.Id,
+            string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
+            req.Description ?? oldKey.Description,
+            req.ScopesJson ?? oldKey.ScopesJson,
+            req.ExpiresAt ?? oldKey.ExpiresAt);
+
+        oldKey.RevokedAt = DateTime.UtcNow;
+        db.UserApiKeys.Add(newKey);
+        await db.SaveChangesAsync(ct);
+
+        await audit.RecordAsync("auth.api_key.rotate", user.OrgId, user.Id, "api_key.rotate", targetType: "user_api_key", targetId: oldKey.Id.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/me/api-keys/{newKey.Id}", new CreateApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt));
     }
 
     private sealed record StartTotpRequest(string? Name);
@@ -595,6 +641,33 @@ public static class MeEndpoints
         if (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 64)
         {
             errors["name"] = ["Name is required and must be 64 characters or fewer."];
+        }
+
+        if (req.Description is not null && req.Description.Length > 256)
+        {
+            errors["description"] = ["Description must be 256 characters or fewer when provided."];
+        }
+
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateRotateApiKey(RotateApiKeyRequest req)
+    {
+        var errors = new Dictionary<string, string[]>();
+
+        if (req.Name is not null && (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 64))
+        {
+            errors["name"] = ["Name must be 64 characters or fewer when provided."];
         }
 
         if (req.Description is not null && req.Description.Length > 256)

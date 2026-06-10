@@ -372,6 +372,39 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task RotateUserApiKey_RevokesOldKeyAndReturnsNewPlaintextKey()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var oldKeyId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-key-rotate@example.com", "User Key Rotate");
+            userId = user.Id;
+            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var (_, apiKey) = store.GenerateUserApiKey(user.Id, "old", "Old key", "[]", DateTime.UtcNow.AddDays(7));
+            oldKeyId = apiKey.Id;
+            db.UserApiKeys.Add(apiKey);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/me/api-keys/{oldKeyId}/rotate");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"new\",\"description\":\"New key\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("plaintextKey", body, StringComparison.OrdinalIgnoreCase);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.NotNull((await db.UserApiKeys.SingleAsync(x => x.Id == oldKeyId, TestContext.Current.CancellationToken)).RevokedAt);
+            Assert.True(await db.UserApiKeys.AnyAsync(x => x.UserId == userId && x.Name == "new", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "auth.api_key.rotate", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task StartTotp_WritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync();
