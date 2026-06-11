@@ -2626,13 +2626,25 @@ public sealed class RouteTests
             var user = SeedUser(db, "route-group-role-count@example.com", "Group Role Count");
             userId = user.Id;
             GrantUserOrgPermission(db, user.Id, "org.groups.read");
-            db.Groups.Add(new Group
+            var group = new Group
             {
                 Id = groupId,
                 OrgId = Constants.DefaultOrganizationId,
                 Name = "readers",
                 NameUpcase = "READERS",
-            });
+            };
+            var legacyRole = new Role
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "Owner",
+                NameUpcase = "OWNER",
+                CreatedBy = user.Id,
+            };
+
+            db.Groups.Add(group);
+            db.Roles.Add(legacyRole);
+            group.Roles.Add(legacyRole);
             db.RoleAssignments.Add(new RoleAssignment
             {
                 Id = Guid.CreateVersion7(),

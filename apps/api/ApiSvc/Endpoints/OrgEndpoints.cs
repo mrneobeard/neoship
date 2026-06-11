@@ -373,7 +373,10 @@ public static class OrgEndpoints
                 .ToList());
 
     private static GroupResponse ToGroupResponse(Group group, int builtInRoleCount = 0)
-        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count + builtInRoleCount);
+        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, CustomRoleCount(group) + builtInRoleCount);
+
+    private static int CustomRoleCount(Group group)
+        => group.Roles.Count(x => !BuiltInRoleStore.IsBuiltInRoleName(x.Name));
 
     private static AuthPolicyResponse ToAuthPolicyResponse(Organization org)
         => new(
