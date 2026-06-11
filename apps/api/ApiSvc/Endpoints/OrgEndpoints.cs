@@ -372,8 +372,8 @@ public static class OrgEndpoints
                 .Select((grant, index) => new RoleClaimResponse(-(index + 1), grant.Key.ToString(), grant.ScopeId is null ? grant.ScopeKind.ToString().ToLowerInvariant() : $"{grant.ScopeKind.ToString().ToLowerInvariant()}:{grant.ScopeId}"))
                 .ToList());
 
-    private static GroupResponse ToGroupResponse(Group group)
-        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count);
+    private static GroupResponse ToGroupResponse(Group group, int builtInRoleCount = 0)
+        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count + builtInRoleCount);
 
     private static AuthPolicyResponse ToAuthPolicyResponse(Organization org)
         => new(
@@ -1328,7 +1328,14 @@ public static class OrgEndpoints
 
         var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
         var hasMore = page.Count > query.Limit;
-        var data = page.Take(query.Limit).Select(ToGroupResponse).ToList();
+        var pageGroups = page.Take(query.Limit).ToList();
+        var groupIds = pageGroups.Select(x => x.Id).ToList();
+        var builtInRoleCounts = await db.RoleAssignments
+            .Where(x => x.GroupId != null && groupIds.Contains(x.GroupId.Value))
+            .GroupBy(x => x.GroupId!.Value)
+            .Select(x => new { GroupId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
+        var data = pageGroups.Select(x => ToGroupResponse(x, builtInRoleCounts.GetValueOrDefault(x.Id))).ToList();
         var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
         var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
         var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
@@ -1399,7 +1406,8 @@ public static class OrgEndpoints
             return NotFoundError(httpContext);
         }
 
-        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group)));
+        var builtInRoleCount = await db.RoleAssignments.CountAsync(x => x.GroupId == group.Id, ct);
+        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group, builtInRoleCount)));
     }
 
     private static async Task<IResult> UpdateGroupAsync(
@@ -1439,7 +1447,8 @@ public static class OrgEndpoints
         }
 
         await audit.RecordAsync("org.groups.update", org.Id, auth.User!.Id, "group.update", targetType: "group", targetId: group.Id.ToString(), ct: ct);
-        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group)));
+        var builtInRoleCount = await db.RoleAssignments.CountAsync(x => x.GroupId == group.Id, ct);
+        return TypedResults.Ok(Envelope(httpContext, ToGroupResponse(group, builtInRoleCount)));
     }
 
     private static Dictionary<string, string[]> ValidateGroupInput(string? name, string? email, string? description, bool requireName)

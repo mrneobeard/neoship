@@ -2616,6 +2616,48 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetGroup_IncludesBuiltInRoleAssignmentsInRoleCount()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var groupId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-role-count@example.com", "Group Role Count");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.read");
+            db.Groups.Add(new Group
+            {
+                Id = groupId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "readers",
+                NameUpcase = "READERS",
+            });
+            db.RoleAssignments.Add(new RoleAssignment
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                GroupId = groupId,
+                RoleKey = BuiltInRoleStore.ReaderRoleName,
+                ScopeKind = PermissionScopeKind.Organization,
+                ScopeId = "default",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 5, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/groups/{groupId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetProperty("roleCount").GetInt32());
+    }
+
+    [Fact]
     public async Task ListGroups_RejectsInvalidQueryContractValues()
     {
         await using var app = await RouteTestApp.CreateAsync();
