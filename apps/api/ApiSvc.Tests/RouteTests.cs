@@ -2118,6 +2118,60 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListRoles_CurrentOrgRouteUsesSessionOrganization()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-role-list@example.com", "Current Role List");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/roles?filter[name]=owner");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Single(data.EnumerateArray());
+        Assert.Equal(BuiltInRoleStore.OwnerRoleName, data[0].GetProperty("key").GetString());
+    }
+
+    [Fact]
+    public async Task CreateRole_CurrentOrgRouteCreatesCustomRole()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-role-create@example.com", "Current Role Create");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/roles");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Maintainer\",\"description\":\"Maintains things\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("Maintainer", json.RootElement.GetProperty("data").GetProperty("name").GetString());
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.Roles.AnyAsync(x => x.NameUpcase == "MAINTAINER" && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task GetRole_ReturnsBuiltInRoleDefinition()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -2351,6 +2405,60 @@ public sealed class RouteTests
         {
             Assert.True(await db.RoleAssignments.AnyAsync(x => x.UserId == targetId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.user.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateRoleAssignment_CurrentOrgRouteAssignsBuiltInRoleToUser()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var adminId = Guid.Empty;
+        var targetId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var admin = SeedUser(db, "route-current-assignment-admin@example.com", "Current Assignment Admin");
+            var target = SeedUser(db, "route-current-assignment-target@example.com", "Current Assignment Target");
+            adminId = admin.Id;
+            targetId = target.Id;
+            GrantUserOrgPermission(db, admin.Id, "org.roles.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(adminId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/role-assignments");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent($"{{\"roleId\":\"{BuiltInRoleStore.ReaderRoleId}\",\"principalType\":\"user\",\"principalId\":\"{targetId}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.RoleAssignments.AnyAsync(x => x.UserId == targetId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.role_assignments.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateRoleAssignment_RejectsServiceAccountBearerEvenWithWriteClaim()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        var targetId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var target = SeedUser(db, "route-current-assignment-service-account-target@example.com", "Current Assignment Service Account Target");
+            targetId = target.Id;
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.roles.write");
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/role-assignments");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        request.Content = new StringContent($"{{\"roleId\":\"{BuiltInRoleStore.ReaderRoleId}\",\"principalType\":\"user\",\"principalId\":\"{targetId}\"}}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.RoleAssignments.AnyAsync(x => x.UserId == targetId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
         });
     }
 
@@ -3218,6 +3326,7 @@ public sealed class RouteTests
                             endpoints.MapMeEndpoints();
                             endpoints.MapTenantEndpoints();
                             endpoints.MapOrgEndpoints();
+                            endpoints.MapRoleEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);

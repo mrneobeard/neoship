@@ -177,6 +177,7 @@ app.MapAdminEndpoints();
 app.MapMeEndpoints();
 app.MapTenantEndpoints();
 app.MapOrgEndpoints();
+app.MapRoleEndpoints();
 
 app.MapDefaultEndpoints();
 
