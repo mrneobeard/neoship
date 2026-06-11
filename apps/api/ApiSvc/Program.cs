@@ -183,6 +183,7 @@ app.MapServiceAccountEndpoints();
 app.MapIdentityProviderEndpoints();
 app.MapPermissionEndpoints();
 app.MapAuthPolicyEndpoints();
+app.MapInviteEndpoints();
 
 app.MapDefaultEndpoints();
 

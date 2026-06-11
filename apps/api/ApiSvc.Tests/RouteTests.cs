@@ -3223,6 +3223,37 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateInvite_CurrentOrgRouteReturnsTokenAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-invite-writer@example.com", "Current Invite Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"email\":\"current-invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("current-invited@example.com", body, StringComparison.Ordinal);
+        Assert.Contains("token", body, StringComparison.OrdinalIgnoreCase);
+        var message = Assert.Single(app.EmailSender.Messages);
+        Assert.Equal("current-invited@example.com", message.To);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.OrganizationInvites.AnyAsync(x => x.Email == "current-invited@example.com", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListInvites_SupportsQueryContractPaginationAndFilter()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3248,6 +3279,34 @@ public sealed class RouteTests
         Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
         Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
         Assert.Equal("example", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task ListInvites_CurrentOrgRouteSupportsQueryContract()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-invite-query@example.com", "Current Invite Query");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.read");
+            db.OrganizationInvites.AddRange(
+                new OrganizationInvite { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Email = "alpha-current@example.com", EmailUpcase = "ALPHA-CURRENT@EXAMPLE.COM", TokenDigest = "ca", InvitedByUserId = user.Id, CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), ExpiresAt = DateTime.UtcNow.AddDays(7) },
+                new OrganizationInvite { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Email = "beta-current@example.com", EmailUpcase = "BETA-CURRENT@EXAMPLE.COM", TokenDigest = "cb", InvitedByUserId = user.Id, CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc), ExpiresAt = DateTime.UtcNow.AddDays(7) });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/invites?limit=1&filter[email]=current&sort=createdAt");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.True(json.RootElement.GetProperty("pagination").GetProperty("hasMore").GetBoolean());
+        Assert.Equal("current", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("email").GetString());
     }
 
     [Fact]
@@ -3720,6 +3779,7 @@ public sealed class RouteTests
                             endpoints.MapIdentityProviderEndpoints();
                             endpoints.MapPermissionEndpoints();
                             endpoints.MapAuthPolicyEndpoints();
+                            endpoints.MapInviteEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
