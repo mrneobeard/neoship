@@ -17,7 +17,7 @@ namespace NeoShip.ApiSvc.Tests;
 /// </remarks>
 [Trait(Traits.Category, Traits.Integration)]
 [Trait(Traits.Category, Traits.Auth)]
-public sealed class OrganizationInviteStoreTests
+public sealed class OrganizationInviteTests
 {
     private static ShipDb CreateDatabase()
     {
@@ -44,9 +44,9 @@ public sealed class OrganizationInviteStoreTests
         return db;
     }
 
-    private static OrganizationInviteStore CreateStore(ShipDb db)
+    private static OrganizationStore CreateStore(ShipDb db)
     {
-        return new OrganizationInviteStore(db, NullLogger<OrganizationInviteStore>.Instance);
+        return new OrganizationStore(db, NullLogger<OrganizationStore>.Instance);
     }
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class OrganizationInviteStoreTests
 
         var store = CreateStore(db);
         var before = DateTime.UtcNow;
-        var (invite, token) = await store.CreateAsync(Constants.DefaultOrganizationId, inviter.Id, " person@example.com ", [], [], TestContext.Current.CancellationToken);
+        var (invite, token) = await store.CreateInviteAsync(Constants.DefaultOrganizationId, inviter.Id, " person@example.com ", [], [], TestContext.Current.CancellationToken);
 
         Assert.NotEmpty(token);
         Assert.NotEqual(token, invite.TokenDigest);
@@ -88,10 +88,10 @@ public sealed class OrganizationInviteStoreTests
         db.Users.Add(inviter);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var store = CreateStore(db);
-        var (invite, _) = await store.CreateAsync(Constants.DefaultOrganizationId, inviter.Id, "person@example.com", [], [], TestContext.Current.CancellationToken);
+        var (invite, _) = await store.CreateInviteAsync(Constants.DefaultOrganizationId, inviter.Id, "person@example.com", [], [], TestContext.Current.CancellationToken);
 
-        Assert.True(await store.RevokeAsync(Constants.DefaultOrganizationId, invite.Id, TestContext.Current.CancellationToken));
-        Assert.False(await store.RevokeAsync(Constants.DefaultOrganizationId, invite.Id, TestContext.Current.CancellationToken));
+        Assert.True(await store.RevokeInviteAsync(Constants.DefaultOrganizationId, invite.Id, TestContext.Current.CancellationToken));
+        Assert.False(await store.RevokeInviteAsync(Constants.DefaultOrganizationId, invite.Id, TestContext.Current.CancellationToken));
         Assert.NotNull(invite.RevokedAt);
     }
 
@@ -131,8 +131,8 @@ public sealed class OrganizationInviteStoreTests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
         var store = CreateStore(db);
-        var (invite, token) = await store.CreateAsync(Constants.DefaultOrganizationId, inviter.Id, invited.Email, [role.Id], [group.Id], TestContext.Current.CancellationToken);
-        var accepted = await store.AcceptAsync(token, invited.Id, TestContext.Current.CancellationToken);
+        var (invite, token) = await store.CreateInviteAsync(Constants.DefaultOrganizationId, inviter.Id, invited.Email, [role.Id], [group.Id], TestContext.Current.CancellationToken);
+        var accepted = await store.AcceptInviteAsync(token, invited.Id, TestContext.Current.CancellationToken);
 
         Assert.NotNull(accepted);
         Assert.Equal(invite.Id, accepted!.Id);
@@ -160,8 +160,8 @@ public sealed class OrganizationInviteStoreTests
         db.Users.AddRange(inviter, other);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         var store = CreateStore(db);
-        var (_, token) = await store.CreateAsync(Constants.DefaultOrganizationId, inviter.Id, "person@example.com", [], [], TestContext.Current.CancellationToken);
+        var (_, token) = await store.CreateInviteAsync(Constants.DefaultOrganizationId, inviter.Id, "person@example.com", [], [], TestContext.Current.CancellationToken);
 
-        Assert.Null(await store.AcceptAsync(token, other.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await store.AcceptInviteAsync(token, other.Id, TestContext.Current.CancellationToken));
     }
 }

@@ -139,7 +139,6 @@ public static class AuthEndpoints
         [FromBody] BeginPasskeyLoginRequest req,
         HttpContext httpContext,
         UserStore passkeys,
-        PasskeyChallengeStore challenges,
         CancellationToken ct)
     {
         var validation = ValidateEmailRequest(req.Email);
@@ -155,7 +154,7 @@ public static class AuthEndpoints
         }
 
         var (user, options) = result.Value;
-        var challengeId = challenges.StoreLogin(user.Id, options);
+        var challengeId = passkeys.StorePasskeyLoginChallenge(user.Id, options);
         return TypedResults.Ok(Envelope(httpContext, new BeginPasskeyLoginResponse(challengeId, options.ToJson())));
     }
 
@@ -220,7 +219,6 @@ public static class AuthEndpoints
         [FromBody] FinishPasskeyLoginRequest req,
         HttpContext httpContext,
         UserStore passkeys,
-        PasskeyChallengeStore challenges,
         PermissionResolver permissions,
         SessionStore sessions,
         AuditStore audit,
@@ -232,7 +230,7 @@ public static class AuthEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var challenge = challenges.TakeLogin(req.ChallengeId);
+        var challenge = passkeys.TakePasskeyLoginChallenge(req.ChallengeId);
         if (challenge is null)
         {
             return Unauthenticated(httpContext);

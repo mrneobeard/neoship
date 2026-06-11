@@ -584,7 +584,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        OrganizationInviteStore invites,
+        OrganizationStore orgs,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -599,7 +599,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var list = await invites.ListAsync(org.Id, ct);
+        var list = await orgs.ListInvitesAsync(org.Id, ct);
         var query = ParseEmailListQuery(httpContext, limit, cursor, filterEmail, sort);
         if (query.Errors.Count > 0)
         {
@@ -678,7 +678,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        OrganizationInviteStore invites,
+        OrganizationStore orgs,
         AuditStore audit,
         IEmailSender emails,
         CancellationToken ct)
@@ -701,7 +701,7 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var (invite, token) = await invites.CreateAsync(org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
+        var (invite, token) = await orgs.CreateInviteAsync(org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
         await audit.RecordAsync("org.invites.create", org.Id, auth.User.Id, "org.invite.create", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
         await emails.SendAsync(new EmailMessage(
             invite.Email,
@@ -759,7 +759,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        OrganizationInviteStore invites,
+        OrganizationStore orgs,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -775,7 +775,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var revoked = await invites.RevokeAsync(org.Id, inviteId, ct);
+        var revoked = await orgs.RevokeInviteAsync(org.Id, inviteId, ct);
         if (!revoked)
         {
             return NotFoundError(httpContext);
@@ -2713,7 +2713,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -2728,7 +2728,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var list = await providers.ListAsync(org.Id, ct);
+        var list = await users.ListIdentityProvidersAsync(org.Id, ct);
         var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
         if (query.Errors.Count > 0)
         {
@@ -2767,7 +2767,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -2789,7 +2789,7 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var provider = await providers.CreateAsync(
+        var provider = await users.CreateIdentityProviderAsync(
             org.Id,
             auth.User!.Id,
             req.Name,
@@ -2811,7 +2811,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         CancellationToken ct)
     {
         var org = await ResolveOrgAsync(orgSlug, db, ct);
@@ -2826,7 +2826,7 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
-        var provider = await providers.GetAsync(org.Id, providerId, ct);
+        var provider = await users.GetIdentityProviderAsync(org.Id, providerId, ct);
         if (provider is null)
         {
             return NotFoundError(httpContext);
@@ -2843,7 +2843,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -2865,7 +2865,7 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var provider = await providers.UpdateAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
+        var provider = await users.UpdateIdentityProviderAsync(org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         if (provider is null)
         {
             return NotFoundError(httpContext);
@@ -2992,10 +2992,10 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         AuditStore audit,
         CancellationToken ct)
-        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: true, httpContext, sessions, permissions, db, providers, audit, ct);
+        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: true, httpContext, sessions, permissions, db, users, audit, ct);
 
     private static async Task<IResult> DisableIdentityProviderAsync(
         string orgSlug,
@@ -3004,10 +3004,10 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         AuditStore audit,
         CancellationToken ct)
-        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: false, httpContext, sessions, permissions, db, providers, audit, ct);
+        => await SetIdentityProviderActiveAsync(orgSlug, providerId, active: false, httpContext, sessions, permissions, db, users, audit, ct);
 
     private static async Task<IResult> SetIdentityProviderActiveAsync(
         string orgSlug,
@@ -3017,7 +3017,7 @@ public static class OrgEndpoints
         SessionStore sessions,
         PermissionResolver permissions,
         ShipDb db,
-        IdentityProviderStore providers,
+        UserStore users,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -3036,7 +3036,7 @@ public static class OrgEndpoints
         UserIdentityProvider? provider;
         try
         {
-            provider = await providers.SetActiveAsync(org.Id, providerId, active, ct);
+            provider = await users.SetIdentityProviderActiveAsync(org.Id, providerId, active, ct);
         }
         catch (ArgumentException)
         {

@@ -1,7 +1,9 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
 
 using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.Data.Model;
@@ -19,8 +21,10 @@ namespace NeoShip.ApiSvc.Stores;
 /// </remarks>
 public sealed class SsoStore
 {
+    private static readonly TimeSpan ChallengeTtl = TimeSpan.FromMinutes(5);
+
     private readonly ShipDb db;
-    private readonly SsoChallengeStore challenges;
+    private readonly IDistributedCache cache;
     private readonly ISsoTokenClient tokenClient;
     private readonly ISsoTokenValidator tokenValidator;
     private readonly ISsoOAuth2ProfileClient? oauth2ProfileClient;
@@ -29,14 +33,14 @@ public sealed class SsoStore
     /// Initializes a new <see cref="SsoStore"/> instance.
     /// </summary>
     /// <param name="db">The database context.</param>
-    /// <param name="challenges">The SSO challenge store.</param>
+    /// <param name="cache">The distributed cache.</param>
     /// <param name="tokenClient">The OIDC token client.</param>
     /// <param name="tokenValidator">The OIDC token validator.</param>
     /// <param name="oauth2ProfileClient">The optional OAuth2 profile client.</param>
-    public SsoStore(ShipDb db, SsoChallengeStore challenges, ISsoTokenClient tokenClient, ISsoTokenValidator tokenValidator, ISsoOAuth2ProfileClient? oauth2ProfileClient = null)
+    public SsoStore(ShipDb db, IDistributedCache cache, ISsoTokenClient tokenClient, ISsoTokenValidator tokenValidator, ISsoOAuth2ProfileClient? oauth2ProfileClient = null)
     {
         this.db = db;
-        this.challenges = challenges;
+        this.cache = cache;
         this.tokenClient = tokenClient;
         this.tokenValidator = tokenValidator;
         this.oauth2ProfileClient = oauth2ProfileClient;
@@ -85,8 +89,8 @@ public sealed class SsoStore
             return null;
         }
 
-        var nonce = SsoChallengeStore.CreateToken();
-        var challenge = this.challenges.Create(org.Id, provider.Id, redirectUri, nonce);
+        var nonce = CreateToken();
+        var challenge = this.CreateChallenge(org.Id, provider.Id, redirectUri, nonce);
         var authorizationUrl = BuildAuthorizationUrl(authorizationEndpoint, provider.ClientId, redirectUri, challenge.State, nonce);
 
         return new SsoBeginResult(provider.Id, authorizationUrl, challenge.State, challenge.ExpiresAt);
@@ -106,7 +110,7 @@ public sealed class SsoStore
             return null;
         }
 
-        var challenge = this.challenges.Take(state);
+        var challenge = this.TakeChallenge(state);
         if (challenge is null)
         {
             return null;
@@ -357,7 +361,62 @@ public sealed class SsoStore
                 && ((org.AllowOidcSso && x.Provider.ProviderTypeId == UserIdentityProviderType.OIDC.Id)
                     || (org.AllowSamlSso && x.Provider.ProviderTypeId == UserIdentityProviderType.SAML.Id)), ct);
     }
+
+    /// <summary>
+    /// Creates a URL-safe random SSO token.
+    /// </summary>
+    /// <returns>The random token.</returns>
+    public static string CreateToken() => Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant();
+
+    /// <summary>
+    /// Creates and stores an SSO challenge.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="providerId">The identity provider identifier.</param>
+    /// <param name="redirectUri">The callback redirect URI.</param>
+    /// <param name="nonce">The OIDC nonce.</param>
+    /// <returns>The created <see cref="SsoChallenge"/>.</returns>
+    public SsoChallenge CreateChallenge(Guid orgId, long providerId, string redirectUri, string nonce)
+    {
+        var challenge = new SsoChallenge(CreateToken(), orgId, providerId, redirectUri, nonce, DateTime.UtcNow.Add(ChallengeTtl));
+        this.cache.SetString(
+            GetChallengeKey(challenge.State),
+            JsonSerializer.Serialize(challenge),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = ChallengeTtl });
+        return challenge;
+    }
+
+    /// <summary>
+    /// Takes and removes an SSO challenge by state.
+    /// </summary>
+    /// <param name="state">The state token.</param>
+    /// <returns>The matching challenge, or <see langword="null"/>.</returns>
+    public SsoChallenge? TakeChallenge(string state)
+    {
+        var key = GetChallengeKey(state);
+        var payload = this.cache.GetString(key);
+        if (string.IsNullOrWhiteSpace(payload))
+        {
+            return null;
+        }
+
+        this.cache.Remove(key);
+        return JsonSerializer.Deserialize<SsoChallenge>(payload);
+    }
+
+    private static string GetChallengeKey(string state) => $"sso:state:{state}";
 }
+
+/// <summary>
+/// Represents a cached SSO challenge.
+/// </summary>
+/// <param name="State">The state token.</param>
+/// <param name="OrgId">The organization identifier.</param>
+/// <param name="ProviderId">The identity provider identifier.</param>
+/// <param name="RedirectUri">The callback redirect URI.</param>
+/// <param name="Nonce">The OIDC nonce.</param>
+/// <param name="ExpiresAt">The challenge expiry time.</param>
+public sealed record SsoChallenge(string State, Guid OrgId, long ProviderId, string RedirectUri, string Nonce, DateTime ExpiresAt);
 
 /// <summary>
 /// Represents the result of a completed SSO callback.

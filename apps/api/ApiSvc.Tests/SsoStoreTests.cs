@@ -47,9 +47,9 @@ public class SsoStoreTests
         return db;
     }
 
-    private static SsoChallengeStore CreateChallenges()
+    private static IDistributedCache CreateChallenges()
     {
-        return new SsoChallengeStore(new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions())));
+        return new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
     }
 
     /// <summary>
@@ -86,10 +86,10 @@ public class SsoStoreTests
         Assert.Contains("response_type=code", result.AuthorizationUrl, StringComparison.Ordinal);
         Assert.Contains($"state={result.State}", result.AuthorizationUrl, StringComparison.Ordinal);
 
-        var challenge = challenges.Take(result.State);
+        var challenge = store.TakeChallenge(result.State);
         Assert.NotNull(challenge);
         Assert.Equal(Constants.DefaultOrganizationId, challenge!.OrgId);
-        Assert.Null(challenges.Take(result.State));
+        Assert.Null(store.TakeChallenge(result.State));
     }
 
     /// <summary>
@@ -180,12 +180,12 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", true, "SSO User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
@@ -228,12 +228,12 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("new-subject", "new-sso-user@example.com", true, "New SSO User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
@@ -274,13 +274,13 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(),
             new FakeSsoOAuth2ProfileClient(new SsoOAuth2Profile("github-subject", "github-user@example.com", true, "GitHub User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
@@ -332,12 +332,12 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "new-email@example.com", true, "SSO User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var result = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
@@ -506,12 +506,12 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-user@example.com", false, "SSO User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 
@@ -545,12 +545,12 @@ public class SsoStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var challenge = challenges.Create(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
         var store = new SsoStore(
             db,
             challenges,
             new FakeSsoTokenClient(),
             new FakeSsoTokenValidator(new SsoExternalIdentity("subject", "sso-callback-disabled@example.com", true, "SSO User")));
+        var challenge = store.CreateChallenge(Constants.DefaultOrganizationId, 10, "https://app.example.com/api/v1/auth/sso/callback", "nonce");
 
         var user = await store.FinishOidcAsync(challenge.State, "code", TestContext.Current.CancellationToken);
 

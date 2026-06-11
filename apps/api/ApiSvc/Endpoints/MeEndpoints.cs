@@ -821,7 +821,7 @@ public static class MeEndpoints
         [FromBody] AcceptInviteRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        OrganizationInviteStore invites,
+        OrganizationStore orgs,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -837,7 +837,7 @@ public static class MeEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var invite = await invites.AcceptAsync(req.Token, user.Id, ct);
+        var invite = await orgs.AcceptInviteAsync(req.Token, user.Id, ct);
         if (invite is null)
         {
             return NotFoundError(httpContext);
@@ -1142,7 +1142,7 @@ public static class MeEndpoints
         }
 
         var options = await passkeys.BeginRegistrationAsync(user, ct);
-        var challengeId = httpContext.RequestServices.GetRequiredService<PasskeyChallengeStore>().StoreRegistration(user.Id, options);
+        var challengeId = passkeys.StorePasskeyRegistrationChallenge(user.Id, options);
         return TypedResults.Ok(Envelope(httpContext, new BeginPasskeyRegistrationResponse(challengeId, options.ToJson())));
     }
 
@@ -1151,7 +1151,6 @@ public static class MeEndpoints
         HttpContext httpContext,
         SessionStore sessions,
         UserStore passkeys,
-        PasskeyChallengeStore challenges,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -1170,7 +1169,7 @@ public static class MeEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var options = challenges.TakeRegistration(req.ChallengeId, actor.Id);
+        var options = passkeys.TakePasskeyRegistrationChallenge(req.ChallengeId, actor.Id);
         if (options is null)
         {
             return NotFoundError(httpContext);

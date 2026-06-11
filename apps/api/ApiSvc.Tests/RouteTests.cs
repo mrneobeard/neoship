@@ -3820,20 +3820,16 @@ public sealed class RouteTests
                         services.AddScoped<AuditStore>();
                         services.AddScoped<UserStore>();
                         services.AddScoped<OrganizationStore>();
-                        services.AddScoped<OrganizationInviteStore>();
                         services.AddScoped<RoleStore>();
                         services.AddScoped<GroupStore>();
                         services.AddScoped<ServiceAccountStore>();
                         services.AddSingleton<IdentityProviderSecretProtector>();
-                        services.AddScoped<IdentityProviderStore>();
                         services.AddSingleton(new Fido2(new Fido2Configuration
                         {
                             ServerDomain = "localhost",
                             ServerName = "NeoShip",
                             Origins = new HashSet<string> { "https://localhost", "http://localhost" },
                         }, metadataService: null));
-                        services.AddSingleton<PasskeyChallengeStore>();
-                        services.AddSingleton<SsoChallengeStore>();
                         services.AddSingleton<ISsoTokenClient, FakeSsoTokenClient>();
                         services.AddSingleton<ISsoTokenValidator>(fakeTokenValidator);
                         services.AddSingleton<ISsoOAuth2ProfileClient, FakeSsoOAuth2ProfileClient>();
@@ -3893,8 +3889,8 @@ public sealed class RouteTests
         public async Task<string> CreateSsoChallengeAsync(long providerId)
         {
             await using var scope = this.host.Services.CreateAsyncScope();
-            var challenges = scope.ServiceProvider.GetRequiredService<SsoChallengeStore>();
-            return challenges.Create(Constants.DefaultOrganizationId, providerId, "https://localhost/api/v1/auth/sso/callback", "nonce").State;
+            var sso = scope.ServiceProvider.GetRequiredService<SsoStore>();
+            return sso.CreateChallenge(Constants.DefaultOrganizationId, providerId, "https://localhost/api/v1/auth/sso/callback", "nonce").State;
         }
 
         public async ValueTask DisposeAsync()

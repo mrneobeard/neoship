@@ -45,7 +45,7 @@ public static class IdentityProviderEndpoints
 
     private sealed record ParsedNamedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
 
-    private static async Task<IResult> ListIdentityProvidersAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[name]")] string? filterName, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, CancellationToken ct)
+    private static async Task<IResult> ListIdentityProvidersAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[name]")] string? filterName, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
@@ -59,7 +59,7 @@ public static class IdentityProviderEndpoints
             return ValidationError(httpContext, query.Errors);
         }
 
-        IEnumerable<UserIdentityProvider> filtered = await providers.ListAsync(auth.Org.Id, ct);
+        IEnumerable<UserIdentityProvider> filtered = await users.ListIdentityProvidersAsync(auth.Org.Id, ct);
         if (!string.IsNullOrWhiteSpace(query.FilterName))
         {
             filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
@@ -81,7 +81,7 @@ public static class IdentityProviderEndpoints
         return TypedResults.Ok(new ApiCollectionEnvelope<IdentityProviderResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
-    private static async Task<IResult> CreateIdentityProviderAsync([FromBody] CreateIdentityProviderRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, AuditStore audit, CancellationToken ct)
+    private static async Task<IResult> CreateIdentityProviderAsync([FromBody] CreateIdentityProviderRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.identity_providers", "write"), ct);
         if (auth.Failure is not null)
@@ -95,12 +95,12 @@ public static class IdentityProviderEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var provider = await providers.CreateAsync(auth.Org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl ?? preset?.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson ?? preset?.MetadataJson, ct);
+        var provider = await users.CreateIdentityProviderAsync(auth.Org.Id, auth.User!.Id, req.Name, providerType, req.IssuerUrl ?? preset?.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson ?? preset?.MetadataJson, ct);
         await audit.RecordAsync("org.identity_providers.create", auth.Org.Id, auth.User.Id, "identity_provider.create", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/identity-providers/{provider.Id}", Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
-    private static async Task<IResult> GetIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, CancellationToken ct)
+    private static async Task<IResult> GetIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.identity_providers", "read"), ct, allowServiceAccount: true);
         if (auth.Failure is not null)
@@ -108,11 +108,11 @@ public static class IdentityProviderEndpoints
             return auth.Failure;
         }
 
-        var provider = await providers.GetAsync(auth.Org.Id, providerId, ct);
+        var provider = await users.GetIdentityProviderAsync(auth.Org.Id, providerId, ct);
         return provider is null ? NotFoundError(httpContext) : TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
-    private static async Task<IResult> UpdateIdentityProviderAsync(long providerId, [FromBody] UpdateIdentityProviderRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, AuditStore audit, CancellationToken ct)
+    private static async Task<IResult> UpdateIdentityProviderAsync(long providerId, [FromBody] UpdateIdentityProviderRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.identity_providers", "write"), ct);
         if (auth.Failure is not null)
@@ -126,7 +126,7 @@ public static class IdentityProviderEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var provider = await providers.UpdateAsync(auth.Org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
+        var provider = await users.UpdateIdentityProviderAsync(auth.Org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         if (provider is null)
         {
             return NotFoundError(httpContext);
@@ -136,13 +136,13 @@ public static class IdentityProviderEndpoints
         return TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
-    private static async Task<IResult> EnableIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, AuditStore audit, CancellationToken ct)
-        => await SetIdentityProviderActiveAsync(providerId, active: true, httpContext, sessions, permissions, db, providers, audit, ct);
+    private static async Task<IResult> EnableIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
+        => await SetIdentityProviderActiveAsync(providerId, active: true, httpContext, sessions, permissions, db, users, audit, ct);
 
-    private static async Task<IResult> DisableIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, AuditStore audit, CancellationToken ct)
-        => await SetIdentityProviderActiveAsync(providerId, active: false, httpContext, sessions, permissions, db, providers, audit, ct);
+    private static async Task<IResult> DisableIdentityProviderAsync(long providerId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
+        => await SetIdentityProviderActiveAsync(providerId, active: false, httpContext, sessions, permissions, db, users, audit, ct);
 
-    private static async Task<IResult> SetIdentityProviderActiveAsync(long providerId, bool active, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, IdentityProviderStore providers, AuditStore audit, CancellationToken ct)
+    private static async Task<IResult> SetIdentityProviderActiveAsync(long providerId, bool active, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.identity_providers", "write"), ct);
         if (auth.Failure is not null)
@@ -153,7 +153,7 @@ public static class IdentityProviderEndpoints
         UserIdentityProvider? provider;
         try
         {
-            provider = await providers.SetActiveAsync(auth.Org.Id, providerId, active, ct);
+            provider = await users.SetIdentityProviderActiveAsync(auth.Org.Id, providerId, active, ct);
         }
         catch (ArgumentException)
         {

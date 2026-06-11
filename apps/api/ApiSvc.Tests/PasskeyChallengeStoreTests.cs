@@ -1,8 +1,9 @@
 using Fido2NetLib;
 
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.EntityFrameworkCore;
 
 using NeoShip.ApiSvc.Stores;
+using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Tests;
 
@@ -17,23 +18,34 @@ namespace NeoShip.ApiSvc.Tests;
 /// </remarks>
 [Trait(Traits.Category, Traits.Unit)]
 [Trait(Traits.Category, Traits.Auth)]
-public class PasskeyChallengeStoreTests
+public class UserPasskeyChallengeTests
 {
+    private static UserStore CreateStore()
+    {
+        var options = new DbContextOptionsBuilder<ShipDb>()
+            .UseSqlite("Data Source=:memory:")
+            .UseSnakeCaseNamingConvention()
+            .Options;
+        var db = new ShipDb(options);
+        db.Database.OpenConnection();
+        db.Database.EnsureCreated();
+        return TestUserStore.Create(db);
+    }
+
     /// <summary>
     /// Verifies that registration challenges are one-time values.
     /// </summary>
     [Fact]
     public void RegistrationChallenge_CanBeTakenOnce()
     {
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new PasskeyChallengeStore(cache);
+        var store = CreateStore();
         var userId = Guid.NewGuid();
         var options = CreateOptions();
 
-        var challengeId = store.StoreRegistration(userId, options);
+        var challengeId = store.StorePasskeyRegistrationChallenge(userId, options);
 
-        Assert.Same(options, store.TakeRegistration(challengeId, userId));
-        Assert.Null(store.TakeRegistration(challengeId, userId));
+        Assert.Same(options, store.TakePasskeyRegistrationChallenge(challengeId, userId));
+        Assert.Null(store.TakePasskeyRegistrationChallenge(challengeId, userId));
     }
 
     /// <summary>
@@ -42,13 +54,12 @@ public class PasskeyChallengeStoreTests
     [Fact]
     public void RegistrationChallenge_RejectsWrongUser()
     {
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new PasskeyChallengeStore(cache);
+        var store = CreateStore();
         var options = CreateOptions();
 
-        var challengeId = store.StoreRegistration(Guid.NewGuid(), options);
+        var challengeId = store.StorePasskeyRegistrationChallenge(Guid.NewGuid(), options);
 
-        Assert.Null(store.TakeRegistration(challengeId, Guid.NewGuid()));
+        Assert.Null(store.TakePasskeyRegistrationChallenge(challengeId, Guid.NewGuid()));
     }
 
     /// <summary>
@@ -57,18 +68,17 @@ public class PasskeyChallengeStoreTests
     [Fact]
     public void LoginChallenge_CanBeTakenOnce()
     {
-        using var cache = new MemoryCache(new MemoryCacheOptions());
-        var store = new PasskeyChallengeStore(cache);
+        var store = CreateStore();
         var userId = Guid.NewGuid();
         var options = CreateAssertionOptions();
 
-        var challengeId = store.StoreLogin(userId, options);
-        var challenge = store.TakeLogin(challengeId);
+        var challengeId = store.StorePasskeyLoginChallenge(userId, options);
+        var challenge = store.TakePasskeyLoginChallenge(challengeId);
 
         Assert.NotNull(challenge);
         Assert.Equal(userId, challenge.Value.UserId);
         Assert.Same(options, challenge.Value.Options);
-        Assert.Null(store.TakeLogin(challengeId));
+        Assert.Null(store.TakePasskeyLoginChallenge(challengeId));
     }
 
     private static CredentialCreateOptions CreateOptions()

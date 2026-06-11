@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,9 +17,12 @@ internal static class TestUserStore
         var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
+            ["Auth:IdentityProviders:EncryptionKey"] = "test-identity-provider-secret-key",
             ["Email:PublicBaseUrl"] = "https://localhost",
         }).Build();
 
-        return new UserStore(db, TestFido2.Create(), sessions, audit, permissions, new TestEmailSender(), configuration, ctx, NullLogger<UserStore>.Instance);
+        var memoryCache = new MemoryCache(new MemoryCacheOptions());
+        var secrets = new IdentityProviderSecretProtector(configuration);
+        return new UserStore(db, TestFido2.Create(), memoryCache, secrets, sessions, audit, permissions, new TestEmailSender(), configuration, ctx, NullLogger<UserStore>.Instance);
     }
 }

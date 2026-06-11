@@ -18,7 +18,7 @@ namespace NeoShip.ApiSvc.Tests;
 /// </remarks>
 [Trait(Traits.Category, Traits.Integration)]
 [Trait(Traits.Category, Traits.Auth)]
-public class IdentityProviderStoreTests
+public class UserIdentityProviderStoreTests
 {
     private static ShipDb CreateDatabase()
     {
@@ -47,7 +47,7 @@ public class IdentityProviderStoreTests
         return db;
     }
 
-    private static IdentityProviderStore CreateStore(ShipDb db)
+    private static UserStore CreateStore(ShipDb db)
     {
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -55,15 +55,14 @@ public class IdentityProviderStoreTests
                 ["Auth:IdentityProviders:EncryptionKey"] = "test-identity-provider-secret-key",
             })
             .Build();
-        var protector = new IdentityProviderSecretProtector(configuration);
-        return new IdentityProviderStore(db, protector, NullLogger<IdentityProviderStore>.Instance);
+        return TestUserStore.Create(db);
     }
 
     /// <summary>
     /// Verifies that identity providers can be created, updated, listed, and enabled.
     /// </summary>
     [Fact]
-    public async Task IdentityProviderStore_CanManageProviderLifecycle()
+    public async Task UserStore_CanManageProviderLifecycle()
     {
         await using var db = CreateDatabase();
         var store = CreateStore(db);
@@ -74,7 +73,7 @@ public class IdentityProviderStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var provider = await store.CreateAsync(
+        var provider = await store.CreateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             createdBy,
             "Acme OIDC",
@@ -90,7 +89,7 @@ public class IdentityProviderStoreTests
         Assert.DoesNotContain("client-secret", Convert.ToBase64String(provider.ClientSecretEncrypted));
         var initialSecretEncrypted = provider.ClientSecretEncrypted.ToArray();
 
-        var updated = await store.UpdateAsync(
+        var updated = await store.UpdateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             provider.Id,
             "Acme Login",
@@ -104,8 +103,8 @@ public class IdentityProviderStoreTests
         Assert.Equal("Acme Login", updated!.Name);
         Assert.NotEqual(initialSecretEncrypted, updated.ClientSecretEncrypted);
 
-        var enabled = await store.SetActiveAsync(Constants.DefaultOrganizationId, provider.Id, active: true, TestContext.Current.CancellationToken);
-        var providers = await store.ListAsync(Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+        var enabled = await store.SetIdentityProviderActiveAsync(Constants.DefaultOrganizationId, provider.Id, active: true, TestContext.Current.CancellationToken);
+        var providers = await store.ListIdentityProvidersAsync(Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
 
         Assert.NotNull(enabled);
         Assert.Equal(UserIdentityProviderStatus.Active.Id, enabled!.StatusId);
@@ -116,7 +115,7 @@ public class IdentityProviderStoreTests
     /// Verifies single identity provider reads are scoped to the owning organization.
     /// </summary>
     [Fact]
-    public async Task IdentityProviderStore_GetAsync_RejectsWrongOrganization()
+    public async Task UserStore_GetIdentityProviderAsync_RejectsWrongOrganization()
     {
         await using var db = CreateDatabase();
         var otherOrgId = Guid.NewGuid();
@@ -139,7 +138,7 @@ public class IdentityProviderStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var provider = await store.CreateAsync(
+        var provider = await store.CreateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             createdBy,
             "Acme OIDC",
@@ -150,8 +149,8 @@ public class IdentityProviderStoreTests
             "{}",
             TestContext.Current.CancellationToken);
 
-        Assert.Null(await store.GetAsync(otherOrgId, provider.Id, TestContext.Current.CancellationToken));
-        Assert.NotNull(await store.GetAsync(Constants.DefaultOrganizationId, provider.Id, TestContext.Current.CancellationToken));
+        Assert.Null(await store.GetIdentityProviderAsync(otherOrgId, provider.Id, TestContext.Current.CancellationToken));
+        Assert.NotNull(await store.GetIdentityProviderAsync(Constants.DefaultOrganizationId, provider.Id, TestContext.Current.CancellationToken));
     }
 
     /// <summary>
@@ -170,7 +169,7 @@ public class IdentityProviderStoreTests
     /// Verifies identity provider issuer URLs must use HTTPS.
     /// </summary>
     [Fact]
-    public async Task IdentityProviderStore_RejectsNonHttpsIssuerUrl()
+    public async Task UserStore_RejectsNonHttpsIssuerUrl()
     {
         await using var db = CreateDatabase();
         var store = CreateStore(db);
@@ -181,7 +180,7 @@ public class IdentityProviderStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             createdBy,
             "Insecure OIDC",
@@ -192,7 +191,7 @@ public class IdentityProviderStoreTests
             "{}",
             TestContext.Current.CancellationToken));
 
-        var provider = await store.CreateAsync(
+        var provider = await store.CreateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             createdBy,
             "Acme OIDC",
@@ -203,7 +202,7 @@ public class IdentityProviderStoreTests
             "{}",
             TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => store.UpdateAsync(
+        await Assert.ThrowsAsync<ArgumentException>(() => store.UpdateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             provider.Id,
             null,
@@ -218,7 +217,7 @@ public class IdentityProviderStoreTests
     /// Verifies OIDC providers require complete HTTPS metadata before activation.
     /// </summary>
     [Fact]
-    public async Task IdentityProviderStore_RejectsIncompleteOidcActivation()
+    public async Task UserStore_RejectsIncompleteOidcActivation()
     {
         await using var db = CreateDatabase();
         var store = CreateStore(db);
@@ -229,7 +228,7 @@ public class IdentityProviderStoreTests
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var incomplete = await store.CreateAsync(
+        var incomplete = await store.CreateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             createdBy,
             "Incomplete OIDC",
@@ -240,13 +239,13 @@ public class IdentityProviderStoreTests
             "{\"authorization_endpoint\":\"https://idp.example.com/oauth2/authorize\"}",
             TestContext.Current.CancellationToken);
 
-        await Assert.ThrowsAsync<ArgumentException>(() => store.SetActiveAsync(
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SetIdentityProviderActiveAsync(
             Constants.DefaultOrganizationId,
             incomplete.Id,
             active: true,
             TestContext.Current.CancellationToken));
 
-        var complete = await store.UpdateAsync(
+        var complete = await store.UpdateIdentityProviderAsync(
             Constants.DefaultOrganizationId,
             incomplete.Id,
             null,
@@ -257,7 +256,7 @@ public class IdentityProviderStoreTests
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(complete);
-        var enabled = await store.SetActiveAsync(Constants.DefaultOrganizationId, complete!.Id, active: true, TestContext.Current.CancellationToken);
+        var enabled = await store.SetIdentityProviderActiveAsync(Constants.DefaultOrganizationId, complete!.Id, active: true, TestContext.Current.CancellationToken);
 
         Assert.NotNull(enabled);
         Assert.Equal(UserIdentityProviderStatus.Active.Id, enabled!.StatusId);

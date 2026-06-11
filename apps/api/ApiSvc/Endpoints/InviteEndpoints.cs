@@ -38,7 +38,7 @@ public static class InviteEndpoints
 
     private sealed record ParsedEmailListQuery(int Limit, int Offset, string? FilterEmail, string Sort, Dictionary<string, string[]> Errors);
 
-    private static async Task<IResult> ListInvitesAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[email]")] string? filterEmail, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationInviteStore invites, CancellationToken ct)
+    private static async Task<IResult> ListInvitesAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[email]")] string? filterEmail, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationStore orgs, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.members", "read"), ct);
         if (auth.Failure is not null)
@@ -52,7 +52,7 @@ public static class InviteEndpoints
             return ValidationError(httpContext, query.Errors);
         }
 
-        IEnumerable<OrganizationInvite> filtered = await invites.ListAsync(auth.Org.Id, ct);
+        IEnumerable<OrganizationInvite> filtered = await orgs.ListInvitesAsync(auth.Org.Id, ct);
         if (!string.IsNullOrWhiteSpace(query.FilterEmail))
         {
             filtered = filtered.Where(x => x.Email.Contains(query.FilterEmail, StringComparison.OrdinalIgnoreCase));
@@ -73,7 +73,7 @@ public static class InviteEndpoints
         return TypedResults.Ok(new ApiCollectionEnvelope<OrganizationInviteResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
-    private static async Task<IResult> CreateInviteAsync([FromBody] CreateOrganizationInviteRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationInviteStore invites, AuditStore audit, IEmailSender emails, CancellationToken ct)
+    private static async Task<IResult> CreateInviteAsync([FromBody] CreateOrganizationInviteRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationStore orgs, AuditStore audit, IEmailSender emails, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.members", "write"), ct);
         if (auth.Failure is not null)
@@ -87,13 +87,13 @@ public static class InviteEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        var (invite, token) = await invites.CreateAsync(auth.Org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
+        var (invite, token) = await orgs.CreateInviteAsync(auth.Org.Id, auth.User!.Id, req.Email, req.RoleIds ?? [], req.GroupIds ?? [], ct);
         await audit.RecordAsync("org.invites.create", auth.Org.Id, auth.User.Id, "org.invite.create", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
         await emails.SendAsync(new EmailMessage(invite.Email, $"You're invited to {auth.Org.Name}", $"You've been invited to join {auth.Org.Name}. Accept the invite at /accept-invite?token={token}"), ct);
         return TypedResults.Created($"/api/v1/invites/{invite.Id}", Envelope(httpContext, new CreateOrganizationInviteResponse(invite.Id, invite.Email, token, invite.CreatedAt, invite.ExpiresAt)));
     }
 
-    private static async Task<IResult> RevokeInviteAsync(Guid inviteId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationInviteStore invites, AuditStore audit, CancellationToken ct)
+    private static async Task<IResult> RevokeInviteAsync(Guid inviteId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, OrganizationStore orgs, AuditStore audit, CancellationToken ct)
     {
         var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.members", "write"), ct);
         if (auth.Failure is not null)
@@ -101,7 +101,7 @@ public static class InviteEndpoints
             return auth.Failure;
         }
 
-        var revoked = await invites.RevokeAsync(auth.Org.Id, inviteId, ct);
+        var revoked = await orgs.RevokeInviteAsync(auth.Org.Id, inviteId, ct);
         if (!revoked)
         {
             return NotFoundError(httpContext);

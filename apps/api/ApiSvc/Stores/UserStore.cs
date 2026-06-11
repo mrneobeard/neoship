@@ -7,6 +7,7 @@ using Fido2NetLib;
 using Fido2NetLib.Objects;
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 
 using NeoShip.Data.Model;
 
@@ -44,12 +45,15 @@ public class UserStore
     private const int TotpSecretBytes = 20;
     private const int TotpDigits = 6;
     private const long TotpStepSeconds = 30;
+    private static readonly TimeSpan PasskeyChallengeTtl = TimeSpan.FromMinutes(5);
 
     private static readonly char[] Base32Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".ToCharArray();
     private static readonly ActivitySource ActivitySource = new(OTelConstants.ActivitySourceName);
 
     private readonly ShipDb db;
     private readonly Fido2 fido2;
+    private readonly IMemoryCache cache;
+    private readonly IdentityProviderSecretProtector secrets;
     private readonly SessionStore sessions;
     private readonly AuditStore audit;
     private readonly PermissionResolver permissions;
@@ -64,6 +68,8 @@ public class UserStore
     /// </summary>
     /// <param name="db">The database context.</param>
     /// <param name="fido2">The FIDO2 core service.</param>
+    /// <param name="cache">The memory cache.</param>
+    /// <param name="secrets">The identity-provider secret protector.</param>
     /// <param name="sessions">The session store.</param>
     /// <param name="audit">The audit store.</param>
     /// <param name="permissions">The permission resolver.</param>
@@ -71,10 +77,12 @@ public class UserStore
     /// <param name="configuration">The application configuration.</param>
     /// <param name="requestContext">The request context.</param>
     /// <param name="logger">The logger.</param>
-    public UserStore(ShipDb db, Fido2 fido2, SessionStore sessions, AuditStore audit, PermissionResolver permissions, IEmailSender emails, IConfiguration configuration, RequestContext requestContext, ILogger<UserStore> logger)
+    public UserStore(ShipDb db, Fido2 fido2, IMemoryCache cache, IdentityProviderSecretProtector secrets, SessionStore sessions, AuditStore audit, PermissionResolver permissions, IEmailSender emails, IConfiguration configuration, RequestContext requestContext, ILogger<UserStore> logger)
     {
         this.db = db;
         this.fido2 = fido2;
+        this.cache = cache;
+        this.secrets = secrets;
         this.sessions = sessions;
         this.audit = audit;
         this.permissions = permissions;
@@ -513,6 +521,158 @@ public class UserStore
     }
 
     /// <summary>
+    /// Lists identity providers for an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching provider configurations.</returns>
+    public async Task<List<UserIdentityProvider>> ListIdentityProvidersAsync(Guid orgId, CancellationToken ct = default)
+    {
+        return await this.db.UserIdentityProviders
+            .AsNoTracking()
+            .Where(x => x.OrgId == orgId)
+            .OrderBy(x => x.Name)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Gets an identity provider by id in an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="providerId">The provider identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The matching provider, or <see langword="null"/>.</returns>
+    public async Task<UserIdentityProvider?> GetIdentityProviderAsync(Guid orgId, long providerId, CancellationToken ct = default)
+    {
+        return await this.db.UserIdentityProviders
+            .FirstOrDefaultAsync(x => x.OrgId == orgId && x.Id == providerId, ct);
+    }
+
+    /// <summary>
+    /// Creates an identity provider configuration.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="createdBy">The creating user identifier.</param>
+    /// <param name="name">The provider name.</param>
+    /// <param name="providerType">The provider type.</param>
+    /// <param name="issuerUrl">The issuer URL.</param>
+    /// <param name="clientId">The client identifier.</param>
+    /// <param name="clientSecret">The optional plaintext client secret.</param>
+    /// <param name="metadataJson">The provider metadata JSON.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The created provider configuration.</returns>
+    public async Task<UserIdentityProvider> CreateIdentityProviderAsync(Guid orgId, Guid createdBy, string name, UserIdentityProviderType providerType, string? issuerUrl, string? clientId, string? clientSecret, string? metadataJson, CancellationToken ct = default)
+    {
+        if (!IsValidIdentityProviderIssuerUrl(issuerUrl))
+        {
+            throw new ArgumentException("Identity provider issuer URL must be HTTPS.", nameof(issuerUrl));
+        }
+
+        var provider = new UserIdentityProvider
+        {
+            OrgId = orgId,
+            UserId = createdBy,
+            Name = name.Trim(),
+            ProviderTypeId = providerType.Id,
+            StatusId = UserIdentityProviderStatus.Inactive.Id,
+            IssuerUrl = issuerUrl,
+            ClientId = clientId,
+            ClientSecretEncrypted = this.secrets.Encrypt(clientSecret),
+            MetadataJson = metadataJson,
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        this.db.UserIdentityProviders.Add(provider);
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Identity provider created: {ProviderId} org={OrgId}", provider.Id, orgId);
+        return provider;
+    }
+
+    /// <summary>
+    /// Updates an identity provider configuration.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="providerId">The provider identifier.</param>
+    /// <param name="name">The provider name.</param>
+    /// <param name="issuerUrl">The issuer URL.</param>
+    /// <param name="clientId">The client identifier.</param>
+    /// <param name="clientSecret">The optional plaintext client secret.</param>
+    /// <param name="metadataJson">The provider metadata JSON.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The updated provider configuration, or <see langword="null"/>.</returns>
+    public async Task<UserIdentityProvider?> UpdateIdentityProviderAsync(Guid orgId, long providerId, string? name, string? issuerUrl, string? clientId, string? clientSecret, string? metadataJson, CancellationToken ct = default)
+    {
+        var provider = await this.GetIdentityProviderAsync(orgId, providerId, ct);
+        if (provider is null)
+        {
+            return null;
+        }
+
+        if (!IsValidIdentityProviderIssuerUrl(issuerUrl))
+        {
+            throw new ArgumentException("Identity provider issuer URL must be HTTPS.", nameof(issuerUrl));
+        }
+
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            provider.Name = name.Trim();
+        }
+
+        if (issuerUrl is not null)
+        {
+            provider.IssuerUrl = issuerUrl;
+        }
+
+        if (clientId is not null)
+        {
+            provider.ClientId = clientId;
+        }
+
+        if (clientSecret is not null)
+        {
+            provider.ClientSecretEncrypted = this.secrets.Encrypt(clientSecret);
+        }
+
+        if (metadataJson is not null)
+        {
+            provider.MetadataJson = metadataJson;
+        }
+
+        provider.UpdatedAt = DateTime.UtcNow;
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Identity provider updated: {ProviderId} org={OrgId}", provider.Id, orgId);
+        return provider;
+    }
+
+    /// <summary>
+    /// Sets identity provider active state.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="providerId">The provider identifier.</param>
+    /// <param name="active">A value indicating whether the provider is active.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The updated provider configuration, or <see langword="null"/>.</returns>
+    public async Task<UserIdentityProvider?> SetIdentityProviderActiveAsync(Guid orgId, long providerId, bool active, CancellationToken ct = default)
+    {
+        var provider = await this.GetIdentityProviderAsync(orgId, providerId, ct);
+        if (provider is null)
+        {
+            return null;
+        }
+
+        if (active && !HasValidActiveIdentityProviderConfiguration(provider))
+        {
+            throw new ArgumentException("Identity provider configuration is incomplete or invalid.", nameof(active));
+        }
+
+        provider.StatusId = active ? UserIdentityProviderStatus.Active.Id : UserIdentityProviderStatus.Inactive.Id;
+        provider.UpdatedAt = DateTime.UtcNow;
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("Identity provider status changed: {ProviderId} org={OrgId} active={Active}", provider.Id, orgId, active);
+        return provider;
+    }
+
+    /// <summary>
     /// Generates a user API key entity and plaintext key.
     /// </summary>
     /// <param name="userId">The user identifier.</param>
@@ -825,6 +985,37 @@ public class UserStore
     }
 
     /// <summary>
+    /// Stores passkey registration options and returns a challenge identifier.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="options">The credential creation options.</param>
+    /// <returns>The challenge identifier.</returns>
+    public Guid StorePasskeyRegistrationChallenge(Guid userId, CredentialCreateOptions options)
+    {
+        var challengeId = Guid.CreateVersion7();
+        this.cache.Set(GetPasskeyRegistrationChallengeKey(challengeId), new PasskeyRegistrationChallenge(userId, options), PasskeyChallengeTtl);
+        return challengeId;
+    }
+
+    /// <summary>
+    /// Takes and removes passkey registration options for a challenge.
+    /// </summary>
+    /// <param name="challengeId">The challenge identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <returns>The credential creation options, or <see langword="null"/>.</returns>
+    public CredentialCreateOptions? TakePasskeyRegistrationChallenge(Guid challengeId, Guid userId)
+    {
+        var key = GetPasskeyRegistrationChallengeKey(challengeId);
+        if (!this.cache.TryGetValue<PasskeyRegistrationChallenge>(key, out var challenge) || challenge is null || challenge.UserId != userId)
+        {
+            return null;
+        }
+
+        this.cache.Remove(key);
+        return challenge.Options;
+    }
+
+    /// <summary>
     /// Begins passkey login for a user email.
     /// </summary>
     /// <param name="email">The user email.</param>
@@ -867,6 +1058,36 @@ public class UserStore
 
         this.logger.LogInformation("Passkey login started: user={UserId}", user.Id);
         return (user, options);
+    }
+
+    /// <summary>
+    /// Stores passkey login assertion options and returns a challenge identifier.
+    /// </summary>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="options">The assertion options.</param>
+    /// <returns>The challenge identifier.</returns>
+    public Guid StorePasskeyLoginChallenge(Guid userId, AssertionOptions options)
+    {
+        var challengeId = Guid.CreateVersion7();
+        this.cache.Set(GetPasskeyLoginChallengeKey(challengeId), new PasskeyLoginChallenge(userId, options), PasskeyChallengeTtl);
+        return challengeId;
+    }
+
+    /// <summary>
+    /// Takes and removes passkey login assertion options for a challenge.
+    /// </summary>
+    /// <param name="challengeId">The challenge identifier.</param>
+    /// <returns>The login challenge, or <see langword="null"/>.</returns>
+    public (Guid UserId, AssertionOptions Options)? TakePasskeyLoginChallenge(Guid challengeId)
+    {
+        var key = GetPasskeyLoginChallengeKey(challengeId);
+        if (!this.cache.TryGetValue<PasskeyLoginChallenge>(key, out var challenge) || challenge is null)
+        {
+            return null;
+        }
+
+        this.cache.Remove(key);
+        return (challenge.UserId, challenge.Options);
     }
 
     /// <summary>
@@ -1087,6 +1308,59 @@ public class UserStore
         }
     }
 
+    private static bool IsValidIdentityProviderIssuerUrl(string? issuerUrl)
+    {
+        return issuerUrl is null || (Uri.TryCreate(issuerUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps);
+    }
+
+    private static bool HasValidActiveIdentityProviderConfiguration(UserIdentityProvider provider)
+    {
+        if (provider.ProviderTypeId != UserIdentityProviderType.OIDC.Id)
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(provider.ClientId)
+            && IsValidIdentityProviderIssuerUrl(provider.IssuerUrl)
+            && Uri.TryCreate(provider.IssuerUrl, UriKind.Absolute, out _)
+            && HasHttpsMetadataEndpoint(provider.MetadataJson, "authorization_endpoint")
+            && HasHttpsMetadataEndpoint(provider.MetadataJson, "token_endpoint");
+    }
+
+    private static bool HasHttpsMetadataEndpoint(string? metadataJson, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(metadataJson))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(metadataJson);
+            if (!doc.RootElement.TryGetProperty(propertyName, out var element))
+            {
+                return false;
+            }
+
+            var value = element.GetString();
+            return Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string GetPasskeyRegistrationChallengeKey(Guid challengeId)
+    {
+        return $"passkey:registration:{challengeId:N}";
+    }
+
+    private static string GetPasskeyLoginChallengeKey(Guid challengeId)
+    {
+        return $"passkey:login:{challengeId:N}";
+    }
+
     private static string GenerateRecoveryCode()
     {
         var encoded = ToBase32(RandomNumberGenerator.GetBytes(RecoveryCodeBytes));
@@ -1123,4 +1397,8 @@ public class UserStore
 
         return false;
     }
+
+    private sealed record PasskeyRegistrationChallenge(Guid UserId, CredentialCreateOptions Options);
+
+    private sealed record PasskeyLoginChallenge(Guid UserId, AssertionOptions Options);
 }
