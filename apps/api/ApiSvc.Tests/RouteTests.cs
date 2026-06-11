@@ -2177,7 +2177,7 @@ public sealed class RouteTests
             });
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/identity-providers/20");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/identity-providers/20");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -2208,7 +2208,7 @@ public sealed class RouteTests
             });
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity-providers/120");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/identity-providers/120");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -2234,7 +2234,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/identity-providers?limit=1&sort=name&filter[name]=OIDC");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/identity-providers?limit=1&sort=name&filter[name]=OIDC");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -2256,7 +2256,7 @@ public sealed class RouteTests
             plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.identity_providers.write");
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
         request.Content = new StringContent("{\"name\":\"Acme OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -2277,7 +2277,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"name\":\"Acme OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -2305,7 +2305,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"name\":\"Current OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -2349,6 +2349,18 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task IdentityProviderRoutes_AreOnlyMappedUnderUsers()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var topLevelResponse = await app.Client.GetAsync("/api/v1/identity-providers", TestContext.Current.CancellationToken);
+        using var orgScopedResponse = await app.Client.GetAsync("/api/v1/orgs/default/identity-providers", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, topLevelResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, orgScopedResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateIdentityProvider_WithStaleSessionReturnsStepUpRequired()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -2367,7 +2379,7 @@ public sealed class RouteTests
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"name\":\"Acme OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -2394,7 +2406,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"name\":\"Google\",\"preset\":\"google\",\"clientId\":\"client-id\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -2426,7 +2438,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/identity-providers");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"name\":\" \" ,\"providerType\":\"ldap\",\"preset\":\"unknown\",\"issuerUrl\":\"http://idp.example.com\",\"clientId\":\" \" ,\"metadataJson\":\"not-json\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -3264,7 +3276,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/invites");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"email\":\"invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -3296,7 +3308,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/invites");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/invites");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"email\":\"current-invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -3344,6 +3356,18 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task InviteRoutes_AreOnlyMappedUnderUsers()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+
+        using var topLevelResponse = await app.Client.GetAsync("/api/v1/invites", TestContext.Current.CancellationToken);
+        using var orgScopedResponse = await app.Client.GetAsync("/api/v1/orgs/default/invites", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, topLevelResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, orgScopedResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task ListInvites_SupportsQueryContractPaginationAndFilter()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3359,7 +3383,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/invites?limit=1&filter[email]=example&sort=createdAt");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/invites?limit=1&filter[email]=example&sort=createdAt");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -3387,7 +3411,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/invites?limit=1&filter[email]=current&sort=createdAt");
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users/invites?limit=1&filter[email]=current&sort=createdAt");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -3409,7 +3433,7 @@ public sealed class RouteTests
             plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.members.write");
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/invites");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
         request.Content = new StringContent("{\"email\":\"invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -3430,7 +3454,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/invites");
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/invites");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"email\":\"not-email\",\"roleIds\":[\"00000000-0000-0000-0000-000000000000\"],\"groupIds\":[\"11111111-1111-1111-1111-111111111111\",\"11111111-1111-1111-1111-111111111111\"]}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -4034,10 +4058,8 @@ public sealed class RouteTests
                             endpoints.MapRoleEndpoints();
                             endpoints.MapGroupEndpoints();
                             endpoints.MapServiceAccountEndpoints();
-                            endpoints.MapIdentityProviderEndpoints();
                             endpoints.MapPermissionEndpoints();
                             endpoints.MapAuthPolicyEndpoints();
-                            endpoints.MapInviteEndpoints();
                             endpoints.MapCurrentOrganizationEndpoints();
                         });
                     }))

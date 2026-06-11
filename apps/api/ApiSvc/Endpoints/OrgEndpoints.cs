@@ -26,10 +26,6 @@ public static class OrgEndpoints
 
         group.MapGet("/permissions", ListPermissionsAsync);
 
-        group.MapGet("/invites", ListInvitesAsync);
-        group.MapPost("/invites", CreateInviteAsync);
-        group.MapPost("/invites/{inviteId:guid}/revoke", RevokeInviteAsync);
-
         group.MapGet("/roles", ListRolesAsync);
         group.MapPost("/roles", CreateRoleAsync);
         group.MapGet("/roles/{roleId:guid}", GetRoleAsync);
@@ -69,13 +65,6 @@ public static class OrgEndpoints
         group.MapGet("/service-accounts/{serviceAccountId:guid}/claims", ListServiceAccountClaimsAsync);
         group.MapPost("/service-accounts/{serviceAccountId:guid}/claims", AddServiceAccountClaimAsync);
         group.MapDelete("/service-accounts/{serviceAccountId:guid}/claims/{claimId:guid}", RemoveServiceAccountClaimAsync);
-
-        group.MapGet("/identity-providers", ListIdentityProvidersAsync);
-        group.MapPost("/identity-providers", CreateIdentityProviderAsync);
-        group.MapGet("/identity-providers/{providerId:long}", GetIdentityProviderAsync);
-        group.MapPatch("/identity-providers/{providerId:long}", UpdateIdentityProviderAsync);
-        group.MapPost("/identity-providers/{providerId:long}/enable", EnableIdentityProviderAsync);
-        group.MapPost("/identity-providers/{providerId:long}/disable", DisableIdentityProviderAsync);
 
         return group;
     }

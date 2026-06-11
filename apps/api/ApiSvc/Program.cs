@@ -172,10 +172,8 @@ app.MapOrgEndpoints();
 app.MapRoleEndpoints();
 app.MapGroupEndpoints();
 app.MapServiceAccountEndpoints();
-app.MapIdentityProviderEndpoints();
 app.MapPermissionEndpoints();
 app.MapAuthPolicyEndpoints();
-app.MapInviteEndpoints();
 app.MapCurrentOrganizationEndpoints();
 
 app.MapDefaultEndpoints();
