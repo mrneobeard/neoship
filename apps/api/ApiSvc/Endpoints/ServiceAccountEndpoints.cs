@@ -511,55 +511,8 @@ public static class ServiceAccountEndpoints
 
     private static async Task<AuthContext> RequireCurrentOrgPermissionAsync(HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, PermissionKey permission, CancellationToken ct, bool allowServiceAccount = false)
     {
-        var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
-        if (user is not null)
-        {
-            var org = await db.Orgs.FirstOrDefaultAsync(x => x.Id == user.OrgId, ct);
-            if (org is null)
-            {
-                return new AuthContext(null, null, null!, NotFoundError(httpContext));
-            }
-
-            var allowed = await HasUserOrgPermissionAsync(httpContext, permissions, user.Id, permission, org.Slug, ct);
-            if (!allowed)
-            {
-                return new AuthContext(null, null, org, Forbidden(httpContext));
-            }
-
-            if (permission.Action == "write")
-            {
-                var stepUpFailure = await RequireRecentSessionAsync(httpContext, ct);
-                if (stepUpFailure is not null)
-                {
-                    return new AuthContext(null, null, org, stepUpFailure);
-                }
-            }
-
-            return new AuthContext(user, null, org, null);
-        }
-
-        var token = ReadBearerToken(httpContext.Request);
-        var serviceAccountKey = token is null ? null : await httpContext.RequestServices.GetRequiredService<ServiceAccountStore>().AuthenticateApiKeyAsync(token, ct);
-        if (serviceAccountKey?.ServiceAccount is null)
-        {
-            return new AuthContext(null, null, null!, Unauthenticated(httpContext));
-        }
-
-        var serviceAccountOrg = await db.Orgs.FirstOrDefaultAsync(x => x.Id == serviceAccountKey.ServiceAccount.OrgId, ct);
-        if (serviceAccountOrg is null)
-        {
-            return new AuthContext(null, null, null!, NotFoundError(httpContext));
-        }
-
-        if (!allowServiceAccount)
-        {
-            return new AuthContext(null, null, serviceAccountOrg, Forbidden(httpContext));
-        }
-
-        var serviceAccountAllowed = (await permissions.ResolveServiceAccountApiKeyAsync(serviceAccountKey.Id, ct)).Allows(permission, PermissionScopeKind.Organization, serviceAccountOrg.Slug);
-        return serviceAccountAllowed
-            ? new AuthContext(null, serviceAccountKey, serviceAccountOrg, null)
-            : new AuthContext(null, null, serviceAccountOrg, Forbidden(httpContext));
+        var auth = await CurrentOrgEndpointAuth.RequireAsync(httpContext, sessions, permissions, db, permission, ct, allowServiceAccount);
+        return new AuthContext(auth.User, auth.ServiceAccountKey, auth.Org, auth.Failure);
     }
 
     private static async Task<bool> HasUserOrgPermissionAsync(HttpContext httpContext, PermissionResolver permissions, Guid userId, PermissionKey permission, string orgSlug, CancellationToken ct)
