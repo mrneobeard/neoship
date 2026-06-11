@@ -3515,6 +3515,56 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetCurrentOrganization_ReturnsSessionOrganization()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-org-reader@example.com", "Current Org Reader");
+            userId = user.Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/org");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("default", json.RootElement.GetProperty("data").GetProperty("slug").GetString());
+    }
+
+    [Fact]
+    public async Task UpdateCurrentOrganization_UpdatesSessionOrganization()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-org-writer@example.com", "Current Org Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.settings.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/org");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Default Renamed\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Default Renamed", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal("Default Renamed", (await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken)).Name);
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.update", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListOrganizations_SupportsQueryContract()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3780,6 +3830,7 @@ public sealed class RouteTests
                             endpoints.MapPermissionEndpoints();
                             endpoints.MapAuthPolicyEndpoints();
                             endpoints.MapInviteEndpoints();
+                            endpoints.MapCurrentOrganizationEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
