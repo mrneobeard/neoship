@@ -39,6 +39,8 @@ public class ShipDb : DbContext
 
     public DbSet<Role> Roles => Set<Role>();
 
+    public DbSet<RoleAssignment> RoleAssignments => Set<RoleAssignment>();
+
     public DbSet<RoleClaim> RoleClaims => Set<RoleClaim>();
 
     public DbSet<Group> Groups => Set<Group>();
@@ -82,6 +84,12 @@ public class ShipDb : DbContext
         modelBuilder.Entity<RoleClaim>(c =>
         {
             c.Property(x => x.Id).ValueGeneratedOnAdd();
+        });
+
+        modelBuilder.Entity<RoleAssignment>(a =>
+        {
+            a.HasIndex(x => new { x.OrgId, x.UserId, x.RoleKey, x.ScopeKind, x.ScopeId }).IsUnique();
+            a.HasIndex(x => new { x.UserId, x.OrgId });
         });
 
         modelBuilder.Entity<ServiceAccountApiKeyClaim>(c =>
@@ -233,6 +241,13 @@ public class ShipDb : DbContext
             r.HasOne(x => x.CreatedByUser)
                 .WithMany()
                 .HasForeignKey(x => x.CreatedBy);
+        });
+
+        modelBuilder.Entity<RoleAssignment>(a =>
+        {
+            a.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
+            a.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            a.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
         });
 
         // Role -> RoleClaim

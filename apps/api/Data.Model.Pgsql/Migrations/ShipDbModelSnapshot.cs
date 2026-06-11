@@ -477,6 +477,60 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.ToTable("roles", (string)null);
                 });
 
+            modelBuilder.Entity("NeoShip.Data.Model.RoleAssignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("OrgId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("org_id");
+
+                    b.Property<string>("RoleKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("role_key");
+
+                    b.Property<string>("ScopeId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)")
+                        .HasColumnName("scope_id");
+
+                    b.Property<int>("ScopeKind")
+                        .HasColumnType("integer")
+                        .HasColumnName("scope_kind");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_role_assignments");
+
+                    b.HasIndex("CreatedBy")
+                        .HasDatabaseName("ix_role_assignments_created_by");
+
+                    b.HasIndex("UserId", "OrgId")
+                        .HasDatabaseName("ix_role_assignments_user_id_org_id");
+
+                    b.HasIndex("OrgId", "UserId", "RoleKey", "ScopeKind", "ScopeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_role_assignments_org_id_user_id_role_key_scope_kind_scope_id");
+
+                    b.ToTable("role_assignments", (string)null);
+                });
+
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>
                 {
                     b.Property<long>("Id")
@@ -1661,6 +1715,36 @@ namespace NeoShip.Data.Pgsql.Migrations
                     b.Navigation("CreatedByUser");
 
                     b.Navigation("Org");
+                });
+
+            modelBuilder.Entity("NeoShip.Data.Model.RoleAssignment", b =>
+                {
+                    b.HasOne("NeoShip.Data.Model.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_assignments_users_created_by");
+
+                    b.HasOne("NeoShip.Data.Model.Organization", "Org")
+                        .WithMany()
+                        .HasForeignKey("OrgId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_assignments_orgs_org_id");
+
+                    b.HasOne("NeoShip.Data.Model.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_role_assignments_users_user_id");
+
+                    b.Navigation("CreatedByUser");
+
+                    b.Navigation("Org");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("NeoShip.Data.Model.RoleClaim", b =>

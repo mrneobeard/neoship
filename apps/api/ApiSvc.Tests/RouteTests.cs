@@ -2720,7 +2720,7 @@ public sealed class RouteTests
             Assert.Equal("Root User", user.Name);
             Assert.True(new PasswordStore().Verify("correct-horse-password", (await db.UserPasswordAuths.SingleAsync(x => x.UserId == user.Id, TestContext.Current.CancellationToken)).PasswordHash).Success);
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId && x.DeletedAt == null, TestContext.Current.CancellationToken));
-            Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
+            Assert.True(await db.RoleAssignments.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.UserId == user.Id && x.RoleKey == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "admin.bootstrap", TestContext.Current.CancellationToken));
         });
     }

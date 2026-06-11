@@ -245,7 +245,7 @@ public class SsoStoreTests
         Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
         Assert.True(await db.UserEmails.AnyAsync(x => x.UserId == user.Id && x.VerifiedAt != null, TestContext.Current.CancellationToken));
         Assert.True(await db.UserExternalIdentities.AnyAsync(x => x.UserId == user.Id && x.Subject == "new-subject", TestContext.Current.CancellationToken));
-        Assert.True(await db.Users.Where(x => x.Id == user.Id).SelectMany(x => x.Roles).AnyAsync(x => x.Name == BuiltInRoleStore.MemberRoleName, TestContext.Current.CancellationToken));
+        Assert.True(await db.RoleAssignments.AnyAsync(x => x.UserId == user.Id && x.RoleKey == BuiltInRoleStore.MemberRoleName, TestContext.Current.CancellationToken));
     }
 
     /// <summary>

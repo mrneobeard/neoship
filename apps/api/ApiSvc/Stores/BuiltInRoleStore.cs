@@ -5,62 +5,53 @@ using NeoShip.Data.Model;
 namespace NeoShip.ApiSvc.Stores;
 
 /// <summary>
-/// Seeds and assigns built-in organization roles.
+/// Assigns and resolves code-owned organization roles.
 /// </summary>
 /// <example>
 /// <code>
-/// var roles = await BuiltInRoleStore.EnsureAsync(db, org.Id, org.Slug, user.Id, ct);
+/// await BuiltInRoleStore.AssignAsync(db, org.Id, org.Slug, user.Id, BuiltInRoleStore.OwnerRoleName, ct);
 /// </code>
 /// </example>
 public static class BuiltInRoleStore
 {
     /// <summary>
-    /// The built-in owner role name.
+    /// The built-in owner role key.
     /// </summary>
-    public const string OwnerRoleName = "Owner";
+    public const string OwnerRoleName = "owner";
 
     /// <summary>
-    /// The built-in admin role name.
+    /// The built-in admin role key.
     /// </summary>
-    public const string AdminRoleName = "Admin";
+    public const string AdminRoleName = "admin";
 
     /// <summary>
-    /// The built-in member role name.
+    /// The built-in editor role key.
     /// </summary>
-    public const string MemberRoleName = "Member";
+    public const string EditorRoleName = "editor";
 
     /// <summary>
-    /// Ensures the built-in organization roles and claims exist.
+    /// The built-in reader role key.
     /// </summary>
-    /// <param name="db">The database context.</param>
-    /// <param name="orgId">The organization identifier.</param>
-    /// <param name="orgSlug">The organization slug.</param>
-    /// <param name="createdBy">The creator user identifier.</param>
-    /// <param name="ct">The cancellation token.</param>
-    /// <returns>The built-in <see cref="Role"/> values keyed by role name.</returns>
-    public static async Task<IReadOnlyDictionary<string, Role>> EnsureAsync(ShipDb db, Guid orgId, string orgSlug, Guid createdBy, CancellationToken ct = default)
+    public const string ReaderRoleName = "reader";
+
+    /// <summary>
+    /// The built-in auditor role key.
+    /// </summary>
+    public const string AuditorRoleName = "auditor";
+
+    /// <summary>
+    /// The legacy built-in member role key.
+    /// </summary>
+    public const string MemberRoleName = ReaderRoleName;
+
+    private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<PermissionKey>> Roles = new Dictionary<string, IReadOnlyCollection<PermissionKey>>(StringComparer.OrdinalIgnoreCase)
     {
-        var roles = await db.Roles
-            .Include(x => x.Claims)
-            .Where(x => x.OrgId == orgId && (x.NameUpcase == "OWNER" || x.NameUpcase == "ADMIN" || x.NameUpcase == "MEMBER"))
-            .ToDictionaryAsync(x => x.NameUpcase, ct);
-
-        var owner = EnsureRole(db, roles, orgId, OwnerRoleName, "Full organization ownership.", createdBy);
-        var admin = EnsureRole(db, roles, orgId, AdminRoleName, "Organization administration without ownership transfer.", createdBy);
-        var member = EnsureRole(db, roles, orgId, MemberRoleName, "Default organization member access.", createdBy);
-
-        EnsureClaims(owner, OwnerPermissions(), orgSlug, createdBy);
-        EnsureClaims(admin, AdminPermissions(), orgSlug, createdBy);
-        EnsureClaims(member, MemberPermissions(), orgSlug, createdBy);
-
-        await db.SaveChangesAsync(ct);
-        return new Dictionary<string, Role>(StringComparer.OrdinalIgnoreCase)
-        {
-            [OwnerRoleName] = owner,
-            [AdminRoleName] = admin,
-            [MemberRoleName] = member,
-        };
-    }
+        [OwnerRoleName] = OwnerPermissions().ToArray(),
+        [AdminRoleName] = AdminPermissions().ToArray(),
+        [EditorRoleName] = EditorPermissions().ToArray(),
+        [ReaderRoleName] = ReaderPermissions().ToArray(),
+        [AuditorRoleName] = AuditorPermissions().ToArray(),
+    };
 
     /// <summary>
     /// Assigns a built-in role to a user.
@@ -69,72 +60,72 @@ public static class BuiltInRoleStore
     /// <param name="orgId">The organization identifier.</param>
     /// <param name="orgSlug">The organization slug.</param>
     /// <param name="userId">The user identifier.</param>
-    /// <param name="roleName">The built-in role name.</param>
+    /// <param name="roleName">The built-in role key.</param>
     /// <param name="ct">The cancellation token.</param>
     /// <returns><see cref="Task"/> representing the asynchronous operation.</returns>
     public static async Task AssignAsync(ShipDb db, Guid orgId, string orgSlug, Guid userId, string roleName, CancellationToken ct = default)
     {
-        var roles = await EnsureAsync(db, orgId, orgSlug, userId, ct);
-        if (!roles.TryGetValue(roleName, out var role))
+        var roleKey = NormalizeRoleKey(roleName);
+        if (!Roles.ContainsKey(roleKey))
         {
             throw new ArgumentException("Unknown built-in role.", nameof(roleName));
         }
 
-        var user = await db.Users.Include(x => x.Roles).FirstOrDefaultAsync(x => x.Id == userId, ct);
-        if (user is null || user.Roles.Any(x => x.Id == role.Id))
+        var scopeId = NormalizeScopeId(orgSlug);
+        var exists = await db.RoleAssignments.AnyAsync(
+            x => x.OrgId == orgId
+                && x.UserId == userId
+                && x.RoleKey == roleKey
+                && x.ScopeKind == PermissionScopeKind.Organization
+                && x.ScopeId == scopeId,
+            ct);
+        if (exists)
         {
             return;
         }
 
-        user.Roles.Add(role);
+        var userExists = db.Users.Local.Any(x => x.Id == userId) || await db.Users.AnyAsync(x => x.Id == userId, ct);
+        if (!userExists)
+        {
+            return;
+        }
+
+        db.RoleAssignments.Add(new RoleAssignment
+        {
+            Id = Factory.NewGuid(),
+            OrgId = orgId,
+            UserId = userId,
+            RoleKey = roleKey,
+            ScopeKind = PermissionScopeKind.Organization,
+            ScopeId = scopeId,
+            CreatedBy = userId,
+            CreatedAt = DateTime.UtcNow,
+        });
+
         await db.SaveChangesAsync(ct);
     }
 
-    private static Role EnsureRole(ShipDb db, Dictionary<string, Role> roles, Guid orgId, string name, string description, Guid createdBy)
+    /// <summary>
+    /// Gets grants for a built-in role at a scope.
+    /// </summary>
+    /// <param name="roleName">The built-in role key.</param>
+    /// <param name="scopeKind">The scope kind.</param>
+    /// <param name="scopeId">The optional scope identifier.</param>
+    /// <returns>The role's permission grants, or an empty sequence for unknown roles.</returns>
+    public static IEnumerable<PermissionGrant> GrantsFor(string roleName, PermissionScopeKind scopeKind, string? scopeId)
     {
-        var nameUpcase = name.ToUpperInvariant();
-        if (roles.TryGetValue(nameUpcase, out var role))
+        var roleKey = NormalizeRoleKey(roleName);
+        if (!Roles.TryGetValue(roleKey, out var permissions))
         {
-            role.Description = description;
-            return role;
+            return [];
         }
 
-        role = new Role
-        {
-            Id = Guid.CreateVersion7(),
-            OrgId = orgId,
-            Name = name,
-            NameUpcase = nameUpcase,
-            Description = description,
-            CreatedBy = createdBy,
-            CreatedAt = DateTime.UtcNow,
-        };
-        db.Roles.Add(role);
-        roles[nameUpcase] = role;
-        return role;
+        return permissions.Select(x => new PermissionGrant(x, scopeKind, scopeId));
     }
 
-    private static void EnsureClaims(Role role, IEnumerable<PermissionKey> permissions, string orgSlug, Guid createdBy)
-    {
-        var scope = $"organization:{orgSlug}";
-        foreach (var permission in permissions)
-        {
-            var type = permission.ToString();
-            if (role.Claims.Any(x => x.Type == type && x.Value == scope))
-            {
-                continue;
-            }
+    private static string NormalizeRoleKey(string roleName) => roleName.Trim().ToLowerInvariant() is "member" ? ReaderRoleName : roleName.Trim().ToLowerInvariant();
 
-            role.Claims.Add(new RoleClaim
-            {
-                RoleId = role.Id,
-                Type = type,
-                Value = scope,
-                CreatedBy = createdBy,
-                CreatedAt = DateTime.UtcNow,
-            });
-        }
-    }
+    private static string NormalizeScopeId(string orgSlug) => orgSlug.Trim().ToLowerInvariant();
 
     private static IEnumerable<PermissionKey> OwnerPermissions()
         => CorePermissions.All.Where(x => x.AllowedScopes.Contains(PermissionScopeKind.Organization)).Select(x => x.Key);
@@ -142,6 +133,12 @@ public static class BuiltInRoleStore
     private static IEnumerable<PermissionKey> AdminPermissions()
         => OwnerPermissions().Where(x => x != PermissionKey.Create("org.settings", "write"));
 
-    private static IEnumerable<PermissionKey> MemberPermissions()
+    private static IEnumerable<PermissionKey> EditorPermissions()
+        => OwnerPermissions().Where(x => x.Action is "read" or "write" && x.Resource != "org.settings");
+
+    private static IEnumerable<PermissionKey> ReaderPermissions()
         => OwnerPermissions().Where(x => x.Action == "read" && x.Resource is "org.settings" or "org.members");
+
+    private static IEnumerable<PermissionKey> AuditorPermissions()
+        => OwnerPermissions().Where(x => x.Action == "read");
 }

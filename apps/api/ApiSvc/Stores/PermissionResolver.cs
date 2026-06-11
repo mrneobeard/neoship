@@ -53,6 +53,16 @@ public sealed class PermissionResolver
 
         this.AddClaims(grants, userClaims);
 
+        var builtInAssignments = await this.db.RoleAssignments
+            .Where(x => x.UserId == userId && x.OrgId == userOrgId)
+            .Select(x => new { x.RoleKey, x.ScopeKind, x.ScopeId })
+            .ToListAsync(ct);
+
+        foreach (var assignment in builtInAssignments)
+        {
+            grants.AddRange(BuiltInRoleStore.GrantsFor(assignment.RoleKey, assignment.ScopeKind, assignment.ScopeId));
+        }
+
         var userRoles = await this.db.Users
             .Where(x => x.Id == userId)
             .SelectMany(x => x.Roles.Where(r => r.OrgId == userOrgId))

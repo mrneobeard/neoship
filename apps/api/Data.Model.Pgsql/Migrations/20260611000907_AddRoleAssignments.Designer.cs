@@ -2,29 +2,37 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NeoShip.Data.Model;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace NeoShip.Data.Sqlite.Migrations
+namespace NeoShip.Data.Pgsql.Migrations
 {
     [DbContext(typeof(ShipDb))]
-    partial class ShipDbModelSnapshot : ModelSnapshot
+    [Migration("20260611000907_AddRoleAssignments")]
+    partial class AddRoleAssignments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "10.0.8");
+            modelBuilder
+                .HasAnnotation("ProductVersion", "10.0.8")
+                .HasAnnotation("Relational:MaxIdentifierLength", 63);
+
+            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("GroupRole", b =>
                 {
                     b.Property<Guid>("GroupsId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("groups_id");
 
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.HasKey("GroupsId", "RolesId")
@@ -40,114 +48,116 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("action");
 
-                    b.Property<uint?>("Asn")
-                        .HasColumnType("INTEGER")
+                    b.Property<long?>("Asn")
+                        .HasColumnType("bigint")
                         .HasColumnName("asn");
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<string>("DataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("data_json");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("ip_digest");
 
                     b.Property<string>("MachineName")
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("machine_name");
 
                     b.Property<Guid?>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("ParentSpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("parent_span_id");
 
                     b.Property<string>("Region")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("region");
 
                     b.Property<string>("RequestId")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("request_id");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
-                    b.Property<ushort>("RiskLevel")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("RiskLevel")
+                        .HasColumnType("integer")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("SessionId")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("session_id");
 
                     b.Property<string>("SpanId")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("span_id");
 
                     b.Property<string>("TargetId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_id");
 
                     b.Property<string>("TargetType")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("target_type");
 
                     b.Property<DateTime>("Timestamp")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("timestamp");
 
                     b.Property<string>("TraceId")
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("trace_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("type");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid?>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -166,38 +176,38 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -213,81 +223,81 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<bool>("AllowOidcSso")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("allow_oidc_sso");
 
                     b.Property<bool>("AllowPasskeyAuth")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("allow_passkey_auth");
 
                     b.Property<bool>("AllowPasswordAuth")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("allow_password_auth");
 
                     b.Property<bool>("AllowSamlSso")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("allow_saml_sso");
 
                     b.Property<bool>("AllowSelfServiceExternalIdentityUnlink")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("allow_self_service_external_identity_unlink");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<DateTime?>("HardDeleteAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("hard_delete_at");
 
-                    b.Property<ushort>("MfaPolicyId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("MfaPolicyId")
+                        .HasColumnType("integer")
                         .HasColumnName("mfa_policy_id");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
-                    b.Property<ushort>("OrganizationPlanId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("OrganizationPlanId")
+                        .HasColumnType("integer")
                         .HasColumnName("organization_plan_id");
 
                     b.Property<bool>("RequireSso")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("boolean")
                         .HasColumnName("require_sso");
 
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("slug");
 
-                    b.Property<ushort>("StatusId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("StatusId")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
-                    b.Property<ushort>("TenantModeId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("TenantModeId")
+                        .HasColumnType("integer")
                         .HasColumnName("tenant_mode_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -303,63 +313,63 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime?>("AcceptedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("accepted_at");
 
                     b.Property<Guid?>("AcceptedByUserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("accepted_by_user_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<Guid>("InvitedByUserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("invited_by_user_id");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("PendingGroupIdsJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("pending_group_ids_json");
 
                     b.Property<string>("PendingRoleIdsJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("pending_role_ids_json");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("token_digest");
 
                     b.HasKey("Id")
@@ -385,27 +395,27 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("AcceptedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("accepted_at");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -425,36 +435,36 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.HasKey("Id")
@@ -474,38 +484,38 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("RoleKey")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("role_key");
 
                     b.Property<string>("ScopeId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("scope_id");
 
                     b.Property<int>("ScopeKind")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("integer")
                         .HasColumnName("scope_kind");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -528,31 +538,33 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<Guid>("RoleId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("role_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -571,44 +583,44 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("description");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -627,54 +639,54 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(2048)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("Id")
@@ -693,31 +705,33 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
 
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_api_key_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -733,31 +747,31 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("ServiceAccountId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_id");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -773,61 +787,61 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("AvatarUrl")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("avatar_url");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("HardDeleteAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("hard_delete_at");
 
                     b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_login_at");
 
                     b.Property<string>("LastLoginIp")
                         .HasMaxLength(39)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(39)")
                         .HasColumnName("last_login_ip");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("name");
 
                     b.Property<string>("NameUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("name_upcase");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
-                    b.Property<ushort>("StatusId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("StatusId")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.HasKey("Id")
@@ -853,54 +867,54 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Description")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("KeyDigest")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("key_digest");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(64)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(64)")
                         .HasColumnName("name");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("ScopesJson")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("scopes_json");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -919,31 +933,33 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("integer")
                         .HasColumnName("id");
 
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserApiKeyId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_api_key_id");
 
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -959,22 +975,24 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("Type")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("type");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<string>("Value")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("value");
 
                     b.HasKey("Id")
@@ -987,62 +1005,62 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<Guid>("CreatedBy")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
                     b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<string>("EmailDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("email_digest");
 
                     b.Property<string>("EmailUpcase")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email_upcase");
 
                     b.Property<DateTime?>("ErasedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("erased_at");
 
-                    b.Property<ushort>("StatusId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("StatusId")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<string>("VerificationTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("verification_token_digest");
 
                     b.Property<DateTime?>("VerificationTokenExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verification_token_expires_at");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verified_at");
 
                     b.HasKey("Id")
@@ -1064,44 +1082,44 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<long>("ProviderId")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("provider_id");
 
                     b.Property<string>("Subject")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("subject");
 
                     b.Property<string>("SubjectDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("subject_digest");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1124,57 +1142,59 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("bigint")
                         .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientId")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("client_id");
 
                     b.Property<byte[]>("ClientSecretEncrypted")
                         .IsRequired()
-                        .HasColumnType("BLOB")
+                        .HasColumnType("bytea")
                         .HasColumnName("client_secret_enc");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IssuerUrl")
                         .HasMaxLength(2048)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(2048)")
                         .HasColumnName("issuer_url");
 
                     b.Property<string>("MetadataJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("metadata_json");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
-                    b.Property<ushort>("ProviderTypeId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("ProviderTypeId")
+                        .HasColumnType("integer")
                         .HasColumnName("provider_type_id");
 
-                    b.Property<ushort>("StatusId")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("StatusId")
+                        .HasColumnType("integer")
                         .HasColumnName("status_id");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1196,47 +1216,47 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<uint?>("Asn")
-                        .HasColumnType("INTEGER")
+                    b.Property<long?>("Asn")
+                        .HasColumnType("bigint")
                         .HasColumnName("asn");
 
-                    b.Property<uint>("Count")
-                        .HasColumnType("INTEGER")
+                    b.Property<long>("Count")
+                        .HasColumnType("bigint")
                         .HasColumnName("count");
 
                     b.Property<string>("CountryCode")
                         .HasMaxLength(2)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(2)")
                         .HasColumnName("country_code");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Region")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("region");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1252,66 +1272,66 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("name");
 
                     b.Property<string>("TransportsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("transports_json");
 
-                    b.Property<ushort>("Type")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
                         .HasColumnName("type");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<byte[]>("ValueEncrypted")
                         .IsRequired()
-                        .HasColumnType("BLOB")
+                        .HasColumnType("bytea")
                         .HasColumnName("value_enc");
 
                     b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("verified_at");
 
                     b.Property<byte[]>("WebAuthnCredentialId")
                         .IsRequired()
-                        .HasColumnType("BLOB")
+                        .HasColumnType("bytea")
                         .HasColumnName("web_authn_credential_id");
 
                     b.Property<string>("WebAuthnCredentialIdDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("web_authn_credential_id_digest");
 
                     b.Property<byte[]>("WebAuthnPublicKeyCredentialData")
                         .IsRequired()
-                        .HasColumnType("BLOB")
+                        .HasColumnType("bytea")
                         .HasColumnName("web_authn_public_key_credential_data");
 
-                    b.Property<uint>("WebAuthnSignCount")
-                        .HasColumnType("INTEGER")
+                    b.Property<long>("WebAuthnSignCount")
+                        .HasColumnType("bigint")
                         .HasColumnName("web_authn_sign_count");
 
                     b.HasKey("Id")
@@ -1329,58 +1349,58 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("NeoShip.Data.Model.UserPasswordAuth", b =>
                 {
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<int>("FailedAttempts")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("integer")
                         .HasColumnName("failed_attempts");
 
                     b.Property<string>("HashAlgorithm")
                         .IsRequired()
                         .HasMaxLength(32)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(32)")
                         .HasColumnName("hash_algorithm");
 
                     b.Property<int>("Iterations")
-                        .HasColumnType("INTEGER")
+                        .HasColumnType("integer")
                         .HasColumnName("iterations");
 
                     b.Property<DateTime?>("LockedUntil")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
 
                     b.Property<DateTime?>("PasswordChangedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("password_changed_at");
 
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("password_hash");
 
                     b.Property<string>("PasswordSalt")
                         .IsRequired()
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("password_salt");
 
                     b.Property<string>("ResetTokenDigest")
                         .HasMaxLength(256)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(256)")
                         .HasColumnName("reset_token_digest");
 
                     b.Property<DateTime?>("ResetTokenExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("reset_token_expires_at");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("UserId")
@@ -1396,79 +1416,79 @@ namespace NeoShip.Data.Sqlite.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("id");
 
                     b.Property<string>("ClaimsJson")
                         .HasMaxLength(4096)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(4096)")
                         .HasColumnName("claims_json");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
                     b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(46)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(46)")
                         .HasColumnName("ip_address");
 
                     b.Property<string>("IpDigest")
                         .HasMaxLength(128)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(128)")
                         .HasColumnName("ip_digest");
 
                     b.Property<DateTime>("LastUsedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_used_at");
 
                     b.Property<DateTime?>("MfaVerifiedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("mfa_verified_at");
 
                     b.Property<Guid>("OrgId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("org_id");
 
                     b.Property<string>("RevokeReason")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("revoke_reason");
 
                     b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("revoked_at");
 
                     b.Property<string>("RiskFlagsJson")
                         .HasMaxLength(1024)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(1024)")
                         .HasColumnName("risk_flags_json");
 
-                    b.Property<ushort>("RiskLevel")
-                        .HasColumnType("INTEGER")
+                    b.Property<int>("RiskLevel")
+                        .HasColumnType("integer")
                         .HasColumnName("risk_level");
 
                     b.Property<string>("TokenDigest")
                         .IsRequired()
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("token_digest");
 
                     b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(512)
-                        .HasColumnType("TEXT")
+                        .HasColumnType("character varying(512)")
                         .HasColumnName("user_agent");
 
                     b.Property<Guid>("UserId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
                     b.HasKey("Id")
@@ -1489,11 +1509,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("RoleUser", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("UsersId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("users_id");
 
                     b.HasKey("RolesId", "UsersId")
@@ -1508,11 +1528,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("group_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("MembersId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("members_id");
 
                     b.HasKey("GroupId", "MembersId")
@@ -1527,11 +1547,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("group_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("OwnersId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("owners_id");
 
                     b.HasKey("Group1Id", "OwnersId")
@@ -1546,11 +1566,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("group_service_account_members", b =>
                 {
                     b.Property<Guid>("GroupId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("group_id");
 
                     b.Property<Guid>("ServiceAccountMembersId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_members_id");
 
                     b.HasKey("GroupId", "ServiceAccountMembersId")
@@ -1565,11 +1585,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("group_service_account_owners", b =>
                 {
                     b.Property<Guid>("Group1Id")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("group1id");
 
                     b.Property<Guid>("ServiceAccountOwnersId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_owners_id");
 
                     b.HasKey("Group1Id", "ServiceAccountOwnersId")
@@ -1584,11 +1604,11 @@ namespace NeoShip.Data.Sqlite.Migrations
             modelBuilder.Entity("service_account_api_key_roles", b =>
                 {
                     b.Property<Guid>("RolesId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("roles_id");
 
                     b.Property<Guid>("ServiceAccountApiKeyId")
-                        .HasColumnType("TEXT")
+                        .HasColumnType("uuid")
                         .HasColumnName("service_account_api_key_id");
 
                     b.HasKey("RolesId", "ServiceAccountApiKeyId")
@@ -1791,7 +1811,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasForeignKey("ServiceAccountApiKeyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_service_account_api_key_claims_service_account_api_keys_service_account_api_key_id");
+                        .HasConstraintName("fk_service_account_api_key_claims_service_account_api_keys_ser");
 
                     b.Navigation("ServiceAccountApiKey");
                 });
@@ -2016,7 +2036,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasForeignKey("ServiceAccountMembersId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_group_service_account_members_service_accounts_service_account_members_id");
+                        .HasConstraintName("fk_group_service_account_members_service_accounts_service_acco");
                 });
 
             modelBuilder.Entity("group_service_account_owners", b =>
@@ -2033,7 +2053,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasForeignKey("ServiceAccountOwnersId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_group_service_account_owners_service_accounts_service_account_owners_id");
+                        .HasConstraintName("fk_group_service_account_owners_service_accounts_service_accou");
                 });
 
             modelBuilder.Entity("service_account_api_key_roles", b =>
@@ -2050,7 +2070,7 @@ namespace NeoShip.Data.Sqlite.Migrations
                         .HasForeignKey("ServiceAccountApiKeyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_service_account_api_key_roles_service_account_api_keys_service_account_api_key_id");
+                        .HasConstraintName("fk_service_account_api_key_roles_service_account_api_keys_serv");
                 });
 
             modelBuilder.Entity("NeoShip.Data.Model.Role", b =>

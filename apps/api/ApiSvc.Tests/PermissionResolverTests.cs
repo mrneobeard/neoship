@@ -114,8 +114,8 @@ public class PermissionResolverTests
 
         Assert.True(permissions.Allows(PermissionKey.Create("org.settings", "write"), PermissionScopeKind.Organization, "default"));
         Assert.True(permissions.Allows(PermissionKey.Create("org.identity_providers", "write"), PermissionScopeKind.Organization, "default"));
-        Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.AdminRoleName, TestContext.Current.CancellationToken));
-        Assert.True(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.MemberRoleName, TestContext.Current.CancellationToken));
+        Assert.True(await db.RoleAssignments.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.UserId == user.Id && x.RoleKey == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
+        Assert.False(await db.Roles.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.Name == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
     }
 
     [Fact]
