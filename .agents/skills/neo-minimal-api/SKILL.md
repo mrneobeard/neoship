@@ -27,8 +27,9 @@ Use this skill for `apps/api/ApiSvc` endpoint work.
 
 - Success should move toward a `data` envelope when the contract requires it.
 - Failures should move toward an `error` envelope with shared error codes.
-- Org-scoped routes use `/api/v1/orgs/{orgSlug}/...`.
-- Org-scoped routes must not trust org id from request body.
+- Current-organization routes infer org context from the actor and use clean resource nouns.
+- Explicit org-admin routes may use `/api/v1/org/{orgId}/...` when the org id is part of the resource identity.
+- Org routes must not trust org id from request body.
 - Mutable create-style endpoints should consider `Idempotency-Key` where retries are likely.
 
 ## Security Rules

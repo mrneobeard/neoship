@@ -346,10 +346,10 @@ Recommended initial API groups:
 
 - `/api/v1/auth/*`
 - `/api/v1/me/*`
-- `/api/v1/orgs/{org}/service-accounts/*`
-- `/api/v1/orgs/{org}/roles/*`
-- `/api/v1/orgs/{org}/groups/*`
-- `/api/v1/orgs/{org}/identity-providers/*`
+- `/api/v1/service-accounts/*`
+- `/api/v1/roles/*`
+- `/api/v1/groups/*`
+- `/api/v1/users/identity-providers/*`
 
 Priority auth flows:
 

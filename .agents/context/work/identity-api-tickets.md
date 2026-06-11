@@ -128,10 +128,10 @@ Scope:
 
 Endpoints:
 
-- `GET /api/v1/orgs/{orgSlug}/service-accounts`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts`
-- `PATCH /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/disable`
+- `GET /api/v1/service-accounts`
+- `POST /api/v1/service-accounts`
+- `PATCH /api/v1/service-accounts/{serviceAccountId}`
+- `POST /api/v1/service-accounts/{serviceAccountId}/disable`
 
 Acceptance:
 
@@ -145,9 +145,9 @@ Scope:
 
 Endpoints:
 
-- `GET /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{apiKeyId}/revoke`
+- `GET /api/v1/service-accounts/{serviceAccountId}/api-keys`
+- `POST /api/v1/service-accounts/{serviceAccountId}/api-keys`
+- `POST /api/v1/service-accounts/{serviceAccountId}/api-keys/{apiKeyId}/revoke`
 
 Acceptance:
 

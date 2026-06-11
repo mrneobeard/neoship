@@ -59,7 +59,10 @@ internal static class EndpointResults
     /// <param name="offset">The zero-based offset.</param>
     /// <returns>The encoded cursor.</returns>
     internal static string EncodeCursor(int offset)
-        => Convert.ToBase64String(Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        => Convert.ToBase64String(Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
 
     /// <summary>
     /// Decodes an offset cursor.
@@ -72,7 +75,9 @@ internal static class EndpointResults
         offset = 0;
         try
         {
-            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            var padded = cursor.Replace('-', '+').Replace('_', '/');
+            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
+            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(padded));
             return int.TryParse(raw, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
         }
         catch (FormatException)

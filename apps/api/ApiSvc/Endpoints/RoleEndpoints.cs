@@ -593,25 +593,6 @@ public static class RoleEndpoints
         return new ParsedNamedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
     }
 
-    private static string EncodeCursor(int offset)
-        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static bool TryDecodeCursor(string cursor, out int offset)
-    {
-        offset = 0;
-        try
-        {
-            var padded = cursor.Replace('-', '+').Replace('_', '/');
-            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
-            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
-
     private static string? ReadBearerToken(HttpRequest request)
     {
         var header = request.Headers.Authorization.ToString();
