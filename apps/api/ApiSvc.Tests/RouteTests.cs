@@ -1120,7 +1120,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -1143,7 +1143,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"requireSso\":true}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -1164,7 +1164,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent(
             "{\"allowPasswordAuth\":false,\"allowOidcSso\":false,\"requireSso\":true,\"allowSelfServiceExternalIdentityUnlink\":false}",
@@ -1200,7 +1200,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"mfaPolicy\":\"all_members\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -1224,7 +1224,7 @@ public sealed class RouteTests
             plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.settings.read");
         });
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
         var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -1246,7 +1246,7 @@ public sealed class RouteTests
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
-        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/auth-policy");
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/org/{Constants.DefaultOrganizationId}/auth/policy");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"mfaPolicy\":\"all_members\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
@@ -4054,7 +4054,7 @@ public sealed class RouteTests
                             endpoints.MapAdminEndpoints();
                             endpoints.MapMeEndpoints();
                             endpoints.MapUserEndpoints();
-                            endpoints.MapTenantEndpoints();
+                            endpoints.MapOrgEndpoints();
                             endpoints.MapRoleEndpoints();
                             endpoints.MapGroupEndpoints();
                             endpoints.MapServiceAccountEndpoints();

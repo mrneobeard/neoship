@@ -7,6 +7,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 public static class AuthEndpoints
@@ -398,21 +400,8 @@ public static class AuthEndpoints
         return TypedResults.Ok(Envelope(httpContext, new TokenExchangeResponse(token, "Bearer", 300)));
     }
 
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
     private static IResult Unauthenticated(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication failed.");
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => TypedResults.Json(
-            new ApiErrorEnvelope(
-                new ApiError("validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields }),
-                ApiMeta.FromHttpContext(httpContext)),
-            statusCode: StatusCodes.Status422UnprocessableEntity);
-
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
 
     private static Dictionary<string, string[]> ValidateSignup(SignupRequest req)
     {

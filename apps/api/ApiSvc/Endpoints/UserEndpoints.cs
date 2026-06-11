@@ -776,6 +776,4 @@ public static class UserEndpoints
     private static ApiPagination EmptyPagination(int count)
         => new(count, nextCursor: null, previousCursor: null, hasMore: false);
 
-    private static IResult ValidationError(HttpContext httpContext, IReadOnlyDictionary<string, string[]> fields)
-        => EndpointResults.ValidationError(httpContext, fields);
 }

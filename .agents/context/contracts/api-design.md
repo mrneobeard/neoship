@@ -78,6 +78,8 @@ Conform public names to canonical C# types where practical.
 
 ### Access Control
 
+- `GET /api/v1/org/{orgId}/auth/policy`
+- `PATCH /api/v1/org/{orgId}/auth/policy`
 - `GET /api/v1/roles`
 - `POST /api/v1/roles`
 - `GET /api/v1/groups`

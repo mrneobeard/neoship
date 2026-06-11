@@ -38,7 +38,7 @@ This imports and specializes useful context from the research docs:
 
 - auth routes use `/api/v1/auth/...`
 - current actor routes use `/api/v1/me/...`
-- current-organization routes infer org context from the actor and use clean resource nouns such as `/api/v1/roles`, `/api/v1/groups`, and `/api/v1/service-accounts`
+- current-organization routes infer org context from the actor and use clean resource nouns such as `/api/v1/roles`, `/api/v1/groups`, and `/api/v1/service-accounts`; explicit org-admin routes may use `/api/v1/org/{orgId}/...` when the org id is part of the resource identity
 - route nouns use public product terms, not table names
 - resource ids in payloads are UUIDv7 unless a resource explicitly documents another opaque id format
 - slugs are for URLs and human selection

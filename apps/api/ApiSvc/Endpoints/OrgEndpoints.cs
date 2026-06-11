@@ -9,22 +9,22 @@ using static NeoShip.ApiSvc.Endpoints.EndpointResults;
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
-/// Maps tenant and organization endpoints.
+/// Maps organization endpoints.
 /// </summary>
 /// <remarks>
 /// Example:
 /// <code>
-/// app.MapTenantEndpoints();
+/// app.MapOrgEndpoints();
 /// </code>
 /// </remarks>
-public static class TenantEndpoints
+public static class OrgEndpoints
 {
     /// <summary>
-    /// Maps tenant and organization routes.
+    /// Maps organization routes.
     /// </summary>
     /// <param name="routes">The route builder.</param>
     /// <returns>The mapped <see cref="RouteGroupBuilder"/>.</returns>
-    public static RouteGroupBuilder MapTenantEndpoints(this IEndpointRouteBuilder routes)
+    public static RouteGroupBuilder MapOrgEndpoints(this IEndpointRouteBuilder routes)
     {
         var group = routes.MapGroup("/api/v1/orgs");
 

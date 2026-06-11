@@ -11,6 +11,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 public static class MeEndpoints
@@ -834,7 +836,7 @@ public static class MeEndpoints
         var validation = ValidateAcceptInvite(req);
         if (validation.Count > 0)
         {
-            return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+            return ValidationError(httpContext, validation);
         }
 
         var invite = await orgs.AcceptInviteAsync(req.Token, user.Id, ct);
@@ -846,15 +848,6 @@ public static class MeEndpoints
         await audit.RecordAsync("org.invites.accept", invite.OrgId, user.Id, "org.invite.accept", targetType: "organization_invite", targetId: invite.Id.ToString(), ct: ct);
         return TypedResults.Ok(Envelope<object>(httpContext, null));
     }
-
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
 
     private sealed record ParsedDateListQuery(int Limit, int Offset, string Sort, Dictionary<string, string[]> Errors);
 
@@ -978,7 +971,7 @@ public static class MeEndpoints
         => Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication required.");
 
     private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
+        => NotFound(httpContext);
 
     private static Dictionary<string, string[]> ValidateCreateApiKey(CreateApiKeyRequest req, IConfiguration configuration)
     {
