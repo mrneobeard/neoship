@@ -1,0 +1,508 @@
+using System.Text.Json;
+
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+using NeoShip.ApiSvc.Models;
+using NeoShip.ApiSvc.Stores;
+using NeoShip.Data.Model;
+
+namespace NeoShip.ApiSvc.Endpoints;
+
+/// <summary>
+/// Maps current-organization service-account endpoints.
+/// </summary>
+/// <example>
+/// <code>
+/// app.MapServiceAccountEndpoints();
+/// </code>
+/// </example>
+public static class ServiceAccountEndpoints
+{
+    private const double DefaultStepUpWindowMinutes = 15;
+    private const int DefaultApiKeyLifetimeDays = 90;
+    private const int MaxApiKeyLifetimeDays = 365;
+
+    /// <summary>
+    /// Maps current-organization service-account endpoints.
+    /// </summary>
+    /// <param name="routes">The endpoint route builder.</param>
+    /// <returns>The mapped <see cref="IEndpointRouteBuilder"/>.</returns>
+    public static IEndpointRouteBuilder MapServiceAccountEndpoints(this IEndpointRouteBuilder routes)
+    {
+        var group = routes.MapGroup("/api/v1/service-accounts");
+        group.MapGet("", ListServiceAccountsAsync);
+        group.MapPost("", CreateServiceAccountAsync);
+        group.MapGet("/{serviceAccountId:guid}", GetServiceAccountAsync);
+        group.MapPatch("/{serviceAccountId:guid}", UpdateServiceAccountAsync);
+        group.MapPost("/{serviceAccountId:guid}/disable", DisableServiceAccountAsync);
+        group.MapPost("/{serviceAccountId:guid}/enable", EnableServiceAccountAsync);
+        group.MapGet("/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
+        group.MapPost("/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
+        group.MapPost("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
+        return routes;
+    }
+
+    private sealed record ServiceAccountResponse(Guid Id, string Name, string? Description, DateTime CreatedAt, DateTime? UpdatedAt);
+
+    private sealed record CreateServiceAccountRequest(string Name, string? Description);
+
+    private sealed record UpdateServiceAccountRequest(string? Name, string? Description);
+
+    private sealed record ServiceAccountApiKeyResponse(Guid Id, string Name, string? Description, DateTime CreatedAt, DateTime? ExpiresAt);
+
+    private sealed record CreateServiceAccountApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
+
+    private sealed record CreateServiceAccountApiKeyResponse(Guid Id, string Name, string PlaintextKey, DateTime CreatedAt);
+
+    private sealed record AuthContext(User? User, ServiceAccountApiKey? ServiceAccountKey, Organization Org, IResult? Failure);
+
+    private sealed record ParsedNamedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
+
+    private static async Task<IResult> ListServiceAccountsAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[name]")] string? filterName, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return ValidationError(httpContext, query.Errors);
+        }
+
+        IEnumerable<ServiceAccount> filtered = await store.ListAsync(auth.Org.Id, ct);
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(ToServiceAccountResponse).ToList();
+        var pagination = new ApiPagination(query.Limit, hasMore ? EncodeCursor(query.Offset + query.Limit) : null, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+        return TypedResults.Ok(new ApiCollectionEnvelope<ServiceAccountResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private static async Task<IResult> GetServiceAccountAsync(Guid serviceAccountId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var sa = await store.GetAsync(auth.Org.Id, serviceAccountId, ct);
+        return sa is null ? NotFoundError(httpContext) : TypedResults.Ok(Envelope(httpContext, ToServiceAccountResponse(sa)));
+    }
+
+    private static async Task<IResult> CreateServiceAccountAsync([FromBody] CreateServiceAccountRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var sa = await store.CreateAsync(auth.Org.Id, auth.User!.Id, req.Name, req.Description, ct);
+        await audit.RecordAsync("org.service_accounts.create", auth.Org.Id, auth.User.Id, "service_account.create", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/service-accounts/{sa.Id}", Envelope(httpContext, ToServiceAccountResponse(sa)));
+    }
+
+    private static async Task<IResult> UpdateServiceAccountAsync(Guid serviceAccountId, [FromBody] UpdateServiceAccountRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidateServiceAccountInput(req.Name, req.Description, requireName: false);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var sa = await store.UpdateAsync(auth.Org.Id, serviceAccountId, req.Name, req.Description, ct);
+        if (sa is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.update", auth.Org.Id, auth.User!.Id, "service_account.update", targetType: "service_account", targetId: sa.Id.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope(httpContext, ToServiceAccountResponse(sa)));
+    }
+
+    private static async Task<IResult> DisableServiceAccountAsync(Guid serviceAccountId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+        => await SetServiceAccountEnabledAsync(serviceAccountId, enabled: false, httpContext, sessions, permissions, db, store, audit, ct);
+
+    private static async Task<IResult> EnableServiceAccountAsync(Guid serviceAccountId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+        => await SetServiceAccountEnabledAsync(serviceAccountId, enabled: true, httpContext, sessions, permissions, db, store, audit, ct);
+
+    private static async Task<IResult> SetServiceAccountEnabledAsync(Guid serviceAccountId, bool enabled, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var ok = enabled ? await store.EnableAsync(auth.Org.Id, serviceAccountId, ct) : await store.DisableAsync(auth.Org.Id, serviceAccountId, ct);
+        if (!ok)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync($"org.service_accounts.{(enabled ? "enable" : "disable")}", auth.Org.Id, auth.User!.Id, $"service_account.{(enabled ? "enable" : "disable")}", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope<object?>(httpContext, null));
+    }
+
+    private static async Task<IResult> ListServiceAccountApiKeysAsync(Guid serviceAccountId, [FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[name]")] string? filterName, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        if (await store.GetAsync(auth.Org.Id, serviceAccountId, ct) is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        var query = ParseNamedListQuery(httpContext, limit, cursor, filterName, sort, allowCreatedAtSort: true);
+        if (query.Errors.Count > 0)
+        {
+            return ValidationError(httpContext, query.Errors);
+        }
+
+        IEnumerable<ServiceAccountApiKey> filtered = await store.ListApiKeysAsync(serviceAccountId, ct);
+        if (!string.IsNullOrWhiteSpace(query.FilterName))
+        {
+            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = query.Sort switch
+        {
+            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
+            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+        };
+
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var hasMore = page.Count > query.Limit;
+        var data = page.Take(query.Limit).Select(x => new ServiceAccountApiKeyResponse(x.Id, x.Name, x.Description, x.CreatedAt, x.ExpiresAt)).ToList();
+        var pagination = new ApiPagination(query.Limit, hasMore ? EncodeCursor(query.Offset + query.Limit) : null, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+        return TypedResults.Ok(new ApiCollectionEnvelope<ServiceAccountApiKeyResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
+    }
+
+    private static async Task<IResult> CreateServiceAccountApiKeyAsync(Guid serviceAccountId, [FromBody] CreateServiceAccountApiKeyRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, IConfiguration configuration, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidateServiceAccountApiKey(req, configuration);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        if (await store.GetAsync(auth.Org.Id, serviceAccountId, ct) is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        var (plaintextKey, apiKey) = store.GenerateApiKey(serviceAccountId, req.Name, req.Description, req.ScopesJson, ResolveApiKeyExpiresAt(req.ExpiresAt, configuration));
+        db.ServiceAccountApiKeys.Add(apiKey);
+        await db.SaveChangesAsync(ct);
+        await audit.RecordAsync("org.service_accounts.api_key.create", auth.Org.Id, auth.User!.Id, "service_account.api_key.create", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/service-accounts/{serviceAccountId}/api-keys/{apiKey.Id}", Envelope(httpContext, new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt)));
+    }
+
+    private static async Task<IResult> RevokeServiceAccountApiKeyAsync(Guid serviceAccountId, Guid apiKeyId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var success = await store.RevokeApiKeyAsync(auth.Org.Id, apiKeyId, serviceAccountId, ct);
+        if (!success)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.api_key.revoke", auth.Org.Id, auth.User!.Id, "service_account.api_key.revoke", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope<object?>(httpContext, null));
+    }
+
+    private static ServiceAccountResponse ToServiceAccountResponse(ServiceAccount sa)
+        => new(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt);
+
+    private static Dictionary<string, string[]> ValidateServiceAccountInput(string? name, string? description, bool requireName)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
+        {
+            errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+
+        if (description is not null && description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req, IConfiguration configuration)
+    {
+        var errors = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
+
+        return errors;
+    }
+
+    private static bool IsValidJsonArray(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return true;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return doc.RootElement.ValueKind == JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static DateTime ResolveApiKeyExpiresAt(DateTime? requestedExpiresAt, IConfiguration configuration)
+        => requestedExpiresAt ?? DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:DefaultLifetimeDays", DefaultApiKeyLifetimeDays));
+
+    private static DateTime MaxApiKeyExpiresAt(IConfiguration configuration)
+        => DateTime.UtcNow.AddDays(configuration.GetValue("Auth:ApiKeys:MaxLifetimeDays", MaxApiKeyLifetimeDays));
+
+    private static async Task<AuthContext> RequireCurrentOrgPermissionAsync(HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, PermissionKey permission, CancellationToken ct, bool allowServiceAccount = false)
+    {
+        var user = await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
+        if (user is not null)
+        {
+            var org = await db.Orgs.FirstOrDefaultAsync(x => x.Id == user.OrgId, ct);
+            if (org is null)
+            {
+                return new AuthContext(null, null, null!, NotFoundError(httpContext));
+            }
+
+            var allowed = await HasUserOrgPermissionAsync(httpContext, permissions, user.Id, permission, org.Slug, ct);
+            if (!allowed)
+            {
+                return new AuthContext(null, null, org, Forbidden(httpContext));
+            }
+
+            if (permission.Action == "write")
+            {
+                var stepUpFailure = await RequireRecentSessionAsync(httpContext, ct);
+                if (stepUpFailure is not null)
+                {
+                    return new AuthContext(null, null, org, stepUpFailure);
+                }
+            }
+
+            return new AuthContext(user, null, org, null);
+        }
+
+        var token = ReadBearerToken(httpContext.Request);
+        var serviceAccountKey = token is null ? null : await httpContext.RequestServices.GetRequiredService<ServiceAccountStore>().AuthenticateApiKeyAsync(token, ct);
+        if (serviceAccountKey?.ServiceAccount is null)
+        {
+            return new AuthContext(null, null, null!, Unauthenticated(httpContext));
+        }
+
+        var serviceAccountOrg = await db.Orgs.FirstOrDefaultAsync(x => x.Id == serviceAccountKey.ServiceAccount.OrgId, ct);
+        if (serviceAccountOrg is null)
+        {
+            return new AuthContext(null, null, null!, NotFoundError(httpContext));
+        }
+
+        if (!allowServiceAccount)
+        {
+            return new AuthContext(null, null, serviceAccountOrg, Forbidden(httpContext));
+        }
+
+        var serviceAccountAllowed = (await permissions.ResolveServiceAccountApiKeyAsync(serviceAccountKey.Id, ct)).Allows(permission, PermissionScopeKind.Organization, serviceAccountOrg.Slug);
+        return serviceAccountAllowed
+            ? new AuthContext(null, serviceAccountKey, serviceAccountOrg, null)
+            : new AuthContext(null, null, serviceAccountOrg, Forbidden(httpContext));
+    }
+
+    private static async Task<bool> HasUserOrgPermissionAsync(HttpContext httpContext, PermissionResolver permissions, Guid userId, PermissionKey permission, string orgSlug, CancellationToken ct)
+    {
+        if (httpContext.Items.TryGetValue(MeEndpoints.UserApiKeyItemKey, out var value) && value is Guid apiKeyId)
+        {
+            return (await permissions.ResolveUserApiKeyAsync(apiKeyId, ct)).Allows(permission, PermissionScopeKind.Organization, orgSlug);
+        }
+
+        return await permissions.UserHasAsync(userId, permission, PermissionScopeKind.Organization, orgSlug, ct);
+    }
+
+    private static async Task<IResult?> RequireRecentSessionAsync(HttpContext httpContext, CancellationToken ct)
+    {
+        if (!httpContext.RequestServices.GetRequiredService<IConfiguration>().GetValue("Auth:StepUp:Enabled", true))
+        {
+            return null;
+        }
+
+        var sessionId = httpContext.RequestServices.GetRequiredService<RequestContext>().SessionId;
+        if (sessionId is null)
+        {
+            return StepUpRequired(httpContext);
+        }
+
+        var session = await httpContext.RequestServices.GetRequiredService<ShipDb>().UserSessions.FirstOrDefaultAsync(x => x.Id == sessionId.Value, ct);
+        if (session is null)
+        {
+            return StepUpRequired(httpContext);
+        }
+
+        var windowMinutes = httpContext.RequestServices.GetRequiredService<IConfiguration>().GetValue("Auth:StepUp:WindowMinutes", DefaultStepUpWindowMinutes);
+        var window = TimeSpan.FromMinutes(windowMinutes <= 0 ? DefaultStepUpWindowMinutes : windowMinutes);
+        var lastVerifiedAt = session.MfaVerifiedAt is not null && session.MfaVerifiedAt > session.CreatedAt ? session.MfaVerifiedAt.Value : session.CreatedAt;
+        return lastVerifiedAt < DateTime.UtcNow.Subtract(window) ? StepUpRequired(httpContext) : null;
+    }
+
+    private static ParsedNamedListQuery ParseNamedListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterName, string? sort, bool allowCreatedAtSort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[name]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "name" : sort.Trim();
+        var sortIsValid = resolvedSort is "name" or "-name" || (allowCreatedAtSort && resolvedSort is "createdAt" or "-createdAt");
+        if (!sortIsValid)
+        {
+            errors["sort"] = [allowCreatedAtSort ? "Sort must be name, -name, createdAt, or -createdAt." : "Sort must be name or -name."];
+            resolvedSort = "name";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterName is { Length: > 160 })
+        {
+            errors["filter.name"] = ["Name filter must be 160 characters or fewer."];
+        }
+
+        return new ParsedNamedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
+    }
+
+    private static string EncodeCursor(int offset)
+        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static bool TryDecodeCursor(string cursor, out int offset)
+    {
+        offset = 0;
+        try
+        {
+            var padded = cursor.Replace('-', '+').Replace('_', '/');
+            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
+            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
+            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    private static string? ReadBearerToken(HttpRequest request)
+    {
+        var header = request.Headers.Authorization.ToString();
+        const string prefix = "Bearer ";
+        if (!header.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var token = header[prefix.Length..].Trim();
+        return string.IsNullOrWhiteSpace(token) ? null : token;
+    }
+
+    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
+        => new(data, ApiMeta.FromHttpContext(httpContext));
+
+    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
+        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
+
+    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
+        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
+
+    private static IResult StepUpRequired(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
+
+    private static IResult Unauthenticated(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status401Unauthorized, "unauthenticated", "Authentication required.");
+
+    private static IResult Forbidden(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
+
+    private static IResult NotFoundError(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
+}

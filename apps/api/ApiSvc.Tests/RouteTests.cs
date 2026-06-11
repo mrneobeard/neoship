@@ -1233,6 +1233,28 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListServiceAccounts_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false);
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/service-accounts?filter[name]=deploy");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Single(data.EnumerateArray());
+        Assert.Equal("deploy-bot", data[0].GetProperty("name").GetString());
+    }
+
+    [Fact]
     public async Task ListServiceAccounts_SupportsQueryContractPaginationAndFilter()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1338,6 +1360,66 @@ public sealed class RouteTests
         {
             Assert.True(await db.ServiceAccounts.AnyAsync(x => x.Name == "new-bot", TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateServiceAccount_CurrentOrgRouteCreatesServiceAccount()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-sa-create@example.com", "Current SA Create");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/service-accounts");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"api-bot\",\"description\":\"API bot\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("api-bot", json.RootElement.GetProperty("data").GetProperty("name").GetString());
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.ServiceAccounts.AnyAsync(x => x.NameUpcase == "API-BOT" && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateServiceAccountApiKey_CurrentOrgRouteReturnsPlaintextKey()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-sa-key@example.com", "Current SA Key");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            db.ServiceAccounts.Add(new ServiceAccount { Id = serviceAccountId, OrgId = Constants.DefaultOrganizationId, Name = "key-bot", NameUpcase = "KEY-BOT", CreatedBy = user.Id, CreatedAt = DateTime.UtcNow });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/service-accounts/{serviceAccountId}/api-keys");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"primary\",\"description\":null,\"scopesJson\":\"[]\",\"expiresAt\":null}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.StartsWith("nssa_", json.RootElement.GetProperty("data").GetProperty("plaintextKey").GetString(), StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.ServiceAccountApiKeys.AnyAsync(x => x.ServiceAccountId == serviceAccountId && x.Name == "primary", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.create", TestContext.Current.CancellationToken));
         });
     }
 
@@ -3411,6 +3493,7 @@ public sealed class RouteTests
                             endpoints.MapOrgEndpoints();
                             endpoints.MapRoleEndpoints();
                             endpoints.MapGroupEndpoints();
+                            endpoints.MapServiceAccountEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
