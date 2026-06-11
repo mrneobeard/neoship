@@ -27,6 +27,11 @@ public static class InviteEndpoints
         group.MapGet("", ListInvitesAsync);
         group.MapPost("", CreateInviteAsync);
         group.MapPost("/{inviteId:guid}/revoke", RevokeInviteAsync);
+
+        var userManagementGroup = routes.MapGroup("/api/v1/users/invites");
+        userManagementGroup.MapGet("", ListInvitesAsync);
+        userManagementGroup.MapPost("", CreateInviteAsync);
+        userManagementGroup.MapPost("/{inviteId:guid}/revoke", RevokeInviteAsync);
         return routes;
     }
 

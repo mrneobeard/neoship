@@ -2321,6 +2321,34 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task CreateIdentityProvider_UserManagementAliasWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-idp-writer@example.com", "User IDP Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/identity-providers");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"User Alias OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("User Alias OIDC", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.UserIdentityProviders.AnyAsync(x => x.Name == "User Alias OIDC", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.identity_providers.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task CreateIdentityProvider_WithStaleSessionReturnsStepUpRequired()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3282,6 +3310,35 @@ public sealed class RouteTests
         await app.WithDbAsync(async db =>
         {
             Assert.True(await db.OrganizationInvites.AnyAsync(x => x.Email == "current-invited@example.com", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateInvite_UserManagementAliasReturnsTokenAndWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-invite-writer@example.com", "User Invite Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/users/invites");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"email\":\"user-alias-invited@example.com\",\"roleIds\":[],\"groupIds\":[]}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("user-alias-invited@example.com", body, StringComparison.Ordinal);
+        Assert.Contains("token", body, StringComparison.OrdinalIgnoreCase);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.OrganizationInvites.AnyAsync(x => x.Email == "user-alias-invited@example.com", TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.invites.create", TestContext.Current.CancellationToken));
         });
     }

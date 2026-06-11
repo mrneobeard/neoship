@@ -32,6 +32,14 @@ public static class IdentityProviderEndpoints
         group.MapPatch("/{providerId:long}", UpdateIdentityProviderAsync);
         group.MapPost("/{providerId:long}/enable", EnableIdentityProviderAsync);
         group.MapPost("/{providerId:long}/disable", DisableIdentityProviderAsync);
+
+        var userManagementGroup = routes.MapGroup("/api/v1/users/identity-providers");
+        userManagementGroup.MapGet("", ListIdentityProvidersAsync);
+        userManagementGroup.MapPost("", CreateIdentityProviderAsync);
+        userManagementGroup.MapGet("/{providerId:long}", GetIdentityProviderAsync);
+        userManagementGroup.MapPatch("/{providerId:long}", UpdateIdentityProviderAsync);
+        userManagementGroup.MapPost("/{providerId:long}/enable", EnableIdentityProviderAsync);
+        userManagementGroup.MapPost("/{providerId:long}/disable", DisableIdentityProviderAsync);
         return routes;
     }
 
