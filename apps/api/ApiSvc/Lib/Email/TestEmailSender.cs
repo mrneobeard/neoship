@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Email;
 
 /// <summary>
 /// Captures email messages in memory for tests.

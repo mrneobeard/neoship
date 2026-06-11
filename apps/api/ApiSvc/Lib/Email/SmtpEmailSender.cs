@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Mail;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Email;
 
 /// <summary>
 /// Sends transactional email through SMTP.

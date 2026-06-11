@@ -4,7 +4,7 @@ using Microsoft.Extensions.Configuration;
 
 using NeoBeard.Crypto;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Security;
 
 /// <summary>
 /// Protects identity-provider client secrets before database storage.

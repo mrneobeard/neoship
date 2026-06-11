@@ -2,7 +2,7 @@ using System.Text.Json;
 
 using NeoShip.Data.Model;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Sso;
 
 /// <summary>
 /// Exchanges OIDC authorization codes for tokens.

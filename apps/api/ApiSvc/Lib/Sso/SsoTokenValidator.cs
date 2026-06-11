@@ -7,7 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 
 using NeoShip.Data.Model;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Sso;
 
 /// <summary>
 /// Validates OIDC ID tokens.

@@ -1,4 +1,4 @@
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Email;
 
 /// <summary>
 /// Logs transactional email metadata without logging secret message bodies.

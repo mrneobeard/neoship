@@ -1,4 +1,4 @@
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Email;
 
 /// <summary>
 /// Represents an email message to deliver.
