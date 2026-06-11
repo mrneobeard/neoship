@@ -38,11 +38,11 @@ This imports and specializes useful context from the research docs:
 
 - auth routes use `/api/v1/auth/...`
 - current actor routes use `/api/v1/me/...`
-- org-scoped routes use `/api/v1/orgs/{orgSlug}/...`
+- current-organization routes infer org context from the actor and use clean resource nouns such as `/api/v1/roles`, `/api/v1/groups`, and `/api/v1/service-accounts`
 - route nouns use public product terms, not table names
 - resource ids in payloads are UUIDv7 unless a resource explicitly documents another opaque id format
 - slugs are for URLs and human selection
-- org-scoped routes never trust an org id in the request body
+- current-organization routes never trust an org id in the request body
 - tenant context is resolved before resource access
 - every request resolves actor context and tenant context before feature handlers run
 
@@ -391,7 +391,7 @@ Example:
       "status": "queued"
     },
     "links": {
-      "self": "/api/v1/orgs/acme/jobs/018f0000-0000-7000-8000-000000000010"
+      "self": "/api/v1/jobs/018f0000-0000-7000-8000-000000000010"
     }
   },
   "meta": {

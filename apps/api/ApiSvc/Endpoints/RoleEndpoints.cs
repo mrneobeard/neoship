@@ -8,6 +8,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -623,15 +625,6 @@ public static class RoleEndpoints
         return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
-
     private static IResult StepUpRequired(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
 
@@ -642,7 +635,7 @@ public static class RoleEndpoints
         => Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
 
     private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
+        => NotFound(httpContext);
 
     private static IResult BuiltInRoleConflict(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status409Conflict, "conflict", "Built-in roles are code-owned and cannot be modified.");

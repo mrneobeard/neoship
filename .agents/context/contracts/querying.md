@@ -65,19 +65,19 @@ Use `filter[...]` for structured filters.
 Equality:
 
 ```text
-GET /api/v1/orgs/acme/roles?filter[name]=admin
+GET /api/v1/roles?filter[name]=admin
 ```
 
 Multiple exact values:
 
 ```text
-GET /api/v1/orgs/acme/memberships?filter[status]=active,invited
+GET /api/v1/users?filter[status]=active,invited
 ```
 
 Range operators:
 
 ```text
-GET /api/v1/orgs/acme/audit-events?filter[createdAt.gte]=2026-01-01T00:00:00Z&filter[createdAt.lt]=2026-02-01T00:00:00Z
+GET /api/v1/audit-events?filter[createdAt.gte]=2026-01-01T00:00:00Z&filter[createdAt.lt]=2026-02-01T00:00:00Z
 ```
 
 Supported operators:
@@ -108,7 +108,7 @@ Use `q` only for endpoint-defined text search.
 Example:
 
 ```text
-GET /api/v1/orgs/acme/groups?q=deploy
+GET /api/v1/groups?q=deploy
 ```
 
 Rules:
@@ -126,19 +126,19 @@ Use `sort` with comma-separated stable field names.
 Ascending:
 
 ```text
-GET /api/v1/orgs/acme/roles?sort=name
+GET /api/v1/roles?sort=name
 ```
 
 Descending:
 
 ```text
-GET /api/v1/orgs/acme/audit-events?sort=-createdAt
+GET /api/v1/audit-events?sort=-createdAt
 ```
 
 Multiple fields:
 
 ```text
-GET /api/v1/orgs/acme/memberships?sort=status,-createdAt
+GET /api/v1/users?sort=status,-createdAt
 ```
 
 Rules:
@@ -157,7 +157,7 @@ Use cursor pagination for mutable or large collections.
 Request:
 
 ```text
-GET /api/v1/orgs/acme/audit-events?limit=50&cursor=opaque-cursor
+GET /api/v1/audit-events?limit=50&cursor=opaque-cursor
 ```
 
 Response:
@@ -192,13 +192,13 @@ Use `expand` for related data.
 Example:
 
 ```text
-GET /api/v1/orgs/acme/roles?expand=claims
+GET /api/v1/roles?expand=claims
 ```
 
 Multiple expands:
 
 ```text
-GET /api/v1/orgs/acme/groups?expand=members,roles
+GET /api/v1/groups?expand=members,roles
 ```
 
 Rules:

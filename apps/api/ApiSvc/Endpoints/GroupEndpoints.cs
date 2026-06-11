@@ -8,6 +8,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -254,7 +256,7 @@ public static class GroupEndpoints
     }
 
     private static GroupResponse ToGroupResponse(Group group, int builtInRoleCount = 0)
-        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count + group.Owners.Count, group.ServiceAccountMembers.Count + group.ServiceAccountOwners.Count, group.Roles.Count + builtInRoleCount);
+        => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count + group.Owners.Count, group.ServiceAccountMembers.Count + group.ServiceAccountOwners.Count, group.Roles.Count(x => !BuiltInRoleStore.IsBuiltInRoleName(x.Name)) + builtInRoleCount);
 
     private static Dictionary<string, string[]> ValidateGroupInput(string? name, string? email, string? description, bool requireName)
     {
@@ -408,15 +410,6 @@ public static class GroupEndpoints
         return string.IsNullOrWhiteSpace(token) ? null : token;
     }
 
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
-
     private static IResult StepUpRequired(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status403Forbidden, "step_up_required", "Recent authentication is required for this operation.");
 
@@ -427,5 +420,5 @@ public static class GroupEndpoints
         => Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
 
     private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
+        => NotFound(httpContext);
 }

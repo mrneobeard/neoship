@@ -7,7 +7,7 @@
 - camelCase payloads
 - OpenAPI 3.1 generated from source-controlled definitions
 - IAM completion requires OpenAPI generation/validation for IAM routes
-- org-scoped routes use `/api/v1/orgs/{orgSlug}/...`
+- current-organization routes infer org context from the actor and use clean nouns such as `/api/v1/roles`, `/api/v1/groups`, and `/api/v1/service-accounts`
 
 Use `api-contract.md` for response envelopes, error envelopes, HTTP semantics, idempotency, async operations, concurrency, and compatibility rules.
 Use `querying.md` for filter, search, sort, pagination, expand, batch, and query validation rules.
@@ -66,31 +66,32 @@ Conform public names to canonical C# types where practical.
 
 ### Service Accounts
 
-- `GET /api/v1/orgs/{orgSlug}/service-accounts`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts`
-- `GET /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}`
-- `PATCH /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/disable`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/enable`
-- `GET /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys`
-- `POST /api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{apiKeyId}/revoke`
+- `GET /api/v1/service-accounts`
+- `POST /api/v1/service-accounts`
+- `GET /api/v1/service-accounts/{serviceAccountId}`
+- `PATCH /api/v1/service-accounts/{serviceAccountId}`
+- `POST /api/v1/service-accounts/{serviceAccountId}/disable`
+- `POST /api/v1/service-accounts/{serviceAccountId}/enable`
+- `GET /api/v1/service-accounts/{serviceAccountId}/api-keys`
+- `POST /api/v1/service-accounts/{serviceAccountId}/api-keys`
+- `POST /api/v1/service-accounts/{serviceAccountId}/api-keys/{apiKeyId}/revoke`
 
 ### Access Control
 
-- `GET /api/v1/orgs/{orgSlug}/roles`
-- `GET /api/v1/orgs/{orgSlug}/groups`
-- `POST /api/v1/orgs/{orgSlug}/groups`
-- `POST /api/v1/orgs/{orgSlug}/groups/{groupId}/members`
-- `DELETE /api/v1/orgs/{orgSlug}/groups/{groupId}/members/{principalId}`
+- `GET /api/v1/roles`
+- `POST /api/v1/roles`
+- `GET /api/v1/groups`
+- `POST /api/v1/groups`
+- `POST /api/v1/groups/{groupId}/members`
+- `DELETE /api/v1/groups/{groupId}/members/{principalId}`
 
 ### Identity Providers
 
-- `GET /api/v1/orgs/{orgSlug}/identity-providers`
-- `POST /api/v1/orgs/{orgSlug}/identity-providers`
-- `PATCH /api/v1/orgs/{orgSlug}/identity-providers/{providerId}`
-- `POST /api/v1/orgs/{orgSlug}/identity-providers/{providerId}/enable`
-- `POST /api/v1/orgs/{orgSlug}/identity-providers/{providerId}/disable`
+- `GET /api/v1/users/identity-providers`
+- `POST /api/v1/users/identity-providers`
+- `PATCH /api/v1/users/identity-providers/{providerId}`
+- `POST /api/v1/users/identity-providers/{providerId}/enable`
+- `POST /api/v1/users/identity-providers/{providerId}/disable`
 - `GET /api/v1/auth/sso/{orgSlug}/begin`
 - `GET /api/v1/auth/sso/callback`
 

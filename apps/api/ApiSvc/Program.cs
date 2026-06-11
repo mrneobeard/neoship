@@ -168,7 +168,6 @@ app.MapAdminEndpoints();
 app.MapMeEndpoints();
 app.MapUserEndpoints();
 app.MapTenantEndpoints();
-app.MapOrgEndpoints();
 app.MapRoleEndpoints();
 app.MapGroupEndpoints();
 app.MapServiceAccountEndpoints();
