@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 
 using Microsoft.AspNetCore.Mvc;
@@ -8,6 +7,8 @@ using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
+
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
 
 namespace NeoShip.ApiSvc.Endpoints;
 
@@ -148,7 +149,7 @@ public static class UserEndpoints
 
         if (!await users.SoftDeleteOrgUserAsync(auth.Org.Id, userId, ct))
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.users.delete", auth.Org.Id, auth.User!.Id, "user.delete", targetType: "user", targetId: userId.ToString(), ct: ct);
@@ -165,7 +166,7 @@ public static class UserEndpoints
 
         if (!await ActiveUserExistsAsync(db, auth.Org.Id, userId, ct))
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         var customRoles = await db.Roles
@@ -200,7 +201,7 @@ public static class UserEndpoints
 
         if (!await ActiveUserExistsAsync(db, auth.Org.Id, userId, ct))
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         var builtInRole = BuiltInRoleStore.FindById(roleId);
@@ -224,7 +225,7 @@ public static class UserEndpoints
 
         if (!ok)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync(add ? "org.users.roles.add" : "org.users.roles.remove", auth.Org.Id, auth.User!.Id, add ? "user.role.add" : "user.role.remove", targetType: "user", targetId: userId.ToString(), ct: ct);
@@ -241,7 +242,7 @@ public static class UserEndpoints
 
         if (!await ActiveUserExistsAsync(db, auth.Org.Id, userId, ct))
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         var data = await db.Groups
@@ -269,13 +270,13 @@ public static class UserEndpoints
 
         if (!await ActiveUserExistsAsync(db, auth.Org.Id, userId, ct))
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         var ok = add ? await groups.AddUserAsync(auth.Org.Id, groupId, userId, ct) : await groups.RemoveUserAsync(auth.Org.Id, groupId, userId, ct);
         if (!ok)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync(add ? "org.users.groups.add" : "org.users.groups.remove", auth.Org.Id, auth.User!.Id, add ? "user.group.add" : "user.group.remove", targetType: "user", targetId: userId.ToString(), ct: ct);
@@ -348,7 +349,7 @@ public static class UserEndpoints
         var revoked = await orgs.RevokeInviteAsync(auth.Org.Id, inviteId, ct);
         if (!revoked)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.invites.revoke", auth.Org.Id, auth.User!.Id, "org.invite.revoke", targetType: "organization_invite", targetId: inviteId.ToString(), ct: ct);
@@ -420,7 +421,7 @@ public static class UserEndpoints
         }
 
         var provider = await users.GetIdentityProviderAsync(auth.Org.Id, providerId, ct);
-        return provider is null ? NotFoundError(httpContext) : TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
+        return provider is null ? NotFound(httpContext) : TypedResults.Ok(Envelope(httpContext, ToIdentityProviderResponse(provider)));
     }
 
     private static async Task<IResult> UpdateIdentityProviderAsync(long providerId, [FromBody] UpdateIdentityProviderRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, UserStore users, AuditStore audit, CancellationToken ct)
@@ -440,7 +441,7 @@ public static class UserEndpoints
         var provider = await users.UpdateIdentityProviderAsync(auth.Org.Id, providerId, req.Name, req.IssuerUrl, req.ClientId, req.ClientSecret, req.MetadataJson, ct);
         if (provider is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.identity_providers.update", auth.Org.Id, auth.User!.Id, "identity_provider.update", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
@@ -473,7 +474,7 @@ public static class UserEndpoints
 
         if (provider is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync($"org.identity_providers.{(active ? "enable" : "disable")}", auth.Org.Id, auth.User!.Id, $"identity_provider.{(active ? "enable" : "disable")}", targetType: "identity_provider", targetId: provider.Id.ToString(), ct: ct);
@@ -775,32 +776,6 @@ public static class UserEndpoints
     private static ApiPagination EmptyPagination(int count)
         => new(count, nextCursor: null, previousCursor: null, hasMore: false);
 
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
     private static IResult ValidationError(HttpContext httpContext, IReadOnlyDictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
-
-    private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static string EncodeCursor(int offset)
-        => Convert.ToBase64String(Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture)));
-
-    private static bool TryDecodeCursor(string cursor, out int offset)
-    {
-        offset = 0;
-        try
-        {
-            var raw = Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
-            return int.TryParse(raw, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
+        => EndpointResults.ValidationError(httpContext, fields);
 }
