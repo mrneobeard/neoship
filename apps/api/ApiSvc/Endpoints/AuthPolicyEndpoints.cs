@@ -4,6 +4,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -60,7 +62,7 @@ public static class AuthPolicyEndpoints
         var updated = await orgs.UpdateAuthPolicyAsync(auth.Org.Id, req.AllowPasswordAuth, req.AllowPasskeyAuth, req.AllowOidcSso, req.AllowSamlSso, req.RequireSso, mfaPolicy, req.AllowSelfServiceExternalIdentityUnlink, ct);
         if (updated is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.auth_policy.update", auth.Org.Id, auth.User!.Id, "org.auth_policy.update", targetType: "organization", targetId: auth.Org.Id.ToString(), ct: ct);
@@ -89,15 +91,4 @@ public static class AuthPolicyEndpoints
         return policy.Id != OrganizationMfaPolicy.Unknown.Id;
     }
 
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
-
-    private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
 }

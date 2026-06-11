@@ -4,6 +4,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -131,28 +133,4 @@ public static class PermissionEndpoints
         return new ParsedPermissionListQuery(resolvedLimit, offset, filterResource, filterAction, errors);
     }
 
-    private static string EncodeCursor(int offset)
-        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static bool TryDecodeCursor(string cursor, out int offset)
-    {
-        offset = 0;
-        try
-        {
-            var padded = cursor.Replace('-', '+').Replace('_', '/');
-            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
-            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
 }

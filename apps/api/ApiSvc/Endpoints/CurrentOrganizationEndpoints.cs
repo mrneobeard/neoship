@@ -4,6 +4,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -47,7 +49,7 @@ public static class CurrentOrganizationEndpoints
         var org = await db.Orgs.FindAsync([user.OrgId], ct);
         if (org is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         return TypedResults.Ok(Envelope(httpContext, ToResponse(org)));
@@ -70,7 +72,7 @@ public static class CurrentOrganizationEndpoints
         var updated = await organizations.UpdateAsync(auth.Org.Id, req.Name, ct);
         if (updated is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.update", auth.Org.Id, auth.User!.Id, "org.update", targetType: "org", targetId: auth.Org.Id.ToString(), ct: ct);
@@ -94,7 +96,7 @@ public static class CurrentOrganizationEndpoints
         var deleted = await organizations.DeleteAsync(auth.Org.Id, retentionDays, ct);
         if (deleted is null)
         {
-            return NotFoundError(httpContext);
+            return NotFound(httpContext);
         }
 
         await audit.RecordAsync("org.delete", auth.Org.Id, auth.User!.Id, "org.delete", targetType: "org", targetId: auth.Org.Id.ToString(), ct: ct);
@@ -115,15 +117,4 @@ public static class CurrentOrganizationEndpoints
         return errors;
     }
 
-    private static ApiEnvelope<T> Envelope<T>(HttpContext httpContext, T? data)
-        => new(data, ApiMeta.FromHttpContext(httpContext));
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
-
-    private static IResult ValidationError(HttpContext httpContext, Dictionary<string, string[]> fields)
-        => Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = fields });
-
-    private static IResult NotFoundError(HttpContext httpContext)
-        => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
 }
