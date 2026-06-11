@@ -2088,6 +2088,37 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetIdentityProvider_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-idp-owner@example.com", "Current IDP Owner");
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.identity_providers.read");
+            db.UserIdentityProviders.Add(new UserIdentityProvider
+            {
+                Id = 120,
+                OrgId = Constants.DefaultOrganizationId,
+                UserId = user.Id,
+                Name = "Current OIDC",
+                ProviderTypeId = UserIdentityProviderType.OIDC.Id,
+                StatusId = UserIdentityProviderStatus.Active.Id,
+                IssuerUrl = "https://idp.example.com",
+                ClientId = "client-id",
+            });
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/identity-providers/120");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Current OIDC", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ListIdentityProviders_SupportsQueryContractPaginationAndFilter()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -2158,6 +2189,34 @@ public sealed class RouteTests
         await app.WithDbAsync(async db =>
         {
             Assert.True(await db.UserIdentityProviders.AnyAsync(x => x.Name == "Acme OIDC", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.identity_providers.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateIdentityProvider_CurrentOrgRouteWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-idp-writer@example.com", "Current IDP Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.identity_providers.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/identity-providers");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Current OIDC\",\"providerType\":\"oidc\",\"issuerUrl\":\"https://idp.example.com\",\"clientId\":\"client-id\",\"metadataJson\":\"{}\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Contains("Current OIDC", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.UserIdentityProviders.AnyAsync(x => x.Name == "Current OIDC", TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.identity_providers.create", TestContext.Current.CancellationToken));
         });
     }
@@ -3592,6 +3651,7 @@ public sealed class RouteTests
                             endpoints.MapRoleEndpoints();
                             endpoints.MapGroupEndpoints();
                             endpoints.MapServiceAccountEndpoints();
+                            endpoints.MapIdentityProviderEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);

@@ -180,6 +180,7 @@ app.MapOrgEndpoints();
 app.MapRoleEndpoints();
 app.MapGroupEndpoints();
 app.MapServiceAccountEndpoints();
+app.MapIdentityProviderEndpoints();
 
 app.MapDefaultEndpoints();
 
