@@ -4,6 +4,8 @@ using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
+using static NeoShip.ApiSvc.Endpoints.EndpointResults;
+
 namespace NeoShip.ApiSvc.Endpoints;
 
 /// <summary>
@@ -45,9 +47,6 @@ public static class TenantEndpoints
 
     private static OrganizationResponse ToResponse(Organization org)
         => new(org.Id, org.Name, org.Slug, org.Status.Name, org.TenantMode.Name, org.CreatedAt, org.UpdatedAt);
-
-    private static IResult Error(HttpContext httpContext, int statusCode, string code, string message, IReadOnlyDictionary<string, object?>? details = null)
-        => TypedResults.Json(new ApiErrorEnvelope(new ApiError(code, message, details), ApiMeta.FromHttpContext(httpContext)), statusCode: statusCode);
 
     private static async Task<User?> AuthenticateAsync(HttpContext httpContext, SessionStore sessions, CancellationToken ct)
         => await MeEndpoints.AuthenticateAsync(httpContext, sessions, ct);
@@ -135,25 +134,6 @@ public static class TenantEndpoints
         return new ParsedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
     }
 
-    private static string EncodeCursor(int offset)
-        => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(offset.ToString(System.Globalization.CultureInfo.InvariantCulture))).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static bool TryDecodeCursor(string cursor, out int offset)
-    {
-        offset = 0;
-        try
-        {
-            var padded = cursor.Replace('-', '+').Replace('_', '/');
-            padded = padded.PadRight(padded.Length + ((4 - padded.Length % 4) % 4), '=');
-            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(padded));
-            return int.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out offset) && offset >= 0;
-        }
-        catch (FormatException)
-        {
-            return false;
-        }
-    }
-
     private static async Task<IResult> CreateOrganizationAsync(
         [FromBody] CreateOrganizationRequest req,
         HttpContext httpContext,
@@ -184,7 +164,7 @@ public static class TenantEndpoints
 
         return TypedResults.Created(
             $"/api/v1/orgs/{org.Slug}",
-            new ApiEnvelope<OrganizationResponse>(ToResponse(org), ApiMeta.FromHttpContext(httpContext)));
+            Envelope(httpContext, ToResponse(org)));
     }
 
     private static async Task<IResult> GetOrganizationAsync(
@@ -211,7 +191,7 @@ public static class TenantEndpoints
             return Error(httpContext, StatusCodes.Status403Forbidden, "permission_denied", "Permission denied.");
         }
 
-        return TypedResults.Ok(new ApiEnvelope<OrganizationResponse>(ToResponse(org), ApiMeta.FromHttpContext(httpContext)));
+        return TypedResults.Ok(Envelope(httpContext, ToResponse(org)));
     }
 
     private static async Task<IResult> UpdateOrganizationAsync(
@@ -261,7 +241,7 @@ public static class TenantEndpoints
 
         await audit.RecordAsync("org.update", org.Id, user.Id, "org.update", targetType: "org", targetId: org.Id.ToString(), ct: ct);
 
-        return TypedResults.Ok(new ApiEnvelope<OrganizationResponse>(ToResponse(updated), ApiMeta.FromHttpContext(httpContext)));
+        return TypedResults.Ok(Envelope(httpContext, ToResponse(updated)));
     }
 
     private static async Task<IResult> DeleteOrganizationAsync(
@@ -314,7 +294,7 @@ public static class TenantEndpoints
         }
 
         await audit.RecordAsync("org.delete", org.Id, user.Id, "org.delete", targetType: "org", targetId: org.Id.ToString(), ct: ct);
-        return TypedResults.Ok(new ApiEnvelope<OrganizationResponse>(ToResponse(deleted), ApiMeta.FromHttpContext(httpContext)));
+        return TypedResults.Ok(Envelope(httpContext, ToResponse(deleted)));
     }
 
     private static Dictionary<string, string[]> ValidateOrganizationInput(string? name, string? slug, bool validateSlug = true)
