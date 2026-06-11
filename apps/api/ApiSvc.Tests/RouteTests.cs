@@ -1716,6 +1716,46 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task AddServiceAccountClaim_CurrentOrgRouteWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var serviceAccountId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-sa-claim-writer@example.com", "Current Service Account Claim Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            var serviceAccount = new ServiceAccount
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "current-claim-bot",
+                NameUpcase = "CURRENT-CLAIM-BOT",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            };
+            serviceAccountId = serviceAccount.Id;
+            db.ServiceAccounts.Add(serviceAccount);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/service-accounts/{serviceAccountId}/claims");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"permission\":\"org.service_accounts.read\",\"scopeKind\":2,\"scopeId\":\"default\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("org.service_accounts.read", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.ServiceAccountClaims.AnyAsync(x => x.ServiceAccountId == serviceAccountId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.claim.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task AddServiceAccountClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1786,6 +1826,34 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListServiceAccountApiKeyClaims_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: true, disabled: false);
+            db.ServiceAccountApiKeyClaims.Add(new ServiceAccountApiKeyClaim
+            {
+                ServiceAccountApiKeyId = seed.ApiKeyId,
+                Type = "org.service_accounts.read",
+                Value = "organization:default",
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/claims?filter[type]=org.service_accounts");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", seed.PlaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Contains(data.EnumerateArray(), x => x.GetProperty("type").GetString() == "org.service_accounts.read");
+    }
+
+    [Fact]
     public async Task ListServiceAccountApiKeyClaims_SupportsQueryContract()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -1849,6 +1917,36 @@ public sealed class RouteTests
         var sessionToken = await app.CreateSessionAsync(userId);
 
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/claims");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"permission\":\"org.service_accounts.read\",\"scopeKind\":2,\"scopeId\":\"default\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("org.service_accounts.read", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.ServiceAccountApiKeyClaims.AnyAsync(x => x.ServiceAccountApiKeyId == seed.ApiKeyId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.claim.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task AddServiceAccountApiKeyClaim_CurrentOrgRouteWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-sa-key-claim-writer@example.com", "Current Service Account Key Claim Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/claims");
         request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
         request.Content = new StringContent("{\"permission\":\"org.service_accounts.read\",\"scopeKind\":2,\"scopeId\":\"default\"}", Encoding.UTF8, "application/json");
         using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);

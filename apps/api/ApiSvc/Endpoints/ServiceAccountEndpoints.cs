@@ -40,6 +40,12 @@ public static class ServiceAccountEndpoints
         group.MapGet("/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
         group.MapPost("/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
         group.MapPost("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
+        group.MapGet("/{serviceAccountId:guid}/claims", ListServiceAccountClaimsAsync);
+        group.MapPost("/{serviceAccountId:guid}/claims", AddServiceAccountClaimAsync);
+        group.MapDelete("/{serviceAccountId:guid}/claims/{claimId:guid}", RemoveServiceAccountClaimAsync);
+        group.MapGet("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", ListServiceAccountApiKeyClaimsAsync);
+        group.MapPost("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims", AddServiceAccountApiKeyClaimAsync);
+        group.MapDelete("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/claims/{claimId:long}", RemoveServiceAccountApiKeyClaimAsync);
         return routes;
     }
 
@@ -55,9 +61,19 @@ public static class ServiceAccountEndpoints
 
     private sealed record CreateServiceAccountApiKeyResponse(Guid Id, string Name, string PlaintextKey, DateTime CreatedAt);
 
+    private sealed record ServiceAccountClaimResponse(Guid Id, string Type, string Value);
+
+    private sealed record ServiceAccountApiKeyClaimResponse(long Id, string Type, string Value);
+
+    private sealed record AddServiceAccountClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
+
+    private sealed record AddServiceAccountApiKeyClaimRequest(string Permission, PermissionScopeKind ScopeKind, string? ScopeId);
+
     private sealed record AuthContext(User? User, ServiceAccountApiKey? ServiceAccountKey, Organization Org, IResult? Failure);
 
     private sealed record ParsedNamedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
+
+    private sealed record ParsedClaimListQuery(int Limit, int Offset, string? FilterType, string Sort, Dictionary<string, string[]> Errors);
 
     private static async Task<IResult> ListServiceAccountsAsync([FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[name]")] string? filterName, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
     {
@@ -261,6 +277,154 @@ public static class ServiceAccountEndpoints
         return TypedResults.Ok(Envelope<object?>(httpContext, null));
     }
 
+    private static async Task<IResult> ListServiceAccountClaimsAsync(Guid serviceAccountId, [FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[type]")] string? filterType, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var claims = await store.ListClaimsAsync(auth.Org.Id, serviceAccountId, ct);
+        if (claims is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        var query = ParseClaimListQuery(httpContext, limit, cursor, filterType, sort);
+        if (query.Errors.Count > 0)
+        {
+            return ValidationError(httpContext, query.Errors);
+        }
+
+        IEnumerable<ServiceAccountClaim> filtered = claims;
+        if (!string.IsNullOrWhiteSpace(query.FilterType))
+        {
+            filtered = filtered.Where(x => x.Type.Contains(query.FilterType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = SortClaims(filtered, query.Sort);
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var data = page.Take(query.Limit).Select(x => new ServiceAccountClaimResponse(x.Id, x.Type, x.Value)).ToList();
+        return ClaimCollection(httpContext, data, query, page.Count > query.Limit, cursor);
+    }
+
+    private static async Task<IResult> AddServiceAccountClaimAsync(Guid serviceAccountId, [FromBody] AddServiceAccountClaimRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidatePermissionGrant(req.Permission, req.ScopeKind, req.ScopeId, out var key);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var claim = await store.AddClaimAsync(auth.Org.Id, serviceAccountId, new PermissionGrant(key, req.ScopeKind, req.ScopeId), ct);
+        if (claim is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.claim.add", auth.Org.Id, auth.User!.Id, "service_account.claim.add", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountClaimResponse(claim.Id, claim.Type, claim.Value)));
+    }
+
+    private static async Task<IResult> RemoveServiceAccountClaimAsync(Guid serviceAccountId, Guid claimId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var removed = await store.RemoveClaimAsync(auth.Org.Id, serviceAccountId, claimId, ct);
+        if (!removed)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.claim.remove", auth.Org.Id, auth.User!.Id, "service_account.claim.remove", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope<object?>(httpContext, null));
+    }
+
+    private static async Task<IResult> ListServiceAccountApiKeyClaimsAsync(Guid serviceAccountId, Guid apiKeyId, [FromQuery] int? limit, [FromQuery] string? cursor, [FromQuery(Name = "filter[type]")] string? filterType, [FromQuery] string? sort, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "read"), ct, allowServiceAccount: true);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var claims = await store.ListApiKeyClaimsAsync(auth.Org.Id, serviceAccountId, apiKeyId, ct);
+        if (claims is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        var query = ParseClaimListQuery(httpContext, limit, cursor, filterType, sort);
+        if (query.Errors.Count > 0)
+        {
+            return ValidationError(httpContext, query.Errors);
+        }
+
+        IEnumerable<ServiceAccountApiKeyClaim> filtered = claims;
+        if (!string.IsNullOrWhiteSpace(query.FilterType))
+        {
+            filtered = filtered.Where(x => x.Type.Contains(query.FilterType, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filtered = SortClaims(filtered, query.Sort);
+        var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
+        var data = page.Take(query.Limit).Select(x => new ServiceAccountApiKeyClaimResponse(x.Id, x.Type, x.Value)).ToList();
+        return ClaimCollection(httpContext, data, query, page.Count > query.Limit, cursor);
+    }
+
+    private static async Task<IResult> AddServiceAccountApiKeyClaimAsync(Guid serviceAccountId, Guid apiKeyId, [FromBody] AddServiceAccountApiKeyClaimRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidatePermissionGrant(req.Permission, req.ScopeKind, req.ScopeId, out var key);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var claim = await store.AddApiKeyClaimAsync(auth.Org.Id, serviceAccountId, apiKeyId, new PermissionGrant(key, req.ScopeKind, req.ScopeId), ct);
+        if (claim is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.api_key.claim.add", auth.Org.Id, auth.User!.Id, "service_account.api_key.claim.add", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope(httpContext, new ServiceAccountApiKeyClaimResponse(claim.Id, claim.Type, claim.Value)));
+    }
+
+    private static async Task<IResult> RemoveServiceAccountApiKeyClaimAsync(Guid serviceAccountId, Guid apiKeyId, long claimId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var removed = await store.RemoveApiKeyClaimAsync(auth.Org.Id, serviceAccountId, apiKeyId, claimId, ct);
+        if (!removed)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        await audit.RecordAsync("org.service_accounts.api_key.claim.remove", auth.Org.Id, auth.User!.Id, "service_account.api_key.claim.remove", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Ok(Envelope<object?>(httpContext, null));
+    }
+
     private static ServiceAccountResponse ToServiceAccountResponse(ServiceAccount sa)
         => new(sa.Id, sa.Name, sa.Description, sa.CreatedAt, sa.UpdatedAt);
 
@@ -295,6 +459,27 @@ public static class ServiceAccountEndpoints
         else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
         {
             errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidatePermissionGrant(string permission, PermissionScopeKind scopeKind, string? scopeId, out PermissionKey key)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (!PermissionKey.TryParse(permission, out key))
+        {
+            errors["permission"] = ["Permission must be a registered resource.action key."];
+        }
+
+        if (!Enum.IsDefined(scopeKind))
+        {
+            errors["scopeKind"] = ["Scope kind is invalid."];
+        }
+
+        if (scopeId is not null && scopeId.Length > 160)
+        {
+            errors["scopeId"] = ["Scope ID must be 160 characters or fewer when provided."];
         }
 
         return errors;
@@ -451,6 +636,64 @@ public static class ServiceAccountEndpoints
         }
 
         return new ParsedNamedListQuery(resolvedLimit, offset, filterName, resolvedSort, errors);
+    }
+
+    private static ParsedClaimListQuery ParseClaimListQuery(HttpContext httpContext, int? limit, string? cursor, string? filterType, string? sort)
+    {
+        var errors = new Dictionary<string, string[]>();
+        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "limit", "cursor", "filter[type]", "sort" };
+        foreach (var key in httpContext.Request.Query.Keys)
+        {
+            if (!allowed.Contains(key))
+            {
+                errors[key] = ["Query parameter is not supported."];
+            }
+        }
+
+        var resolvedLimit = limit ?? 50;
+        if (resolvedLimit is < 1 or > 100)
+        {
+            errors["limit"] = ["Limit must be between 1 and 100."];
+            resolvedLimit = 50;
+        }
+
+        var resolvedSort = string.IsNullOrWhiteSpace(sort) ? "type" : sort.Trim();
+        if (resolvedSort is not ("type" or "-type"))
+        {
+            errors["sort"] = ["Sort must be type or -type."];
+            resolvedSort = "type";
+        }
+
+        var offset = 0;
+        if (!string.IsNullOrWhiteSpace(cursor) && !TryDecodeCursor(cursor, out offset))
+        {
+            errors["cursor"] = ["Cursor is invalid."];
+        }
+
+        if (filterType is { Length: > 160 })
+        {
+            errors["filter.type"] = ["Type filter must be 160 characters or fewer."];
+        }
+
+        return new ParsedClaimListQuery(resolvedLimit, offset, filterType, resolvedSort, errors);
+    }
+
+    private static IEnumerable<ServiceAccountClaim> SortClaims(IEnumerable<ServiceAccountClaim> claims, string sort)
+        => sort == "-type"
+            ? claims.OrderByDescending(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            : claims.OrderBy(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id);
+
+    private static IEnumerable<ServiceAccountApiKeyClaim> SortClaims(IEnumerable<ServiceAccountApiKeyClaim> claims, string sort)
+        => sort == "-type"
+            ? claims.OrderByDescending(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id)
+            : claims.OrderBy(x => x.Type, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id);
+
+    private static IResult ClaimCollection<T>(HttpContext httpContext, IReadOnlyList<T> data, ParsedClaimListQuery query, bool hasMore, string? cursor)
+    {
+        var pagination = new ApiPagination(query.Limit, hasMore ? EncodeCursor(query.Offset + query.Limit) : null, previousCursor: null, hasMore);
+        var filters = string.IsNullOrWhiteSpace(query.FilterType) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["type"] = query.FilterType };
+        var queryMeta = new ApiQueryMeta(filters, [query.Sort], [], query.Limit, cursor);
+        return TypedResults.Ok(new ApiCollectionEnvelope<T>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
 
     private static string EncodeCursor(int offset)
