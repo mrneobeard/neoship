@@ -369,7 +369,7 @@ public sealed class RouteTests
         await app.SeedAsync(db =>
         {
             var user = SeedUser(db, "route-api-key-policy@example.com", "API Key Policy");
-            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var store = TestUserStore.Create(db);
             var (rawKey, apiKey) = store.GenerateUserApiKey(user.Id, "cli", null, "[]", DateTime.UtcNow.AddDays(1));
             plaintextKey = rawKey;
             db.UserApiKeys.Add(apiKey);
@@ -536,7 +536,7 @@ public sealed class RouteTests
                 OrgId = Constants.DefaultOrganizationId,
                 UserId = user.Id,
             });
-            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var store = TestUserStore.Create(db);
             var (_, apiKey) = store.GenerateUserApiKey(user.Id, "cli", null, "[]", null);
             db.UserApiKeys.Add(apiKey);
         });
@@ -676,7 +676,7 @@ public sealed class RouteTests
         {
             var user = SeedUser(db, "route-user-key-query@example.com", "User Key Query");
             userId = user.Id;
-            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var store = TestUserStore.Create(db);
             var (_, alpha) = store.GenerateUserApiKey(user.Id, "alpha-key", null, "[]", DateTime.UtcNow.AddDays(1));
             var (_, beta) = store.GenerateUserApiKey(user.Id, "beta-key", null, "[]", DateTime.UtcNow.AddDays(1));
             db.UserApiKeys.AddRange(alpha, beta);
@@ -762,7 +762,7 @@ public sealed class RouteTests
         {
             var user = SeedUser(db, "route-user-key-rotate@example.com", "User Key Rotate");
             userId = user.Id;
-            var store = new ApiKeyStore(db, Microsoft.Extensions.Logging.Abstractions.NullLogger<ApiKeyStore>.Instance);
+            var store = TestUserStore.Create(db);
             var (_, apiKey) = store.GenerateUserApiKey(user.Id, "old", "Old key", "[]", DateTime.UtcNow.AddDays(7));
             oldKeyId = apiKey.Id;
             db.UserApiKeys.Add(apiKey);
@@ -863,7 +863,7 @@ public sealed class RouteTests
             session.CreatedAt = DateTime.UtcNow.AddHours(-1);
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);
         });
-        var code = MfaStore.ComputeTotp(secret, DateTimeOffset.UtcNow);
+        var code = UserStore.ComputeTotp(secret, DateTimeOffset.UtcNow);
 
         using var confirmRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/me/mfa/totp/confirm");
         confirmRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
@@ -3817,9 +3817,8 @@ public sealed class RouteTests
                         services.AddSingleton<TestEmailSender>();
                         services.AddSingleton<IEmailSender>(sp => sp.GetRequiredService<TestEmailSender>());
                         services.AddScoped<SessionStore>();
-                        services.AddScoped<AuthStore>();
                         services.AddScoped<AuditStore>();
-                        services.AddScoped<ApiKeyStore>();
+                        services.AddScoped<UserStore>();
                         services.AddScoped<OrganizationStore>();
                         services.AddScoped<OrganizationInviteStore>();
                         services.AddScoped<RoleStore>();
@@ -3827,14 +3826,12 @@ public sealed class RouteTests
                         services.AddScoped<ServiceAccountStore>();
                         services.AddSingleton<IdentityProviderSecretProtector>();
                         services.AddScoped<IdentityProviderStore>();
-                        services.AddScoped<MfaStore>();
                         services.AddSingleton(new Fido2(new Fido2Configuration
                         {
                             ServerDomain = "localhost",
                             ServerName = "NeoShip",
                             Origins = new HashSet<string> { "https://localhost", "http://localhost" },
                         }, metadataService: null));
-                        services.AddScoped<PasskeyStore>();
                         services.AddSingleton<PasskeyChallengeStore>();
                         services.AddSingleton<SsoChallengeStore>();
                         services.AddSingleton<ISsoTokenClient, FakeSsoTokenClient>();

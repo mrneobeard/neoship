@@ -17,7 +17,7 @@ namespace NeoShip.ApiSvc.Tests;
 /// </remarks>
 [Trait(Traits.Category, Traits.Integration)]
 [Trait(Traits.Category, Traits.Auth)]
-public class MfaStoreTests
+public class UserMfaStoreTests
 {
     private static ShipDb CreateDatabase()
     {
@@ -61,9 +61,9 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = TestUserStore.Create(db);
         var (factor, secret) = await store.StartTotpAsync(user.Id, "Phone", TestContext.Current.CancellationToken);
-        var code = MfaStore.ComputeTotp(factor.ValueEncrypted, DateTimeOffset.UtcNow);
+        var code = UserStore.ComputeTotp(factor.ValueEncrypted, DateTimeOffset.UtcNow);
 
         Assert.False(string.IsNullOrWhiteSpace(secret));
         Assert.True(await store.ConfirmTotpAsync(user.Id, factor.Id, code, TestContext.Current.CancellationToken));
@@ -90,7 +90,7 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = TestUserStore.Create(db);
         var (factor, _) = await store.StartTotpAsync(user.Id, "Phone", TestContext.Current.CancellationToken);
 
         Assert.False(await store.ConfirmTotpAsync(user.Id, factor.Id, "000000", TestContext.Current.CancellationToken));
@@ -111,7 +111,7 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = TestUserStore.Create(db);
         var codes = await store.RegenerateRecoveryCodesAsync(user.Id, 3, TestContext.Current.CancellationToken);
 
         Assert.Equal(3, codes.Count);
@@ -136,7 +136,7 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = TestUserStore.Create(db);
         var oldCodes = await store.RegenerateRecoveryCodesAsync(user.Id, 2, TestContext.Current.CancellationToken);
         var newCodes = await store.RegenerateRecoveryCodesAsync(user.Id, 4, TestContext.Current.CancellationToken);
 
@@ -160,7 +160,7 @@ public class MfaStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new MfaStore(db, NullLogger<MfaStore>.Instance);
+        var store = TestUserStore.Create(db);
         await store.RegenerateRecoveryCodesAsync(user.Id, 5, TestContext.Current.CancellationToken);
 
         Assert.Equal(5, await store.RevokeRecoveryCodesAsync(user.Id, TestContext.Current.CancellationToken));

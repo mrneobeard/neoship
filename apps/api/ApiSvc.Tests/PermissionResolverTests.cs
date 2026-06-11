@@ -278,7 +278,7 @@ public class PermissionResolverTests
         db.Users.Add(user);
         db.SaveChanges();
 
-        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
+        var apiKeys = TestUserStore.Create(db);
         var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(
             user.Id, "ci", null, "[]", DateTime.UtcNow.AddHours(1));
 

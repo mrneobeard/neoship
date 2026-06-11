@@ -68,7 +68,7 @@ public static class AuthEndpoints
     private static async Task<IResult> SignupAsync(
         [FromBody] SignupRequest req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateSignup(req);
@@ -102,7 +102,7 @@ public static class AuthEndpoints
     private static async Task<IResult> LoginAsync(
         [FromBody] LoginRequest req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateLogin(req);
@@ -138,7 +138,7 @@ public static class AuthEndpoints
     private static async Task<IResult> BeginPasskeyLoginAsync(
         [FromBody] BeginPasskeyLoginRequest req,
         HttpContext httpContext,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         PasskeyChallengeStore challenges,
         CancellationToken ct)
     {
@@ -219,7 +219,7 @@ public static class AuthEndpoints
     private static async Task<IResult> FinishPasskeyLoginAsync(
         [FromBody] FinishPasskeyLoginRequest req,
         HttpContext httpContext,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         PasskeyChallengeStore challenges,
         PermissionResolver permissions,
         SessionStore sessions,
@@ -264,7 +264,7 @@ public static class AuthEndpoints
     private static async Task<IResult> LoginWithApiKeyAsync(
         [FromBody] ApiKeyLoginRequest req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateApiKeyLogin(req);
@@ -291,7 +291,7 @@ public static class AuthEndpoints
 
     private static async Task<Ok<ApiEnvelope<object>>> LogoutAsync(
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var rawToken = ReadSessionToken(httpContext.Request);
@@ -313,7 +313,7 @@ public static class AuthEndpoints
     private static async Task<IResult> RequestPasswordResetAsync(
         [FromBody] PasswordResetRequest req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateEmailRequest(req.Email);
@@ -331,7 +331,7 @@ public static class AuthEndpoints
     private static async Task<IResult> ConfirmPasswordResetAsync(
         [FromBody] PasswordResetConfirm req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidatePasswordResetConfirm(req);
@@ -349,7 +349,7 @@ public static class AuthEndpoints
     private static async Task<IResult> RequestEmailVerificationAsync(
         [FromBody] EmailVerificationRequest req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateEmailRequest(req.Email);
@@ -367,7 +367,7 @@ public static class AuthEndpoints
     private static async Task<IResult> ConfirmEmailVerificationAsync(
         [FromBody] EmailVerificationConfirm req,
         HttpContext httpContext,
-        AuthStore auth,
+        UserStore auth,
         CancellationToken ct)
     {
         var validation = ValidateToken(req.Token);

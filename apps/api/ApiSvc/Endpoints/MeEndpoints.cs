@@ -85,7 +85,7 @@ public static class MeEndpoints
             return null;
         }
 
-        var apiKeys = httpContext.RequestServices.GetRequiredService<ApiKeyStore>();
+        var apiKeys = httpContext.RequestServices.GetRequiredService<UserStore>();
         var apiKey = await apiKeys.AuthenticateUserApiKeyAsync(bearerToken, ct);
         if (apiKey?.User is null)
         {
@@ -369,7 +369,7 @@ public static class MeEndpoints
         [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
-        ApiKeyStore apiKeys,
+        UserStore apiKeys,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -416,7 +416,7 @@ public static class MeEndpoints
         [FromBody] CreateApiKeyRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        ApiKeyStore apiKeys,
+        UserStore apiKeys,
         ShipDb db,
         AuditStore audit,
         IConfiguration configuration,
@@ -453,7 +453,7 @@ public static class MeEndpoints
         Guid apiKeyId,
         HttpContext httpContext,
         SessionStore sessions,
-        ApiKeyStore apiKeys,
+        UserStore apiKeys,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -481,7 +481,7 @@ public static class MeEndpoints
         [FromBody] RotateApiKeyRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        ApiKeyStore apiKeys,
+        UserStore apiKeys,
         ShipDb db,
         AuditStore audit,
         IConfiguration configuration,
@@ -549,7 +549,7 @@ public static class MeEndpoints
         [FromBody] StartTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        MfaStore mfa,
+        UserStore mfa,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -581,7 +581,7 @@ public static class MeEndpoints
         [FromBody] ConfirmTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        MfaStore mfa,
+        UserStore mfa,
         AuditStore audit,
         CancellationToken ct)
     {
@@ -618,7 +618,7 @@ public static class MeEndpoints
         [FromBody] DisableTotpRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        MfaStore mfa,
+        UserStore mfa,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -651,7 +651,7 @@ public static class MeEndpoints
         [FromBody] RegenerateRecoveryCodesRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        MfaStore mfa,
+        UserStore mfa,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -678,7 +678,7 @@ public static class MeEndpoints
     private static async Task<IResult> RevokeRecoveryCodesAsync(
         HttpContext httpContext,
         SessionStore sessions,
-        MfaStore mfa,
+        UserStore mfa,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)
@@ -703,7 +703,7 @@ public static class MeEndpoints
         [FromQuery] string? sort,
         HttpContext httpContext,
         SessionStore sessions,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -1132,7 +1132,7 @@ public static class MeEndpoints
     private static async Task<IResult> BeginPasskeyRegistrationAsync(
         HttpContext httpContext,
         SessionStore sessions,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         CancellationToken ct)
     {
         var user = await AuthenticateAsync(httpContext, sessions, ct);
@@ -1150,7 +1150,7 @@ public static class MeEndpoints
         [FromBody] FinishPasskeyRegistrationRequest req,
         HttpContext httpContext,
         SessionStore sessions,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         PasskeyChallengeStore challenges,
         AuditStore audit,
         IConfiguration configuration,
@@ -1185,7 +1185,7 @@ public static class MeEndpoints
         Guid factorId,
         HttpContext httpContext,
         SessionStore sessions,
-        PasskeyStore passkeys,
+        UserStore passkeys,
         AuditStore audit,
         IConfiguration configuration,
         CancellationToken ct)

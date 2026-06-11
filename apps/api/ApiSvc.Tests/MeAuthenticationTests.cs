@@ -56,7 +56,7 @@ public class MeAuthenticationTests
         });
         db.Users.Add(user);
 
-        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
+        var apiKeys = TestUserStore.Create(db);
         var (plaintextKey, apiKey) = apiKeys.GenerateUserApiKey(user.Id, "test", null, "[]", null);
         db.UserApiKeys.Add(apiKey);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);

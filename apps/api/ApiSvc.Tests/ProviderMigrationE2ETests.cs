@@ -81,7 +81,7 @@ public sealed class ProviderMigrationE2ETests
         await SeedDefaultOrgAsync(db);
 
         var ctx = new RequestContext { IpAddress = "127.0.0.1", UserAgent = "provider-e2e" };
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
         var (signup, user, _, rawToken) = await auth.SignupAsync(
             $"provider-{Guid.NewGuid():N}@example.com",
             "Provider User",
@@ -116,19 +116,9 @@ public sealed class ProviderMigrationE2ETests
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
     }
 
-    private static AuthStore CreateAuthStore(ShipDb db, RequestContext ctx)
+    private static UserStore CreateUserStore(ShipDb db, RequestContext ctx)
     {
-        var snapshot = new PermissionSnapshotCodec();
-        var sessions = new SessionStore(db, ctx, snapshot, NullLogger<SessionStore>.Instance);
-        var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
-        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
-        var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Email:PublicBaseUrl"] = "https://localhost",
-        }).Build();
-
-        return new AuthStore(db, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
+        return TestUserStore.Create(db, ctx);
     }
 
     private static async Task StartOrSkipAsync(Task startTask)

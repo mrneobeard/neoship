@@ -19,7 +19,7 @@ namespace NeoShip.ApiSvc.Tests;
 /// </remarks>
 [Trait(Traits.Category, Traits.Integration)]
 [Trait(Traits.Category, Traits.Auth)]
-public class PasskeyStoreTests
+public class UserPasskeyStoreTests
 {
     private static ShipDb CreateDatabase()
     {
@@ -48,16 +48,6 @@ public class PasskeyStoreTests
         return db;
     }
 
-    private static Fido2 CreateFido2()
-    {
-        return new Fido2(new Fido2Configuration
-        {
-            ServerDomain = "localhost",
-            ServerName = "NeoShip Tests",
-            Origins = new HashSet<string> { "https://localhost" },
-        }, metadataService: null);
-    }
-
     /// <summary>
     /// Verifies that registration options include the current user.
     /// </summary>
@@ -73,7 +63,7 @@ public class PasskeyStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var store = TestUserStore.Create(db);
         var options = await store.BeginRegistrationAsync(user, TestContext.Current.CancellationToken);
 
         Assert.Equal(user.Email, options.User.Name);
@@ -110,7 +100,7 @@ public class PasskeyStoreTests
         db.UserMfaFactors.Add(factor);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var store = TestUserStore.Create(db);
 
         Assert.Single(await store.ListAsync(user.Id, TestContext.Current.CancellationToken));
         Assert.True(await store.RevokeAsync(user.Id, factor.Id, TestContext.Current.CancellationToken));
@@ -135,7 +125,7 @@ public class PasskeyStoreTests
             Name = "Laptop",
             Type = MfaFactorType.Passkey.Id,
             WebAuthnCredentialId = [1, 2, 3],
-            WebAuthnCredentialIdDigest = PasskeyStore.ComputeCredentialIdDigest([1, 2, 3]),
+            WebAuthnCredentialIdDigest = UserStore.ComputeCredentialIdDigest([1, 2, 3]),
             WebAuthnPublicKeyCredentialData = [4, 5, 6],
             CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
             VerifiedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -145,7 +135,7 @@ public class PasskeyStoreTests
         db.UserMfaFactors.Add(factor);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var store = TestUserStore.Create(db);
         var result = await store.BeginLoginAsync(user.Email, TestContext.Current.CancellationToken);
 
         Assert.NotNull(result);
@@ -173,7 +163,7 @@ public class PasskeyStoreTests
             Name = "Laptop",
             Type = MfaFactorType.Passkey.Id,
             WebAuthnCredentialId = [1, 2, 3],
-            WebAuthnCredentialIdDigest = PasskeyStore.ComputeCredentialIdDigest([1, 2, 3]),
+            WebAuthnCredentialIdDigest = UserStore.ComputeCredentialIdDigest([1, 2, 3]),
             WebAuthnPublicKeyCredentialData = [4, 5, 6],
             CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
             VerifiedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -181,7 +171,7 @@ public class PasskeyStoreTests
         db.Users.Add(user);
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
-        var store = new PasskeyStore(db, CreateFido2(), NullLogger<PasskeyStore>.Instance);
+        var store = TestUserStore.Create(db);
         var result = await store.BeginLoginAsync(user.Email, TestContext.Current.CancellationToken);
 
         Assert.Null(result);

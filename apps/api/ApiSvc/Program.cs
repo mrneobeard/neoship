@@ -111,9 +111,8 @@ builder.Services.AddSingleton<IEmailSender>(sp =>
 });
 
 builder.Services.AddScoped<SessionStore>();
-builder.Services.AddScoped<AuthStore>();
 builder.Services.AddScoped<AuditStore>();
-builder.Services.AddScoped<ApiKeyStore>();
+builder.Services.AddScoped<UserStore>();
 builder.Services.AddScoped<ServiceAccountStore>();
 builder.Services.AddScoped<RoleStore>();
 builder.Services.AddScoped<GroupStore>();
@@ -121,8 +120,6 @@ builder.Services.AddScoped<OrganizationStore>();
 builder.Services.AddScoped<OrganizationInviteStore>();
 builder.Services.AddSingleton<IdentityProviderSecretProtector>();
 builder.Services.AddScoped<IdentityProviderStore>();
-builder.Services.AddScoped<MfaStore>();
-builder.Services.AddScoped<PasskeyStore>();
 builder.Services.AddSingleton<PasskeyChallengeStore>();
 builder.Services.AddSingleton<SsoChallengeStore>();
 builder.Services.AddHttpClient<ISsoTokenClient, SsoTokenClient>();

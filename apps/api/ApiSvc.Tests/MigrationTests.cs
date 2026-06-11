@@ -39,18 +39,9 @@ public class MigrationTests
         return (db, ctx);
     }
 
-    private static AuthStore CreateAuthStore(ShipDb db, RequestContext ctx)
+    private static UserStore CreateUserStore(ShipDb db, RequestContext ctx)
     {
-        var snapshot = new PermissionSnapshotCodec();
-        var sessions = new SessionStore(db, ctx, snapshot, NullLogger<SessionStore>.Instance);
-        var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
-        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
-        var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["Email:PublicBaseUrl"] = "https://localhost",
-        }).Build();
-        return new AuthStore(db, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
+        return TestUserStore.Create(db, ctx);
     }
 
     [Fact]
@@ -74,7 +65,7 @@ public class MigrationTests
     public async Task Signup_CreatesUserAndSession()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         var (result, user, _, rawToken) = await auth.SignupAsync(
             "new@example.com", "New User", "password123",
@@ -91,8 +82,8 @@ public class MigrationTests
     public async Task ApiKeyLogin_CreatesSessionAndReturnsSuccess()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
-        var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
+        var auth = CreateUserStore(db, ctx);
+        var apiKeys = CreateUserStore(db, ctx);
 
         var (_, user, _, _) = await auth.SignupAsync(
             "apikey@example.com", "Api Key User", "password123",
@@ -120,7 +111,7 @@ public class MigrationTests
     public async Task ServiceAccountApiKey_CanBeAuthenticated()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         var (_, user, _, _) = await auth.SignupAsync(
             "service@example.com", "Service User", "password123",
@@ -154,7 +145,7 @@ public class MigrationTests
     public async Task Login_WithValidCredentials_ReturnsSuccess()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         await auth.SignupAsync(
             "login@example.com", "Login User", "password123",
@@ -173,7 +164,7 @@ public class MigrationTests
     public async Task Login_WithWrongPassword_ReturnsInvalidCredentials()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         await auth.SignupAsync(
             "wrong@example.com", "Wrong User", "correct-password",
@@ -191,7 +182,7 @@ public class MigrationTests
     public async Task Login_WhenSsoIsRequired_ReturnsAuthMethodNotAllowed()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         await auth.SignupAsync(
             "sso-required@example.com", "SSO Required", "password123",
@@ -212,7 +203,7 @@ public class MigrationTests
     public async Task Signup_DuplicateEmail_ReturnsEmailAlreadyExists()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         await auth.SignupAsync(
             "dup@example.com", "First", "password123",
@@ -230,7 +221,7 @@ public class MigrationTests
     public async Task Session_CanBeValidated()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         var (_, _, _, rawToken) = await auth.SignupAsync(
             "session@example.com", "Session User", "password123",
@@ -246,7 +237,7 @@ public class MigrationTests
     public async Task Session_CanBeRevoked()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         var (_, _, session, _) = await auth.SignupAsync(
             "revoke@example.com", "Revoke User", "password123",
@@ -263,7 +254,7 @@ public class MigrationTests
     public async Task Audit_Events_AreRecorded()
     {
         var (db, ctx) = CreateDatabase();
-        var auth = CreateAuthStore(db, ctx);
+        var auth = CreateUserStore(db, ctx);
 
         await auth.SignupAsync(
             "audit@example.com", "Audit User", "password123",
