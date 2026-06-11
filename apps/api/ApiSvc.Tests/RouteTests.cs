@@ -2358,6 +2358,34 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task UpdateRole_RejectsBuiltInRole()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-builtin-update@example.com", "Built In Update");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"/api/v1/orgs/default/roles/{BuiltInRoleStore.OwnerRoleId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"description\":\"Changed\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("conflict", json.RootElement.GetProperty("error").GetProperty("code").GetString());
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.update", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task AddRoleClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();

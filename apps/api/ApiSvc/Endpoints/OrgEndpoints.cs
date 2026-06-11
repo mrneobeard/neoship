@@ -284,6 +284,9 @@ public static class OrgEndpoints
     private static IResult NotFoundError(HttpContext httpContext)
         => Error(httpContext, StatusCodes.Status404NotFound, "not_found", "Resource not found.");
 
+    private static IResult BuiltInRoleConflict(HttpContext httpContext)
+        => Error(httpContext, StatusCodes.Status409Conflict, "conflict", "Built-in roles are code-owned and cannot be modified.");
+
     private static async Task<ServiceAccountApiKey?> AuthenticateServiceAccountApiKeyAsync(HttpContext httpContext, CancellationToken ct)
     {
         var token = ReadBearerToken(httpContext.Request);
@@ -1004,6 +1007,11 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
+        if (BuiltInRoleStore.FindById(roleId) is not null)
+        {
+            return BuiltInRoleConflict(httpContext);
+        }
+
         var role = await roles.UpdateAsync(org.Id, roleId, req.Name, req.Description, ct);
         if (role is null)
         {
@@ -1035,6 +1043,11 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        if (BuiltInRoleStore.FindById(roleId) is not null)
+        {
+            return BuiltInRoleConflict(httpContext);
         }
 
         var deleted = await roles.DeleteAsync(org.Id, roleId, ct);
@@ -1075,6 +1088,11 @@ public static class OrgEndpoints
         if (validation.Count > 0)
         {
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
+        }
+
+        if (BuiltInRoleStore.FindById(roleId) is not null)
+        {
+            return BuiltInRoleConflict(httpContext);
         }
 
         var grant = new PermissionGrant(key, req.ScopeKind, req.ScopeId);
@@ -1152,6 +1170,11 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        if (BuiltInRoleStore.FindById(roleId) is not null)
+        {
+            return BuiltInRoleConflict(httpContext);
         }
 
         var removed = await roles.RemoveClaimAsync(org.Id, roleId, claimId, ct);
