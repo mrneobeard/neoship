@@ -15,6 +15,31 @@ namespace NeoShip.ApiSvc.Stores;
 public static class BuiltInRoleStore
 {
     /// <summary>
+    /// The built-in owner role identifier.
+    /// </summary>
+    public static readonly Guid OwnerRoleId = Guid.Parse("00000000-0000-0000-0000-000000000101");
+
+    /// <summary>
+    /// The built-in admin role identifier.
+    /// </summary>
+    public static readonly Guid AdminRoleId = Guid.Parse("00000000-0000-0000-0000-000000000102");
+
+    /// <summary>
+    /// The built-in editor role identifier.
+    /// </summary>
+    public static readonly Guid EditorRoleId = Guid.Parse("00000000-0000-0000-0000-000000000103");
+
+    /// <summary>
+    /// The built-in reader role identifier.
+    /// </summary>
+    public static readonly Guid ReaderRoleId = Guid.Parse("00000000-0000-0000-0000-000000000104");
+
+    /// <summary>
+    /// The built-in auditor role identifier.
+    /// </summary>
+    public static readonly Guid AuditorRoleId = Guid.Parse("00000000-0000-0000-0000-000000000105");
+
+    /// <summary>
     /// The built-in owner role key.
     /// </summary>
     public const string OwnerRoleName = "owner";
@@ -44,6 +69,15 @@ public static class BuiltInRoleStore
     /// </summary>
     public const string MemberRoleName = ReaderRoleName;
 
+    private static readonly IReadOnlyList<BuiltInRoleDefinition> RoleDefinitions =
+    [
+        new(OwnerRoleId, OwnerRoleName, "Owner", "Full organization ownership."),
+        new(AdminRoleId, AdminRoleName, "Admin", "Organization administration without ownership transfer."),
+        new(EditorRoleId, EditorRoleName, "Editor", "Read and write access without organization settings changes."),
+        new(ReaderRoleId, ReaderRoleName, "Reader", "Default organization read access."),
+        new(AuditorRoleId, AuditorRoleName, "Auditor", "Read-only audit and inspection access."),
+    ];
+
     private static readonly IReadOnlyDictionary<string, IReadOnlyCollection<PermissionKey>> Roles = new Dictionary<string, IReadOnlyCollection<PermissionKey>>(StringComparer.OrdinalIgnoreCase)
     {
         [OwnerRoleName] = OwnerPermissions().ToArray(),
@@ -52,6 +86,26 @@ public static class BuiltInRoleStore
         [ReaderRoleName] = ReaderPermissions().ToArray(),
         [AuditorRoleName] = AuditorPermissions().ToArray(),
     };
+
+    /// <summary>
+    /// Gets the code-owned built-in role definitions.
+    /// </summary>
+    /// <returns>The built-in role definitions.</returns>
+    public static IReadOnlyList<BuiltInRoleDefinition> Definitions() => RoleDefinitions;
+
+    /// <summary>
+    /// Gets a code-owned built-in role by identifier.
+    /// </summary>
+    /// <param name="roleId">The role identifier.</param>
+    /// <returns>The matching built-in role definition, or <see langword="null"/>.</returns>
+    public static BuiltInRoleDefinition? FindById(Guid roleId) => RoleDefinitions.FirstOrDefault(x => x.Id == roleId);
+
+    /// <summary>
+    /// Checks whether a role name is reserved for a built-in role.
+    /// </summary>
+    /// <param name="roleName">The role name.</param>
+    /// <returns><see langword="true"/> when the name is built-in; otherwise <see langword="false"/>.</returns>
+    public static bool IsBuiltInRoleName(string roleName) => Roles.ContainsKey(NormalizeRoleKey(roleName));
 
     /// <summary>
     /// Assigns a built-in role to a user.
@@ -142,3 +196,17 @@ public static class BuiltInRoleStore
     private static IEnumerable<PermissionKey> AuditorPermissions()
         => OwnerPermissions().Where(x => x.Action == "read");
 }
+
+/// <summary>
+/// Describes a code-owned built-in role.
+/// </summary>
+/// <param name="Id">The stable built-in role identifier.</param>
+/// <param name="Key">The built-in role key.</param>
+/// <param name="Name">The display name.</param>
+/// <param name="Description">The role description.</param>
+/// <example>
+/// <code>
+/// var owner = BuiltInRoleStore.Definitions().First(x =&gt; x.Key == BuiltInRoleStore.OwnerRoleName);
+/// </code>
+/// </example>
+public sealed record BuiltInRoleDefinition(Guid Id, string Key, string Name, string Description);

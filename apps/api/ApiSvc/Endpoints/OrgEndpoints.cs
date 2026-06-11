@@ -87,7 +87,7 @@ public static class OrgEndpoints
     /// <summary>
     /// Represents a role response.
     /// </summary>
-    public record RoleResponse(Guid Id, string Name, string? Description, List<RoleClaimResponse> Claims);
+    public record RoleResponse(Guid Id, string Key, string Name, string? Description, bool BuiltIn, bool Editable, List<RoleClaimResponse> Claims);
 
     /// <summary>
     /// Represents a role creation request.
@@ -350,9 +350,24 @@ public static class OrgEndpoints
     private static RoleResponse ToRoleResponse(Role role)
         => new(
             role.Id,
+            role.Name.ToLowerInvariant(),
             role.Name,
             role.Description,
+            false,
+            true,
             role.Claims.Select(c => new RoleClaimResponse(c.Id, c.Type, c.Value)).ToList());
+
+    private static RoleResponse ToBuiltInRoleResponse(BuiltInRoleDefinition role, string orgSlug)
+        => new(
+            role.Id,
+            role.Key,
+            role.Name,
+            role.Description,
+            true,
+            false,
+            BuiltInRoleStore.GrantsFor(role.Key, PermissionScopeKind.Organization, orgSlug)
+                .Select((grant, index) => new RoleClaimResponse(-(index + 1), grant.Key.ToString(), grant.ScopeId is null ? grant.ScopeKind.ToString().ToLowerInvariant() : $"{grant.ScopeKind.ToString().ToLowerInvariant()}:{grant.ScopeId}"))
+                .ToList());
 
     private static GroupResponse ToGroupResponse(Group group)
         => new(group.Id, group.Name, group.Email, group.Description, group.Members.Count, group.ServiceAccountMembers.Count, group.Roles.Count);
@@ -794,24 +809,28 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = query.Errors });
         }
 
-        var list = await roles.ListAsync(org.Id, ct);
-        IEnumerable<Role> filtered = list;
+        var builtInRoles = BuiltInRoleStore.Definitions()
+            .Select(x => new RoleListEntry(ToBuiltInRoleResponse(x, orgSlug), DateTime.MinValue))
+            .ToList();
+        var customRoles = (await roles.ListAsync(org.Id, ct))
+            .Select(x => new RoleListEntry(ToRoleResponse(x), x.CreatedAt));
+        IEnumerable<RoleListEntry> filtered = builtInRoles.Concat(customRoles);
         if (!string.IsNullOrWhiteSpace(query.FilterName))
         {
-            filtered = filtered.Where(x => x.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(x => x.Response.Name.Contains(query.FilterName, StringComparison.OrdinalIgnoreCase));
         }
 
         filtered = query.Sort switch
         {
-            "-name" => filtered.OrderByDescending(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
-            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Id),
-            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Id),
-            _ => filtered.OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Id),
+            "-name" => filtered.OrderByDescending(x => x.Response.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Response.Id),
+            "createdAt" => filtered.OrderBy(x => x.CreatedAt).ThenBy(x => x.Response.Id),
+            "-createdAt" => filtered.OrderByDescending(x => x.CreatedAt).ThenBy(x => x.Response.Id),
+            _ => filtered.OrderBy(x => x.Response.Name, StringComparer.OrdinalIgnoreCase).ThenBy(x => x.Response.Id),
         };
 
         var page = filtered.Skip(query.Offset).Take(query.Limit + 1).ToList();
         var hasMore = page.Count > query.Limit;
-        var data = page.Take(query.Limit).Select(ToRoleResponse).ToList();
+        var data = page.Take(query.Limit).Select(x => x.Response).ToList();
         var nextCursor = hasMore ? EncodeCursor(query.Offset + query.Limit) : null;
         var pagination = new ApiPagination(query.Limit, nextCursor, previousCursor: null, hasMore);
         var filters = string.IsNullOrWhiteSpace(query.FilterName) ? new Dictionary<string, string>() : new Dictionary<string, string> { ["name"] = query.FilterName };
@@ -819,6 +838,8 @@ public static class OrgEndpoints
 
         return TypedResults.Ok(new ApiCollectionEnvelope<RoleResponse>(data, pagination, ApiMeta.FromHttpContext(httpContext, queryMeta)));
     }
+
+    private sealed record RoleListEntry(RoleResponse Response, DateTime CreatedAt);
 
     private sealed record ParsedNamedListQuery(int Limit, int Offset, string? FilterName, string Sort, Dictionary<string, string[]> Errors);
 
@@ -936,6 +957,12 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        var builtInRole = BuiltInRoleStore.FindById(roleId);
+        if (builtInRole is not null)
+        {
+            return TypedResults.Ok(Envelope(httpContext, ToBuiltInRoleResponse(builtInRole, orgSlug)));
         }
 
         var role = await roles.GetAsync(org.Id, roleId, ct);
@@ -1068,6 +1095,10 @@ public static class OrgEndpoints
         if ((requireName && string.IsNullOrWhiteSpace(name)) || (name is not null && (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 160)))
         {
             errors["name"] = ["Name is required and must be 160 characters or fewer."];
+        }
+        else if (name is not null && BuiltInRoleStore.IsBuiltInRoleName(name))
+        {
+            errors["name"] = ["Name is reserved for a built-in role."];
         }
 
         if (description is not null && description.Length > 1024)

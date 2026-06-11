@@ -2114,6 +2114,34 @@ public sealed class RouteTests
         Assert.True(json.RootElement.TryGetProperty("meta", out _));
         Assert.Equal(JsonValueKind.Array, data.ValueKind);
         Assert.Contains("Reader", body, StringComparison.Ordinal);
+        Assert.Contains(data.EnumerateArray(), x => x.GetProperty("key").GetString() == BuiltInRoleStore.OwnerRoleName && x.GetProperty("builtIn").GetBoolean() && !x.GetProperty("editable").GetBoolean());
+    }
+
+    [Fact]
+    public async Task GetRole_ReturnsBuiltInRoleDefinition()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-builtin@example.com", "Role Built In");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/orgs/default/roles/{BuiltInRoleStore.OwnerRoleId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Equal(BuiltInRoleStore.OwnerRoleName, data.GetProperty("key").GetString());
+        Assert.True(data.GetProperty("builtIn").GetBoolean());
+        Assert.False(data.GetProperty("editable").GetBoolean());
+        Assert.True(data.GetProperty("claims").GetArrayLength() > 0);
     }
 
     [Fact]
@@ -2229,6 +2257,35 @@ public sealed class RouteTests
         await app.WithDbAsync(async db =>
         {
             Assert.False(await db.Roles.AnyAsync(x => x.CreatedBy == userId, TestContext.Current.CancellationToken));
+            Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task CreateRole_RejectsBuiltInRoleName()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-builtin-name@example.com", "Role Built In Name");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/orgs/default/roles");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"owner\",\"description\":\"Reserved\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.True(json.RootElement.GetProperty("error").GetProperty("details").GetProperty("fields").TryGetProperty("name", out _));
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.Roles.AnyAsync(x => x.NameUpcase == "OWNER", TestContext.Current.CancellationToken));
             Assert.False(await db.AuditEvents.AnyAsync(x => x.Type == "org.roles.create", TestContext.Current.CancellationToken));
         });
     }
