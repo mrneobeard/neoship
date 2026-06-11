@@ -118,6 +118,20 @@ public static class BuiltInRoleStore
     /// <param name="ct">The cancellation token.</param>
     /// <returns><see cref="Task"/> representing the asynchronous operation.</returns>
     public static async Task AssignAsync(ShipDb db, Guid orgId, string orgSlug, Guid userId, string roleName, CancellationToken ct = default)
+        => await AssignAsync(db, orgId, orgSlug, userId, roleName, userId, ct);
+
+    /// <summary>
+    /// Assigns a built-in role to a user.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="orgSlug">The organization slug.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="roleName">The built-in role key.</param>
+    /// <param name="createdBy">The creator user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see cref="Task"/> representing the asynchronous operation.</returns>
+    public static async Task AssignAsync(ShipDb db, Guid orgId, string orgSlug, Guid userId, string roleName, Guid createdBy, CancellationToken ct = default)
     {
         var roleKey = NormalizeRoleKey(roleName);
         if (!Roles.ContainsKey(roleKey))
@@ -152,11 +166,47 @@ public static class BuiltInRoleStore
             RoleKey = roleKey,
             ScopeKind = PermissionScopeKind.Organization,
             ScopeId = scopeId,
-            CreatedBy = userId,
+            CreatedBy = createdBy,
             CreatedAt = DateTime.UtcNow,
         });
 
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Removes a built-in role assignment from a user.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="orgSlug">The organization slug.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="roleName">The built-in role key.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when an assignment was removed; otherwise <see langword="false"/>.</returns>
+    public static async Task<bool> UnassignAsync(ShipDb db, Guid orgId, string orgSlug, Guid userId, string roleName, CancellationToken ct = default)
+    {
+        var roleKey = NormalizeRoleKey(roleName);
+        if (!Roles.ContainsKey(roleKey))
+        {
+            throw new ArgumentException("Unknown built-in role.", nameof(roleName));
+        }
+
+        var scopeId = NormalizeScopeId(orgSlug);
+        var assignment = await db.RoleAssignments.FirstOrDefaultAsync(
+            x => x.OrgId == orgId
+                && x.UserId == userId
+                && x.RoleKey == roleKey
+                && x.ScopeKind == PermissionScopeKind.Organization
+                && x.ScopeId == scopeId,
+            ct);
+        if (assignment is null)
+        {
+            return false;
+        }
+
+        db.RoleAssignments.Remove(assignment);
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     /// <summary>

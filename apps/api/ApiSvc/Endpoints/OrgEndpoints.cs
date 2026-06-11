@@ -1188,6 +1188,20 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var builtInRole = BuiltInRoleStore.FindById(roleId);
+        if (builtInRole is not null)
+        {
+            var userExists = await db.Users.AnyAsync(x => x.Id == userId && x.OrgId == org.Id, ct);
+            if (!userExists)
+            {
+                return NotFoundError(httpContext);
+            }
+
+            await BuiltInRoleStore.AssignAsync(db, org.Id, orgSlug, userId, builtInRole.Key, auth.User!.Id, ct);
+            await audit.RecordAsync("org.roles.user.add", org.Id, auth.User.Id, "role.user.add", targetType: "role", targetId: roleId.ToString(), ct: ct);
+            return TypedResults.Ok(Envelope<object>(httpContext, null));
+        }
+
         var attached = await roles.AttachUserAsync(org.Id, roleId, userId, ct);
         if (!attached)
         {
@@ -1220,6 +1234,19 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        var builtInRole = BuiltInRoleStore.FindById(roleId);
+        if (builtInRole is not null)
+        {
+            var detachedBuiltIn = await BuiltInRoleStore.UnassignAsync(db, org.Id, orgSlug, userId, builtInRole.Key, ct);
+            if (!detachedBuiltIn)
+            {
+                return NotFoundError(httpContext);
+            }
+
+            await audit.RecordAsync("org.roles.user.remove", org.Id, auth.User!.Id, "role.user.remove", targetType: "role", targetId: roleId.ToString(), ct: ct);
+            return TypedResults.Ok(Envelope<object>(httpContext, null));
         }
 
         var detached = await roles.DetachUserAsync(org.Id, roleId, userId, ct);
