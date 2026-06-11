@@ -2145,6 +2145,42 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListRoles_HidesLegacyBuiltInRoleRows()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-role-legacy-built-in@example.com", "Role Legacy Built In");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+            db.Roles.Add(new Role
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "Owner",
+                NameUpcase = "OWNER",
+                Description = "Legacy owner row",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/orgs/default/roles?filter[name]=owner");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Equal(1, data.GetArrayLength());
+        Assert.Equal(BuiltInRoleStore.OwnerRoleName, data[0].GetProperty("key").GetString());
+        Assert.True(data[0].GetProperty("builtIn").GetBoolean());
+    }
+
+    [Fact]
     public async Task ListRoles_SupportsQueryContractPaginationAndFilter()
     {
         await using var app = await RouteTestApp.CreateAsync();

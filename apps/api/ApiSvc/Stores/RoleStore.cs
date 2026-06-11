@@ -9,6 +9,8 @@ namespace NeoShip.ApiSvc.Stores;
 /// </summary>
 public sealed class RoleStore
 {
+    private static readonly string[] ReservedRoleNames = ["OWNER", "ADMIN", "EDITOR", "READER", "AUDITOR", "MEMBER"];
+
     private readonly ShipDb db;
     private readonly PermissionClaimCodec codec;
     private readonly ILogger<RoleStore> logger;
@@ -36,7 +38,7 @@ public sealed class RoleStore
     {
         return await this.db.Roles
             .Include(x => x.Claims)
-            .Where(x => x.OrgId == orgId)
+            .Where(x => x.OrgId == orgId && !ReservedRoleNames.Contains(x.NameUpcase))
             .OrderBy(x => x.NameUpcase)
             .ToListAsync(ct);
     }
@@ -80,7 +82,7 @@ public sealed class RoleStore
     {
         return await this.db.Roles
             .Include(x => x.Claims)
-            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId && !ReservedRoleNames.Contains(x.NameUpcase), ct);
     }
 
     /// <summary>
@@ -129,7 +131,7 @@ public sealed class RoleStore
             .Include(x => x.Claims)
             .Include(x => x.Users)
             .Include(x => x.Groups)
-            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId && !ReservedRoleNames.Contains(x.NameUpcase), ct);
         if (role is null)
         {
             return false;
@@ -222,7 +224,7 @@ public sealed class RoleStore
     {
         var role = await this.db.Roles
             .Include(x => x.Users)
-            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId && !ReservedRoleNames.Contains(x.NameUpcase), ct);
 
         var user = await this.db.Users.FirstOrDefaultAsync(x => x.Id == userId && x.OrgId == orgId, ct);
         if (role is null || user is null)
@@ -253,7 +255,7 @@ public sealed class RoleStore
     {
         var role = await this.db.Roles
             .Include(x => x.Users)
-            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId, ct);
+            .FirstOrDefaultAsync(x => x.Id == roleId && x.OrgId == orgId && !ReservedRoleNames.Contains(x.NameUpcase), ct);
 
         if (role is null)
         {
@@ -271,4 +273,5 @@ public sealed class RoleStore
         this.logger.LogInformation("Role detached from user: role={RoleId} user={UserId} org={OrgId}", roleId, userId, orgId);
         return true;
     }
+
 }

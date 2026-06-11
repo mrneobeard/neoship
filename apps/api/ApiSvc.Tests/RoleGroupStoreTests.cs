@@ -94,6 +94,40 @@ public class RoleGroupStoreTests
     }
 
     /// <summary>
+    /// Verifies legacy persisted built-in roles are hidden from custom role operations.
+    /// </summary>
+    [Fact]
+    public async Task RoleStore_HidesLegacyBuiltInRows()
+    {
+        var db = CreateDatabase();
+        var codec = new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All));
+        var roles = new RoleStore(db, codec, NullLogger<RoleStore>.Instance);
+        var creator = new User(Guid.NewGuid(), "legacy-role@example.com", "Legacy Role")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var ownerRole = new Role
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "Owner",
+            NameUpcase = "OWNER",
+            CreatedBy = creator.Id,
+        };
+
+        db.Users.Add(creator);
+        db.Roles.Add(ownerRole);
+        db.SaveChanges();
+
+        var listed = await roles.ListAsync(Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
+
+        Assert.Empty(listed);
+        Assert.Null(await roles.GetAsync(Constants.DefaultOrganizationId, ownerRole.Id, TestContext.Current.CancellationToken));
+        Assert.False(await roles.DeleteAsync(Constants.DefaultOrganizationId, ownerRole.Id, TestContext.Current.CancellationToken));
+        Assert.True(await db.Roles.AnyAsync(x => x.Id == ownerRole.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
     /// Verifies single role reads are scoped to the owning organization.
     /// </summary>
     [Fact]
