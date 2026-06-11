@@ -72,14 +72,29 @@ public sealed class PermissionResolver
 
         this.AddClaims(grants, userRoles);
 
-        var userGroups = await this.db.Groups
+        var userGroupIds = await this.db.Groups
             .Where(g => g.OrgId == userOrgId && (g.Members.Any(u => u.Id == userId) || g.Owners.Any(u => u.Id == userId)))
+            .Select(g => g.Id)
+            .ToListAsync(ct);
+
+        var userGroups = await this.db.Groups
+            .Where(g => userGroupIds.Contains(g.Id))
             .SelectMany(g => g.Roles)
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
 
         this.AddClaims(grants, userGroups);
+
+        var builtInGroupAssignments = await this.db.RoleAssignments
+            .Where(x => x.GroupId != null && userGroupIds.Contains(x.GroupId.Value))
+            .Select(x => new { x.RoleKey, x.ScopeKind, x.ScopeId })
+            .ToListAsync(ct);
+
+        foreach (var assignment in builtInGroupAssignments)
+        {
+            grants.AddRange(BuiltInRoleStore.GrantsFor(assignment.RoleKey, assignment.ScopeKind, assignment.ScopeId));
+        }
 
         return new PermissionSet(grants);
     }
@@ -136,14 +151,29 @@ public sealed class PermissionResolver
 
         this.AddClaims(grants, directClaims);
 
-        var roleClaims = await this.db.Groups
+        var serviceAccountGroupIds = await this.db.Groups
             .Where(g => g.OrgId == orgId && (g.ServiceAccountMembers.Any(sa => sa.Id == serviceAccountId) || g.ServiceAccountOwners.Any(sa => sa.Id == serviceAccountId)))
+            .Select(g => g.Id)
+            .ToListAsync(ct);
+
+        var roleClaims = await this.db.Groups
+            .Where(g => serviceAccountGroupIds.Contains(g.Id))
             .SelectMany(g => g.Roles)
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
 
         this.AddClaims(grants, roleClaims);
+
+        var builtInGroupAssignments = await this.db.RoleAssignments
+            .Where(x => x.GroupId != null && serviceAccountGroupIds.Contains(x.GroupId.Value))
+            .Select(x => new { x.RoleKey, x.ScopeKind, x.ScopeId })
+            .ToListAsync(ct);
+
+        foreach (var assignment in builtInGroupAssignments)
+        {
+            grants.AddRange(BuiltInRoleStore.GrantsFor(assignment.RoleKey, assignment.ScopeKind, assignment.ScopeId));
+        }
 
         return new PermissionSet(grants);
     }

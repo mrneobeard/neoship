@@ -492,6 +492,10 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("created_by");
 
+                    b.Property<Guid?>("GroupId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("group_id");
+
                     b.Property<Guid>("OrgId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("org_id");
@@ -511,7 +515,7 @@ namespace NeoShip.Data.Mssql.Migrations
                         .HasColumnType("int")
                         .HasColumnName("scope_kind");
 
-                    b.Property<Guid>("UserId")
+                    b.Property<Guid?>("UserId")
                         .HasColumnType("uniqueidentifier")
                         .HasColumnName("user_id");
 
@@ -521,13 +525,17 @@ namespace NeoShip.Data.Mssql.Migrations
                     b.HasIndex("CreatedBy")
                         .HasDatabaseName("ix_role_assignments_created_by");
 
+                    b.HasIndex("GroupId", "OrgId")
+                        .HasDatabaseName("ix_role_assignments_group_id_org_id");
+
                     b.HasIndex("UserId", "OrgId")
                         .HasDatabaseName("ix_role_assignments_user_id_org_id");
 
+                    b.HasIndex("OrgId", "GroupId", "RoleKey", "ScopeKind", "ScopeId")
+                        .HasDatabaseName("ix_role_assignments_org_id_group_id_role_key_scope_kind_scope_id");
+
                     b.HasIndex("OrgId", "UserId", "RoleKey", "ScopeKind", "ScopeId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_role_assignments_org_id_user_id_role_key_scope_kind_scope_id")
-                        .HasFilter("[scope_id] IS NOT NULL");
+                        .HasDatabaseName("ix_role_assignments_org_id_user_id_role_key_scope_kind_scope_id");
 
                     b.ToTable("role_assignments", (string)null);
                 });
@@ -1727,6 +1735,12 @@ namespace NeoShip.Data.Mssql.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_role_assignments_users_created_by");
 
+                    b.HasOne("NeoShip.Data.Model.Group", "Group")
+                        .WithMany()
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_role_assignments_groups_group_id");
+
                     b.HasOne("NeoShip.Data.Model.Organization", "Org")
                         .WithMany()
                         .HasForeignKey("OrgId")
@@ -1738,10 +1752,11 @@ namespace NeoShip.Data.Mssql.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_role_assignments_users_user_id");
 
                     b.Navigation("CreatedByUser");
+
+                    b.Navigation("Group");
 
                     b.Navigation("Org");
 

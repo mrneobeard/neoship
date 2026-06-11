@@ -144,6 +144,8 @@ public sealed class GroupStore
         group.Owners.Clear();
         group.ServiceAccountMembers.Clear();
         group.ServiceAccountOwners.Clear();
+        var roleAssignments = await this.db.RoleAssignments.Where(x => x.GroupId == groupId).ToListAsync(ct);
+        this.db.RoleAssignments.RemoveRange(roleAssignments);
         this.db.Groups.Remove(group);
         await this.db.SaveChangesAsync(ct);
 

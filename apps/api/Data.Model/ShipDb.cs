@@ -88,8 +88,10 @@ public class ShipDb : DbContext
 
         modelBuilder.Entity<RoleAssignment>(a =>
         {
-            a.HasIndex(x => new { x.OrgId, x.UserId, x.RoleKey, x.ScopeKind, x.ScopeId }).IsUnique();
+            a.HasIndex(x => new { x.OrgId, x.UserId, x.RoleKey, x.ScopeKind, x.ScopeId });
+            a.HasIndex(x => new { x.OrgId, x.GroupId, x.RoleKey, x.ScopeKind, x.ScopeId });
             a.HasIndex(x => new { x.UserId, x.OrgId });
+            a.HasIndex(x => new { x.GroupId, x.OrgId });
         });
 
         modelBuilder.Entity<ServiceAccountApiKeyClaim>(c =>
@@ -247,6 +249,7 @@ public class ShipDb : DbContext
         {
             a.HasOne(x => x.Org).WithMany().HasForeignKey(x => x.OrgId).OnDelete(DeleteBehavior.Restrict);
             a.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId).OnDelete(DeleteBehavior.Restrict);
+            a.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId).OnDelete(DeleteBehavior.Restrict);
             a.HasOne(x => x.CreatedByUser).WithMany().HasForeignKey(x => x.CreatedBy).OnDelete(DeleteBehavior.Restrict);
         });
 

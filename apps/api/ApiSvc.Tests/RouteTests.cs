@@ -2422,6 +2422,83 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task AttachGroupRole_AssignsBuiltInRole()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var groupId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-builtin-assign@example.com", "Group Built In Assign");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.write");
+            db.Groups.Add(new Group
+            {
+                Id = groupId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "readers",
+                NameUpcase = "READERS",
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/orgs/default/groups/{groupId}/roles/{BuiltInRoleStore.ReaderRoleId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.RoleAssignments.AnyAsync(x => x.GroupId == groupId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.groups.role.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task DetachGroupRole_RemovesBuiltInRole()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var groupId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-group-builtin-detach@example.com", "Group Built In Detach");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.write");
+            db.Groups.Add(new Group
+            {
+                Id = groupId,
+                OrgId = Constants.DefaultOrganizationId,
+                Name = "readers",
+                NameUpcase = "READERS",
+            });
+            db.RoleAssignments.Add(new RoleAssignment
+            {
+                Id = Guid.CreateVersion7(),
+                OrgId = Constants.DefaultOrganizationId,
+                GroupId = groupId,
+                RoleKey = BuiltInRoleStore.ReaderRoleName,
+                ScopeKind = PermissionScopeKind.Organization,
+                ScopeId = "default",
+                CreatedBy = user.Id,
+                CreatedAt = new DateTime(2025, 1, 4, 0, 0, 0, DateTimeKind.Utc),
+            });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/orgs/default/groups/{groupId}/roles/{BuiltInRoleStore.ReaderRoleId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.False(await db.RoleAssignments.AnyAsync(x => x.GroupId == groupId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.groups.role.remove", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task AddRoleClaim_ReturnsAggregateValidationErrorsBeforeDbWrite()
     {
         await using var app = await RouteTestApp.CreateAsync();

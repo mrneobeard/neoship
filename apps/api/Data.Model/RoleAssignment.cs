@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace NeoShip.Data.Model;
 
 /// <summary>
-/// Represents a scoped user role assignment.
+/// Represents a scoped role assignment.
 /// </summary>
 /// <example>
 /// <code>
@@ -42,8 +42,8 @@ public class RoleAssignment
     /// <summary>
     /// Gets or sets the assigned user identifier.
     /// </summary>
-    /// <value>The assigned user identifier.</value>
-    public Guid UserId { get; set; } = Guid.Empty;
+    /// <value>The assigned user identifier, when the assignment targets a user.</value>
+    public Guid? UserId { get; set; } = null;
 
     /// <summary>
     /// Gets or sets the assigned user navigation.
@@ -51,6 +51,19 @@ public class RoleAssignment
     /// <value>The assigned user navigation.</value>
     [ForeignKey(nameof(UserId))]
     public User? User { get; set; }
+
+    /// <summary>
+    /// Gets or sets the assigned group identifier.
+    /// </summary>
+    /// <value>The assigned group identifier, when the assignment targets a group.</value>
+    public Guid? GroupId { get; set; } = null;
+
+    /// <summary>
+    /// Gets or sets the assigned group navigation.
+    /// </summary>
+    /// <value>The assigned group navigation.</value>
+    [ForeignKey(nameof(GroupId))]
+    public Group? Group { get; set; }
 
     /// <summary>
     /// Gets or sets the role key.

@@ -119,6 +119,35 @@ public class PermissionResolverTests
     }
 
     [Fact]
+    public async Task ResolveUserAsync_IncludesBuiltInGroupAssignments()
+    {
+        var (db, resolver) = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "builtin-group-reader@example.com", "Built In Group Reader")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var group = new Group
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "readers",
+            NameUpcase = "READERS",
+        };
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        group.Members.Add(user);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        Assert.True(await BuiltInRoleStore.AssignGroupAsync(db, Constants.DefaultOrganizationId, "default", group.Id, BuiltInRoleStore.ReaderRoleName, user.Id, TestContext.Current.CancellationToken));
+
+        var permissions = await resolver.ResolveUserAsync(user.Id, TestContext.Current.CancellationToken);
+
+        Assert.True(permissions.Allows(PermissionKey.Create("org.members", "read"), PermissionScopeKind.Organization, "default"));
+    }
+
+    [Fact]
     public async Task ServiceAccountResolver_IncludesDirectClaims()
     {
         var (db, resolver) = CreateDatabase();

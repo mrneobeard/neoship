@@ -210,6 +210,96 @@ public static class BuiltInRoleStore
     }
 
     /// <summary>
+    /// Assigns a built-in role to a group.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="orgSlug">The organization slug.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="roleName">The built-in role key.</param>
+    /// <param name="createdBy">The creator user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the group exists; otherwise <see langword="false"/>.</returns>
+    public static async Task<bool> AssignGroupAsync(ShipDb db, Guid orgId, string orgSlug, Guid groupId, string roleName, Guid createdBy, CancellationToken ct = default)
+    {
+        var roleKey = NormalizeRoleKey(roleName);
+        if (!Roles.ContainsKey(roleKey))
+        {
+            throw new ArgumentException("Unknown built-in role.", nameof(roleName));
+        }
+
+        var groupExists = await db.Groups.AnyAsync(x => x.Id == groupId && x.OrgId == orgId, ct);
+        if (!groupExists)
+        {
+            return false;
+        }
+
+        var scopeId = NormalizeScopeId(orgSlug);
+        var exists = await db.RoleAssignments.AnyAsync(
+            x => x.OrgId == orgId
+                && x.GroupId == groupId
+                && x.RoleKey == roleKey
+                && x.ScopeKind == PermissionScopeKind.Organization
+                && x.ScopeId == scopeId,
+            ct);
+        if (exists)
+        {
+            return true;
+        }
+
+        db.RoleAssignments.Add(new RoleAssignment
+        {
+            Id = Factory.NewGuid(),
+            OrgId = orgId,
+            GroupId = groupId,
+            RoleKey = roleKey,
+            ScopeKind = PermissionScopeKind.Organization,
+            ScopeId = scopeId,
+            CreatedBy = createdBy,
+            CreatedAt = DateTime.UtcNow,
+        });
+
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Removes a built-in role assignment from a group.
+    /// </summary>
+    /// <param name="db">The database context.</param>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="orgSlug">The organization slug.</param>
+    /// <param name="groupId">The group identifier.</param>
+    /// <param name="roleName">The built-in role key.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when an assignment was removed; otherwise <see langword="false"/>.</returns>
+    public static async Task<bool> UnassignGroupAsync(ShipDb db, Guid orgId, string orgSlug, Guid groupId, string roleName, CancellationToken ct = default)
+    {
+        var roleKey = NormalizeRoleKey(roleName);
+        if (!Roles.ContainsKey(roleKey))
+        {
+            throw new ArgumentException("Unknown built-in role.", nameof(roleName));
+        }
+
+        var scopeId = NormalizeScopeId(orgSlug);
+        var assignment = await db.RoleAssignments.FirstOrDefaultAsync(
+            x => x.OrgId == orgId
+                && x.GroupId == groupId
+                && x.RoleKey == roleKey
+                && x.ScopeKind == PermissionScopeKind.Organization
+                && x.ScopeId == scopeId,
+            ct);
+        if (assignment is null)
+        {
+            return false;
+        }
+
+        db.RoleAssignments.Remove(assignment);
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
     /// Gets grants for a built-in role at a scope.
     /// </summary>
     /// <param name="roleName">The built-in role key.</param>

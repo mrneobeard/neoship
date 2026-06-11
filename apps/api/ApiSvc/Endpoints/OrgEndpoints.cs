@@ -1657,6 +1657,19 @@ public static class OrgEndpoints
             return auth.Failure;
         }
 
+        var builtInRole = BuiltInRoleStore.FindById(roleId);
+        if (builtInRole is not null)
+        {
+            var assigned = await BuiltInRoleStore.AssignGroupAsync(db, org.Id, orgSlug, groupId, builtInRole.Key, auth.User!.Id, ct);
+            if (!assigned)
+            {
+                return NotFoundError(httpContext);
+            }
+
+            await audit.RecordAsync("org.groups.role.add", org.Id, auth.User.Id, "group.role.add", targetType: "group", targetId: groupId.ToString(), ct: ct);
+            return TypedResults.Ok(Envelope<object>(httpContext, null));
+        }
+
         var ok = await groups.AttachRoleAsync(org.Id, groupId, roleId, ct);
         if (!ok)
         {
@@ -1689,6 +1702,19 @@ public static class OrgEndpoints
         if (auth.Failure is not null)
         {
             return auth.Failure;
+        }
+
+        var builtInRole = BuiltInRoleStore.FindById(roleId);
+        if (builtInRole is not null)
+        {
+            var detachedBuiltIn = await BuiltInRoleStore.UnassignGroupAsync(db, org.Id, orgSlug, groupId, builtInRole.Key, ct);
+            if (!detachedBuiltIn)
+            {
+                return NotFoundError(httpContext);
+            }
+
+            await audit.RecordAsync("org.groups.role.remove", org.Id, auth.User!.Id, "group.role.remove", targetType: "group", targetId: groupId.ToString(), ct: ct);
+            return TypedResults.Ok(Envelope<object>(httpContext, null));
         }
 
         var ok = await groups.DetachRoleAsync(org.Id, groupId, roleId, ct);
