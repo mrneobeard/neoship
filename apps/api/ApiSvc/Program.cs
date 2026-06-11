@@ -181,6 +181,7 @@ app.MapRoleEndpoints();
 app.MapGroupEndpoints();
 app.MapServiceAccountEndpoints();
 app.MapIdentityProviderEndpoints();
+app.MapPermissionEndpoints();
 
 app.MapDefaultEndpoints();
 

@@ -2015,6 +2015,27 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListPermissions_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.roles.read");
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/permissions?limit=1&filter[resource]=org.service_accounts");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.Equal("org.service_accounts", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("resource").GetString());
+    }
+
+    [Fact]
     public async Task ListPermissions_SupportsCollectionQueryContract()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3652,6 +3673,7 @@ public sealed class RouteTests
                             endpoints.MapGroupEndpoints();
                             endpoints.MapServiceAccountEndpoints();
                             endpoints.MapIdentityProviderEndpoints();
+                            endpoints.MapPermissionEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
