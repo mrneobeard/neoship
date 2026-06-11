@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.Data.Model;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Iam;
 
 /// <summary>
 /// Resolves effective permissions for users, API keys, and service accounts.
