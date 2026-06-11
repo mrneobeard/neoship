@@ -41,10 +41,8 @@ public class MigrationTests
 
     private static AuthStore CreateAuthStore(ShipDb db, RequestContext ctx)
     {
-        var passwords = new PasswordStore();
-        var tokens = new TokenStore();
         var snapshot = new PermissionSnapshotCodec();
-        var sessions = new SessionStore(db, tokens, ctx, snapshot, NullLogger<SessionStore>.Instance);
+        var sessions = new SessionStore(db, ctx, snapshot, NullLogger<SessionStore>.Instance);
         var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
         var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
         var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
@@ -52,7 +50,7 @@ public class MigrationTests
         {
             ["Email:PublicBaseUrl"] = "https://localhost",
         }).Build();
-        return new AuthStore(db, passwords, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
+        return new AuthStore(db, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
     }
 
     [Fact]
@@ -239,8 +237,7 @@ public class MigrationTests
             Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
 
         Assert.NotNull(rawToken);
-        var tokens = new TokenStore();
-        var sessions = new SessionStore(db, tokens, ctx, new PermissionSnapshotCodec(), NullLogger<SessionStore>.Instance);
+        var sessions = new SessionStore(db, ctx, new PermissionSnapshotCodec(), NullLogger<SessionStore>.Instance);
         var session = await sessions.ValidateSessionAsync(rawToken!, TestContext.Current.CancellationToken);
         Assert.NotNull(session);
     }
@@ -255,8 +252,7 @@ public class MigrationTests
             "revoke@example.com", "Revoke User", "password123",
             Constants.DefaultOrganizationId, TestContext.Current.CancellationToken);
 
-        var tokens = new TokenStore();
-        var sessions = new SessionStore(db, tokens, ctx, new PermissionSnapshotCodec(), NullLogger<SessionStore>.Instance);
+        var sessions = new SessionStore(db, ctx, new PermissionSnapshotCodec(), NullLogger<SessionStore>.Instance);
         await sessions.RevokeSessionAsync(session!.Id, "test", TestContext.Current.CancellationToken);
 
         var active = await sessions.ListSessionsAsync(session.UserId, TestContext.Current.CancellationToken);

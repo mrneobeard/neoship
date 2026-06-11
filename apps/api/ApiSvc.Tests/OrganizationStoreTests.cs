@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 

@@ -299,7 +299,7 @@ public static class AuthEndpoints
         if (rawToken is not null)
         {
             var tokenBytes = Convert.FromBase64String(rawToken);
-            var digest = TokenStore.ComputeDigest(tokenBytes);
+            var digest = TokenGenerator.ComputeDigest(tokenBytes);
             var digestBase64 = Convert.ToBase64String(digest);
             await auth.LogoutAsync(digestBase64, ct);
         }

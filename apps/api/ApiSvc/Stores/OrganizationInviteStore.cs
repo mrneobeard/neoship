@@ -20,19 +20,16 @@ public sealed class OrganizationInviteStore
     private static readonly TimeSpan DefaultInviteLifetime = TimeSpan.FromDays(7);
 
     private readonly ShipDb db;
-    private readonly TokenStore tokens;
     private readonly ILogger<OrganizationInviteStore> logger;
 
     /// <summary>
     /// Initializes a new <see cref="OrganizationInviteStore"/> instance.
     /// </summary>
     /// <param name="db">The database context.</param>
-    /// <param name="tokens">The token helper.</param>
     /// <param name="logger">The logger.</param>
-    public OrganizationInviteStore(ShipDb db, TokenStore tokens, ILogger<OrganizationInviteStore> logger)
+    public OrganizationInviteStore(ShipDb db, ILogger<OrganizationInviteStore> logger)
     {
         this.db = db;
-        this.tokens = tokens;
         this.logger = logger;
     }
 
@@ -69,7 +66,7 @@ public sealed class OrganizationInviteStore
         CancellationToken ct = default)
     {
         var normalizedEmail = email.Trim();
-        var rawToken = this.tokens.GenerateResetToken();
+        var rawToken = TokenGenerator.GenerateResetToken();
         var invite = new OrganizationInvite
         {
             Id = Guid.CreateVersion7(),
@@ -77,7 +74,7 @@ public sealed class OrganizationInviteStore
             InvitedByUserId = invitedByUserId,
             Email = normalizedEmail,
             EmailUpcase = normalizedEmail.ToUpperInvariant(),
-            TokenDigest = TokenStore.ComputeDigestBase64(rawToken),
+            TokenDigest = TokenGenerator.ComputeDigestBase64(rawToken),
             PendingRoleIdsJson = JsonSerializer.Serialize(roleIds),
             PendingGroupIdsJson = JsonSerializer.Serialize(groupIds),
             CreatedAt = DateTime.UtcNow,
@@ -122,7 +119,7 @@ public sealed class OrganizationInviteStore
     /// <returns>The accepted invite, or <see langword="null"/>.</returns>
     public async Task<OrganizationInvite?> AcceptAsync(string rawToken, Guid userId, CancellationToken ct = default)
     {
-        var tokenDigest = TokenStore.ComputeDigestBase64(rawToken);
+        var tokenDigest = TokenGenerator.ComputeDigestBase64(rawToken);
         var invite = await this.db.OrganizationInvites.FirstOrDefaultAsync(x => x.TokenDigest == tokenDigest, ct);
         if (invite is null || invite.AcceptedAt is not null || invite.RevokedAt is not null || invite.ExpiresAt <= DateTime.UtcNow)
         {

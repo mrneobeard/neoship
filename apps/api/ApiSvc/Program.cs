@@ -98,8 +98,6 @@ builder.Services.AddSingleton<PermissionClaimCodec>(sp => new PermissionClaimCod
 builder.Services.AddSingleton<PermissionSnapshotCodec>();
 builder.Services.AddScoped<PermissionResolver>();
 
-builder.Services.AddSingleton<PasswordStore>();
-builder.Services.AddSingleton<TokenStore>();
 builder.Services.AddSingleton<TokenExchangeStore>();
 builder.Services.AddSingleton<IEmailSender>(sp =>
 {

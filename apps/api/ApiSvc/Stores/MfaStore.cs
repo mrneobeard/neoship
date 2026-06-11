@@ -28,19 +28,16 @@ public sealed class MfaStore
 
     private readonly ShipDb db;
     private readonly ILogger<MfaStore> logger;
-    private readonly PasswordStore passwords;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MfaStore"/> class.
     /// </summary>
     /// <param name="db">The database context.</param>
     /// <param name="logger">The MFA store logger.</param>
-    /// <param name="passwords">The password hashing store.</param>
-    public MfaStore(ShipDb db, ILogger<MfaStore> logger, PasswordStore passwords)
+    public MfaStore(ShipDb db, ILogger<MfaStore> logger)
     {
         this.db = db;
         this.logger = logger;
-        this.passwords = passwords;
     }
 
     /// <summary>
@@ -155,7 +152,7 @@ public sealed class MfaStore
                 UserId = userId,
                 Name = "Recovery code",
                 Type = MfaFactorType.RecoverCode.Id,
-                ValueEncrypted = Encoding.UTF8.GetBytes(this.passwords.Hash(NormalizeRecoveryCode(code))),
+                ValueEncrypted = Encoding.UTF8.GetBytes(PasswordHashing.Hash(NormalizeRecoveryCode(code))),
                 VerifiedAt = now,
                 CreatedAt = now,
             });
@@ -181,7 +178,7 @@ public sealed class MfaStore
             .Where(x => x.UserId == userId && x.Type == MfaFactorType.RecoverCode.Id)
             .ToListAsync(ct);
 
-        var factor = factors.FirstOrDefault(x => this.passwords.Verify(normalized, Encoding.UTF8.GetString(x.ValueEncrypted)).Success);
+        var factor = factors.FirstOrDefault(x => PasswordHashing.Verify(normalized, Encoding.UTF8.GetString(x.ValueEncrypted)).Success);
         if (factor is null)
         {
             return false;

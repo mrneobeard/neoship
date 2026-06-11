@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 using NeoShip.Data.Model;
 
-namespace NeoShip.ApiSvc.Stores;
+namespace NeoShip.ApiSvc.Lib.Iam;
 
 /// <summary>
 /// Assigns and resolves code-owned organization roles.

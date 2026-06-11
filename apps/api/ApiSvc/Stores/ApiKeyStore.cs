@@ -25,7 +25,7 @@ public class ApiKeyStore
         rng.GetBytes(keyBytes);
 
         var plaintextKey = "nsu_" + Convert.ToBase64String(keyBytes);
-        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+        var digest = TokenGenerator.ComputeDigestBase64(keyBytes);
 
         var apiKey = new UserApiKey(userId, name, digest, scopesJson ?? "[]", expiresAt, description);
 
@@ -45,7 +45,7 @@ public class ApiKeyStore
             return null;
         }
 
-        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+        var digest = TokenGenerator.ComputeDigestBase64(keyBytes);
 
         var key = await db.UserApiKeys
             .Include(k => k.User)

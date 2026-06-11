@@ -118,10 +118,8 @@ public sealed class ProviderMigrationE2ETests
 
     private static AuthStore CreateAuthStore(ShipDb db, RequestContext ctx)
     {
-        var passwords = new PasswordStore();
-        var tokens = new TokenStore();
         var snapshot = new PermissionSnapshotCodec();
-        var sessions = new SessionStore(db, tokens, ctx, snapshot, NullLogger<SessionStore>.Instance);
+        var sessions = new SessionStore(db, ctx, snapshot, NullLogger<SessionStore>.Instance);
         var audit = new AuditStore(db, ctx, NullLogger<AuditStore>.Instance);
         var apiKeys = new ApiKeyStore(db, NullLogger<ApiKeyStore>.Instance);
         var permissions = new PermissionResolver(db, new PermissionClaimCodec(new PermissionRegistry(CorePermissions.All)));
@@ -130,7 +128,7 @@ public sealed class ProviderMigrationE2ETests
             ["Email:PublicBaseUrl"] = "https://localhost",
         }).Build();
 
-        return new AuthStore(db, passwords, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
+        return new AuthStore(db, sessions, audit, apiKeys, permissions, new TestEmailSender(), configuration, ctx, NullLogger<AuthStore>.Instance);
     }
 
     private static async Task StartOrSkipAsync(Task startTask)

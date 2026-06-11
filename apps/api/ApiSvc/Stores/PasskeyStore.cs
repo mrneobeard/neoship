@@ -271,6 +271,6 @@ public sealed class PasskeyStore
     /// <returns>The Base64 digest.</returns>
     public static string ComputeCredentialIdDigest(byte[] credentialId)
     {
-        return TokenStore.ComputeDigestBase64(credentialId);
+        return TokenGenerator.ComputeDigestBase64(credentialId);
     }
 }

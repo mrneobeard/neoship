@@ -74,7 +74,6 @@ public class MeAuthenticationTests
 
         var sessions = new SessionStore(
             db,
-            new TokenStore(),
             new RequestContext(),
             new PermissionSnapshotCodec(),
             NullLogger<SessionStore>.Instance);

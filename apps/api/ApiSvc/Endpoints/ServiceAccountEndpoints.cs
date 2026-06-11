@@ -39,6 +39,7 @@ public static class ServiceAccountEndpoints
         group.MapPost("/{serviceAccountId:guid}/enable", EnableServiceAccountAsync);
         group.MapGet("/{serviceAccountId:guid}/api-keys", ListServiceAccountApiKeysAsync);
         group.MapPost("/{serviceAccountId:guid}/api-keys", CreateServiceAccountApiKeyAsync);
+        group.MapPost("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/rotate", RotateServiceAccountApiKeyAsync);
         group.MapPost("/{serviceAccountId:guid}/api-keys/{apiKeyId:guid}/revoke", RevokeServiceAccountApiKeyAsync);
         group.MapGet("/{serviceAccountId:guid}/claims", ListServiceAccountClaimsAsync);
         group.MapPost("/{serviceAccountId:guid}/claims", AddServiceAccountClaimAsync);
@@ -58,6 +59,8 @@ public static class ServiceAccountEndpoints
     private sealed record ServiceAccountApiKeyResponse(Guid Id, string Name, string? Description, DateTime CreatedAt, DateTime? ExpiresAt);
 
     private sealed record CreateServiceAccountApiKeyRequest(string Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
+
+    private sealed record RotateServiceAccountApiKeyRequest(string? Name, string? Description, string? ScopesJson, DateTime? ExpiresAt);
 
     private sealed record CreateServiceAccountApiKeyResponse(Guid Id, string Name, string PlaintextKey, DateTime CreatedAt);
 
@@ -247,16 +250,40 @@ public static class ServiceAccountEndpoints
             return ValidationError(httpContext, validation);
         }
 
-        if (await store.GetAsync(auth.Org.Id, serviceAccountId, ct) is null)
+        var created = await store.CreateApiKeyAsync(auth.Org.Id, serviceAccountId, req.Name, req.Description, req.ScopesJson, ResolveApiKeyExpiresAt(req.ExpiresAt, configuration), ct);
+        if (created is null)
         {
             return NotFoundError(httpContext);
         }
 
-        var (plaintextKey, apiKey) = store.GenerateApiKey(serviceAccountId, req.Name, req.Description, req.ScopesJson, ResolveApiKeyExpiresAt(req.ExpiresAt, configuration));
-        db.ServiceAccountApiKeys.Add(apiKey);
-        await db.SaveChangesAsync(ct);
+        var (plaintextKey, apiKey) = created.Value;
         await audit.RecordAsync("org.service_accounts.api_key.create", auth.Org.Id, auth.User!.Id, "service_account.api_key.create", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
         return TypedResults.Created($"/api/v1/service-accounts/{serviceAccountId}/api-keys/{apiKey.Id}", Envelope(httpContext, new CreateServiceAccountApiKeyResponse(apiKey.Id, apiKey.Name, plaintextKey, apiKey.CreatedAt)));
+    }
+
+    private static async Task<IResult> RotateServiceAccountApiKeyAsync(Guid serviceAccountId, Guid apiKeyId, [FromBody] RotateServiceAccountApiKeyRequest req, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, IConfiguration configuration, CancellationToken ct)
+    {
+        var auth = await RequireCurrentOrgPermissionAsync(httpContext, sessions, permissions, db, PermissionKey.Create("org.service_accounts", "write"), ct);
+        if (auth.Failure is not null)
+        {
+            return auth.Failure;
+        }
+
+        var validation = ValidateRotateServiceAccountApiKey(req, configuration);
+        if (validation.Count > 0)
+        {
+            return ValidationError(httpContext, validation);
+        }
+
+        var rotated = await store.RotateApiKeyAsync(auth.Org.Id, serviceAccountId, apiKeyId, req.Name, req.Description, req.ScopesJson, req.ExpiresAt is null ? null : ResolveApiKeyExpiresAt(req.ExpiresAt, configuration), ResolveApiKeyExpiresAt(null, configuration), ct);
+        if (rotated is null)
+        {
+            return NotFoundError(httpContext);
+        }
+
+        var (plaintextKey, newKey) = rotated.Value;
+        await audit.RecordAsync("org.service_accounts.api_key.rotate", auth.Org.Id, auth.User!.Id, "service_account.api_key.rotate", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
+        return TypedResults.Created($"/api/v1/service-accounts/{serviceAccountId}/api-keys/{newKey.Id}", Envelope(httpContext, new CreateServiceAccountApiKeyResponse(newKey.Id, newKey.Name, plaintextKey, newKey.CreatedAt)));
     }
 
     private static async Task<IResult> RevokeServiceAccountApiKeyAsync(Guid serviceAccountId, Guid apiKeyId, HttpContext httpContext, SessionStore sessions, PermissionResolver permissions, ShipDb db, ServiceAccountStore store, AuditStore audit, CancellationToken ct)
@@ -447,6 +474,36 @@ public static class ServiceAccountEndpoints
     private static Dictionary<string, string[]> ValidateServiceAccountApiKey(CreateServiceAccountApiKeyRequest req, IConfiguration configuration)
     {
         var errors = ValidateServiceAccountInput(req.Name, req.Description, requireName: true);
+        if (!IsValidJsonArray(req.ScopesJson))
+        {
+            errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];
+        }
+
+        if (req.ExpiresAt is not null && req.ExpiresAt <= DateTime.UtcNow)
+        {
+            errors["expiresAt"] = ["Expiration must be in the future when provided."];
+        }
+        else if (req.ExpiresAt is not null && req.ExpiresAt > MaxApiKeyExpiresAt(configuration))
+        {
+            errors["expiresAt"] = ["Expiration exceeds the maximum API key lifetime."];
+        }
+
+        return errors;
+    }
+
+    private static Dictionary<string, string[]> ValidateRotateServiceAccountApiKey(RotateServiceAccountApiKeyRequest req, IConfiguration configuration)
+    {
+        var errors = new Dictionary<string, string[]>();
+        if (req.Name is not null && (string.IsNullOrWhiteSpace(req.Name) || req.Name.Trim().Length > 160))
+        {
+            errors["name"] = ["Name must be 160 characters or fewer when provided."];
+        }
+
+        if (req.Description is not null && req.Description.Length > 1024)
+        {
+            errors["description"] = ["Description must be 1024 characters or fewer when provided."];
+        }
+
         if (!IsValidJsonArray(req.ScopesJson))
         {
             errors["scopesJson"] = ["Scopes JSON must be a valid JSON array when provided."];

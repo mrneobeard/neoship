@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Stores;
@@ -169,7 +170,7 @@ public sealed class SsoStore
                 UserId = user.Id,
                 Email = externalIdentity.Email,
                 EmailUpcase = emailUpcase,
-                EmailDigest = TokenStore.ComputeDigestBase64(externalIdentity.Email),
+                EmailDigest = TokenGenerator.ComputeDigestBase64(externalIdentity.Email),
                 StatusId = UserEmailStatus.Active.Id,
                 CreatedBy = provider.UserId,
                 CreatedAt = DateTime.UtcNow,
@@ -330,7 +331,7 @@ public sealed class SsoStore
 
     private static string ComputeSubjectDigest(string subject)
     {
-        return TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes(subject));
+        return TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes(subject));
     }
 
     private async Task<bool> HasAlternativeSignInMethodAsync(User user, Guid excludingExternalIdentityId, Organization org, CancellationToken ct)

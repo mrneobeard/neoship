@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
@@ -97,7 +98,7 @@ public static class AdminEndpoints
                 UserId = user.Id,
                 Email = email,
                 EmailUpcase = emailUpcase,
-                EmailDigest = TokenStore.ComputeDigestBase64(email),
+                EmailDigest = TokenGenerator.ComputeDigestBase64(email),
                 StatusId = UserEmailStatus.Active.Id,
                 CreatedBy = user.Id,
                 CreatedAt = now,
@@ -110,20 +111,19 @@ public static class AdminEndpoints
         user.OrgId = org.Id;
         user.StatusId = UserStatus.Active.Id;
 
-        var passwordStore = new PasswordStore();
         var passwordAuth = await db.UserPasswordAuths.FirstOrDefaultAsync(x => x.UserId == user.Id, ct);
         if (passwordAuth is null)
         {
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = passwordStore.Hash(req.Password),
+                PasswordHash = PasswordHashing.Hash(req.Password),
                 CreatedAt = now,
             });
         }
         else
         {
-            passwordAuth.PasswordHash = passwordStore.Hash(req.Password);
+            passwordAuth.PasswordHash = PasswordHashing.Hash(req.Password);
             passwordAuth.PasswordChangedAt = now;
             passwordAuth.FailedAttempts = 0;
             passwordAuth.LockedUntil = null;

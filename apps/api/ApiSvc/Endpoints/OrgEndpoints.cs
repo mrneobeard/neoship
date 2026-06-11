@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Models;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
@@ -2118,18 +2119,13 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var sa = await store.GetAsync(org.Id, serviceAccountId, ct);
-        if (sa is null)
+        var created = await store.CreateApiKeyAsync(org.Id, serviceAccountId, req.Name, req.Description, req.ScopesJson, ResolveApiKeyExpiresAt(req.ExpiresAt, configuration), ct);
+        if (created is null)
         {
             return NotFoundError(httpContext);
         }
 
-        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt, configuration);
-        var (plaintextKey, apiKey) = store.GenerateApiKey(
-            serviceAccountId, req.Name, req.Description, req.ScopesJson, expiresAt);
-
-        db.ServiceAccountApiKeys.Add(apiKey);
-        await db.SaveChangesAsync(ct);
+        var (plaintextKey, apiKey) = created.Value;
         await audit.RecordAsync("org.service_accounts.api_key.create", org.Id, auth.User!.Id, "service_account.api_key.create", targetType: "service_account", targetId: serviceAccountId.ToString(), ct: ct);
 
         return TypedResults.Created(
@@ -2243,32 +2239,13 @@ public static class OrgEndpoints
             return Error(httpContext, StatusCodes.Status422UnprocessableEntity, "validation_failed", "Validation failed.", new Dictionary<string, object?> { ["fields"] = validation });
         }
 
-        var oldKey = await db.ServiceAccountApiKeys
-            .Include(x => x.ServiceAccount)
-            .FirstOrDefaultAsync(x => x.Id == apiKeyId
-                && x.ServiceAccountId == serviceAccountId
-                && x.ServiceAccount != null
-                && x.ServiceAccount.OrgId == org.Id
-                && x.ServiceAccount.DeletedAt == null
-                && x.DeletedAt == null
-                && x.RevokedAt == null, ct);
-        if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
+        var rotated = await store.RotateApiKeyAsync(org.Id, serviceAccountId, apiKeyId, req.Name, req.Description, req.ScopesJson, req.ExpiresAt is null ? null : ResolveApiKeyExpiresAt(req.ExpiresAt, configuration), ResolveApiKeyExpiresAt(null, configuration), ct);
+        if (rotated is null)
         {
             return NotFoundError(httpContext);
         }
 
-        var expiresAt = ResolveApiKeyExpiresAt(req.ExpiresAt ?? oldKey.ExpiresAt, configuration);
-        var (plaintextKey, newKey) = store.GenerateApiKey(
-            serviceAccountId,
-            string.IsNullOrWhiteSpace(req.Name) ? oldKey.Name : req.Name.Trim(),
-            req.Description ?? oldKey.Description,
-            req.ScopesJson ?? oldKey.ScopesJson,
-            expiresAt);
-
-        oldKey.RevokedAt = DateTime.UtcNow;
-        db.ServiceAccountApiKeys.Add(newKey);
-        await db.SaveChangesAsync(ct);
-
+        var (plaintextKey, newKey) = rotated.Value;
         await audit.RecordAsync("org.service_accounts.api_key.rotate", org.Id, auth.User!.Id, "service_account.api_key.rotate", targetType: "service_account_api_key", targetId: apiKeyId.ToString(), ct: ct);
         return TypedResults.Created(
             $"/api/v1/orgs/{orgSlug}/service-accounts/{serviceAccountId}/api-keys/{newKey.Id}",

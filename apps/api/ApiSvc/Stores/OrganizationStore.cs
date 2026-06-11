@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.Data.Model;
 
 namespace NeoShip.ApiSvc.Stores;

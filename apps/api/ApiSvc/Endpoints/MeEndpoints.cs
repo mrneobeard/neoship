@@ -222,7 +222,7 @@ public static class MeEndpoints
                 .ExecuteUpdateAsync(x => x
                     .SetProperty(e => e.Email, anonymousEmail)
                     .SetProperty(e => e.EmailUpcase, anonymousEmail.ToUpperInvariant())
-                    .SetProperty(e => e.EmailDigest, TokenStore.ComputeDigestBase64(anonymousEmail))
+                    .SetProperty(e => e.EmailDigest, TokenGenerator.ComputeDigestBase64(anonymousEmail))
                     .SetProperty(e => e.VerificationTokenDigest, (string?)null)
                     .SetProperty(e => e.VerificationTokenExpiresAt, (DateTime?)null), ct);
         }

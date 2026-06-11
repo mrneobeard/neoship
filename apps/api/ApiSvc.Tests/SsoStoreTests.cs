@@ -3,6 +3,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -326,7 +327,7 @@ public class SsoStoreTests
             UserId = linkedUserId,
             ProviderId = 10,
             Subject = "subject",
-            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+            SubjectDigest = TokenGenerator.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
             Email = "linked-user@example.com",
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
@@ -379,7 +380,7 @@ public class SsoStoreTests
             UserId = userId,
             ProviderId = 10,
             Subject = "subject",
-            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+            SubjectDigest = TokenGenerator.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -423,7 +424,7 @@ public class SsoStoreTests
             UserId = userId,
             ProviderId = 10,
             Subject = "subject",
-            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+            SubjectDigest = TokenGenerator.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 
@@ -469,7 +470,7 @@ public class SsoStoreTests
             UserId = userId,
             ProviderId = 10,
             Subject = "subject",
-            SubjectDigest = TokenStore.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
+            SubjectDigest = TokenGenerator.ComputeDigestBase64(System.Text.Encoding.UTF8.GetBytes("subject")),
         });
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);
 

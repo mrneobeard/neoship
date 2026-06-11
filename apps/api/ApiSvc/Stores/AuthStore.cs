@@ -27,7 +27,6 @@ public enum LoginResult
 public class AuthStore
 {
     private readonly ShipDb db;
-    private readonly PasswordStore passwords;
     private readonly SessionStore sessions;
     private readonly AuditStore audit;
     private readonly ApiKeyStore apiKeys;
@@ -43,7 +42,6 @@ public class AuthStore
     /// Initializes a new <see cref="AuthStore"/> instance.
     /// </summary>
     /// <param name="db">The database context.</param>
-    /// <param name="passwords">The password helper.</param>
     /// <param name="sessions">The session store.</param>
     /// <param name="audit">The audit store.</param>
     /// <param name="apiKeys">The API key store.</param>
@@ -52,10 +50,9 @@ public class AuthStore
     /// <param name="configuration">The application configuration.</param>
     /// <param name="requestContext">The request context.</param>
     /// <param name="logger">The logger.</param>
-    public AuthStore(ShipDb db, PasswordStore passwords, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, PermissionResolver permissions, IEmailSender emails, IConfiguration configuration, RequestContext requestContext, ILogger<AuthStore> logger)
+    public AuthStore(ShipDb db, SessionStore sessions, AuditStore audit, ApiKeyStore apiKeys, PermissionResolver permissions, IEmailSender emails, IConfiguration configuration, RequestContext requestContext, ILogger<AuthStore> logger)
     {
         this.db = db;
-        this.passwords = passwords;
         this.sessions = sessions;
         this.audit = audit;
         this.apiKeys = apiKeys;
@@ -104,7 +101,7 @@ public class AuthStore
             StatusId = UserStatus.Active.Id,
         };
 
-        var emailDigest = TokenStore.ComputeDigestBase64(email);
+        var emailDigest = TokenGenerator.ComputeDigestBase64(email);
 
         var userEmail = new UserEmail
         {
@@ -119,7 +116,7 @@ public class AuthStore
             VerifiedAt = DateTime.UtcNow,
         };
 
-        var passwordHash = this.passwords.Hash(password);
+        var passwordHash = PasswordHashing.Hash(password);
         var userPasswordAuth = new UserPasswordAuth
         {
             UserId = userId,
@@ -224,7 +221,7 @@ public class AuthStore
             return (LoginResult.AccountLocked, null, null, null);
         }
 
-        var (success, needsRehash) = this.passwords.Verify(password, auth.PasswordHash);
+        var (success, needsRehash) = PasswordHashing.Verify(password, auth.PasswordHash);
 
         if (!success)
         {
@@ -246,7 +243,7 @@ public class AuthStore
 
         if (needsRehash)
         {
-            auth.PasswordHash = this.passwords.Hash(password);
+            auth.PasswordHash = PasswordHashing.Hash(password);
         }
 
         auth.FailedAttempts = 0;
@@ -386,7 +383,7 @@ public class AuthStore
         }
 
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var digest = TokenStore.ComputeDigestBase64(rawToken);
+        var digest = TokenGenerator.ComputeDigestBase64(rawToken);
 
         auth.ResetTokenDigest = digest;
         auth.ResetTokenExpiresAt = DateTime.UtcNow.AddMinutes(15);
@@ -405,7 +402,7 @@ public class AuthStore
     {
         using var activity = activitySource.StartActivity("auth.password_reset_confirm", ActivityKind.Internal);
 
-        var digest = TokenStore.ComputeDigestBase64(token);
+        var digest = TokenGenerator.ComputeDigestBase64(token);
 
         var auth = await this.db.UserPasswordAuths
             .FirstOrDefaultAsync(a => a.ResetTokenDigest == digest
@@ -419,7 +416,7 @@ public class AuthStore
             return false;
         }
 
-        auth.PasswordHash = this.passwords.Hash(newPassword);
+        auth.PasswordHash = PasswordHashing.Hash(newPassword);
         auth.ResetTokenDigest = null;
         auth.ResetTokenExpiresAt = null;
         auth.FailedAttempts = 0;
@@ -453,7 +450,7 @@ public class AuthStore
         }
 
         var rawToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32));
-        var digest = TokenStore.ComputeDigestBase64(rawToken);
+        var digest = TokenGenerator.ComputeDigestBase64(rawToken);
 
         userEmail.VerificationTokenDigest = digest;
         userEmail.VerificationTokenExpiresAt = DateTime.UtcNow.AddHours(24);
@@ -471,7 +468,7 @@ public class AuthStore
 
     public async Task<bool> ConfirmEmailVerificationAsync(string token, CancellationToken ct = default)
     {
-        var digest = TokenStore.ComputeDigestBase64(token);
+        var digest = TokenGenerator.ComputeDigestBase64(token);
 
         var userEmail = await this.db.UserEmails
             .FirstOrDefaultAsync(e => e.VerificationTokenDigest == digest

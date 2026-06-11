@@ -15,7 +15,6 @@ namespace NeoShip.ApiSvc.Stores;
 public class SessionStore
 {
     private readonly ShipDb db;
-    private readonly TokenStore tokens;
     private readonly RequestContext requestContext;
     private readonly ILogger<SessionStore> logger;
     private readonly PermissionSnapshotCodec snapshotCodec;
@@ -24,14 +23,12 @@ public class SessionStore
     /// Initializes a new <see cref="SessionStore"/> instance.
     /// </summary>
     /// <param name="db">The database context.</param>
-    /// <param name="tokens">The token helper.</param>
     /// <param name="requestContext">The request context.</param>
     /// <param name="snapshotCodec">The permission snapshot codec.</param>
     /// <param name="logger">The logger.</param>
-    public SessionStore(ShipDb db, TokenStore tokens, RequestContext requestContext, PermissionSnapshotCodec snapshotCodec, ILogger<SessionStore> logger)
+    public SessionStore(ShipDb db, RequestContext requestContext, PermissionSnapshotCodec snapshotCodec, ILogger<SessionStore> logger)
     {
         this.db = db;
-        this.tokens = tokens;
         this.requestContext = requestContext;
         this.snapshotCodec = snapshotCodec;
         this.logger = logger;
@@ -51,7 +48,7 @@ public class SessionStore
         PermissionSet? permissions = null,
         CancellationToken ct = default)
     {
-        var (rawToken, digest) = tokens.GenerateSessionToken();
+        var (rawToken, digest) = TokenGenerator.GenerateSessionToken();
         var digestBase64 = Convert.ToBase64String(digest);
 
         var session = new UserSession
@@ -83,7 +80,7 @@ public class SessionStore
     public async Task<UserSession?> ValidateSessionAsync(string rawToken, CancellationToken ct = default)
     {
         var tokenBytes = Convert.FromBase64String(rawToken);
-        var digest = TokenStore.ComputeDigest(tokenBytes);
+        var digest = TokenGenerator.ComputeDigest(tokenBytes);
         var digestBase64 = Convert.ToBase64String(digest);
 
         var session = await db.UserSessions

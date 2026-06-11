@@ -46,7 +46,7 @@ public sealed class OrganizationInviteStoreTests
 
     private static OrganizationInviteStore CreateStore(ShipDb db)
     {
-        return new OrganizationInviteStore(db, new TokenStore(), NullLogger<OrganizationInviteStore>.Instance);
+        return new OrganizationInviteStore(db, NullLogger<OrganizationInviteStore>.Instance);
     }
 
     /// <summary>

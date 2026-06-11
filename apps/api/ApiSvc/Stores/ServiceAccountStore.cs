@@ -115,7 +115,7 @@ public class ServiceAccountStore
         rng.GetBytes(keyBytes);
 
         var plaintextKey = "nssa_" + Convert.ToBase64String(keyBytes);
-        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+        var digest = TokenGenerator.ComputeDigestBase64(keyBytes);
 
         var apiKey = new ServiceAccountApiKey
         {
@@ -133,6 +133,89 @@ public class ServiceAccountStore
     }
 
     /// <summary>
+    /// Creates a service account API key within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="name">The API key name.</param>
+    /// <param name="description">The API key description.</param>
+    /// <param name="scopesJson">The API key scopes JSON.</param>
+    /// <param name="expiresAt">The API key expiration.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The plaintext key and created <see cref="ServiceAccountApiKey"/>, or <see langword="null"/>.</returns>
+    public async Task<(string PlaintextKey, ServiceAccountApiKey ApiKey)?> CreateApiKeyAsync(
+        Guid orgId,
+        Guid serviceAccountId,
+        string name,
+        string? description,
+        string? scopesJson,
+        DateTime? expiresAt,
+        CancellationToken ct = default)
+    {
+        var exists = await db.ServiceAccounts.AnyAsync(x => x.Id == serviceAccountId && x.OrgId == orgId && x.DeletedAt == null, ct);
+        if (!exists)
+        {
+            return null;
+        }
+
+        var generated = GenerateApiKey(serviceAccountId, name, description, scopesJson, expiresAt);
+        db.ServiceAccountApiKeys.Add(generated.ApiKey);
+        await db.SaveChangesAsync(ct);
+        return generated;
+    }
+
+    /// <summary>
+    /// Rotates a service account API key within an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="serviceAccountId">The service account identifier.</param>
+    /// <param name="apiKeyId">The API key identifier.</param>
+    /// <param name="name">The replacement API key name.</param>
+    /// <param name="description">The replacement API key description.</param>
+    /// <param name="scopesJson">The replacement API key scopes JSON.</param>
+    /// <param name="expiresAt">The requested replacement API key expiration.</param>
+    /// <param name="defaultExpiresAt">The replacement API key expiration when neither the request nor old key specify one.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The plaintext key and created <see cref="ServiceAccountApiKey"/>, or <see langword="null"/>.</returns>
+    public async Task<(string PlaintextKey, ServiceAccountApiKey ApiKey)?> RotateApiKeyAsync(
+        Guid orgId,
+        Guid serviceAccountId,
+        Guid apiKeyId,
+        string? name,
+        string? description,
+        string? scopesJson,
+        DateTime? expiresAt,
+        DateTime defaultExpiresAt,
+        CancellationToken ct = default)
+    {
+        var oldKey = await db.ServiceAccountApiKeys
+            .Include(x => x.ServiceAccount)
+            .FirstOrDefaultAsync(x => x.Id == apiKeyId
+                && x.ServiceAccountId == serviceAccountId
+                && x.ServiceAccount != null
+                && x.ServiceAccount.OrgId == orgId
+                && x.ServiceAccount.DeletedAt == null
+                && x.DeletedAt == null
+                && x.RevokedAt == null, ct);
+        if (oldKey is null || oldKey.ExpiresAt <= DateTime.UtcNow)
+        {
+            return null;
+        }
+
+        var generated = GenerateApiKey(
+            serviceAccountId,
+            string.IsNullOrWhiteSpace(name) ? oldKey.Name : name.Trim(),
+            description ?? oldKey.Description,
+            scopesJson ?? oldKey.ScopesJson,
+            expiresAt ?? oldKey.ExpiresAt ?? defaultExpiresAt);
+
+        oldKey.RevokedAt = DateTime.UtcNow;
+        db.ServiceAccountApiKeys.Add(generated.ApiKey);
+        await db.SaveChangesAsync(ct);
+        return generated;
+    }
+
+    /// <summary>
     /// Authenticates a service account API key.
     /// </summary>
     /// <param name="rawKey">The plaintext API key.</param>
@@ -145,7 +228,7 @@ public class ServiceAccountStore
             return null;
         }
 
-        var digest = TokenStore.ComputeDigestBase64(keyBytes);
+        var digest = TokenGenerator.ComputeDigestBase64(keyBytes);
 
         var key = await db.ServiceAccountApiKeys
             .Include(k => k.ServiceAccount)

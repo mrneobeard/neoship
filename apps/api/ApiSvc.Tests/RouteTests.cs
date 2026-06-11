@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 
 using NeoShip.ApiSvc;
 using NeoShip.ApiSvc.Endpoints;
+using NeoShip.ApiSvc.Lib.Iam;
 using NeoShip.ApiSvc.Stores;
 using NeoShip.Data.Model;
 
@@ -94,7 +95,7 @@ public sealed class RouteTests
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = new PasswordStore().Hash("password123"),
+                PasswordHash = PasswordHashing.Hash("password123"),
             });
             var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
             org.RequireSso = true;
@@ -118,7 +119,7 @@ public sealed class RouteTests
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = new PasswordStore().Hash("password123"),
+                PasswordHash = PasswordHashing.Hash("password123"),
             });
             var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
             org.MfaPolicyId = OrganizationMfaPolicy.AllMembers.Id;
@@ -315,7 +316,7 @@ public sealed class RouteTests
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = new PasswordStore().Hash("current-password"),
+                PasswordHash = PasswordHashing.Hash("current-password"),
             });
         });
 
@@ -340,7 +341,7 @@ public sealed class RouteTests
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = new PasswordStore().Hash("current-password"),
+                PasswordHash = PasswordHashing.Hash("current-password"),
             });
             var org = db.Orgs.Single(o => o.Id == Constants.DefaultOrganizationId);
             org.AllowPasswordAuth = false;
@@ -581,7 +582,7 @@ public sealed class RouteTests
                 UserId = user.Id,
                 Email = user.Email,
                 EmailUpcase = user.EmailUpcase,
-                EmailDigest = TokenStore.ComputeDigestBase64(user.Email),
+                EmailDigest = TokenGenerator.ComputeDigestBase64(user.Email),
                 StatusId = UserEmailStatus.Active.Id,
                 CreatedBy = user.Id,
                 CreatedAt = DateTime.UtcNow,
@@ -963,7 +964,7 @@ public sealed class RouteTests
                 UserId = user.Id,
                 ProviderId = 10,
                 Subject = "subject",
-                SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
+                SubjectDigest = TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
                 Email = "route-linked@example.com",
             });
         });
@@ -999,8 +1000,8 @@ public sealed class RouteTests
                 ClientId = "client-id",
             });
             db.UserExternalIdentities.AddRange(
-                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-a", SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-a")), CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-b", SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-b")), CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
+                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-a", SubjectDigest = TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-a")), CreatedAt = new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+                new UserExternalIdentity { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, UserId = user.Id, ProviderId = 11, Subject = "subject-b", SubjectDigest = TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject-b")), CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc) });
         });
         var sessionToken = await app.CreateSessionAsync(userId);
 
@@ -1043,7 +1044,7 @@ public sealed class RouteTests
                 UserId = user.Id,
                 ProviderId = 10,
                 Subject = "subject",
-                SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
+                SubjectDigest = TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
             });
         });
         var sessionToken = await app.CreateSessionAsync(userId);
@@ -1068,7 +1069,7 @@ public sealed class RouteTests
             db.UserPasswordAuths.Add(new UserPasswordAuth
             {
                 UserId = user.Id,
-                PasswordHash = new PasswordStore().Hash("current-password"),
+                PasswordHash = PasswordHashing.Hash("current-password"),
             });
             db.UserIdentityProviders.Add(new UserIdentityProvider
             {
@@ -1087,7 +1088,7 @@ public sealed class RouteTests
                 UserId = user.Id,
                 ProviderId = 10,
                 Subject = "subject",
-                SubjectDigest = TokenStore.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
+                SubjectDigest = TokenGenerator.ComputeDigestBase64(Encoding.UTF8.GetBytes("subject")),
             });
         });
         var sessionToken = await app.CreateSessionAsync(userId);
@@ -1640,6 +1641,38 @@ public sealed class RouteTests
         {
             Assert.NotNull((await db.ServiceAccountApiKeys.SingleAsync(x => x.Id == seed.ApiKeyId, TestContext.Current.CancellationToken)).RevokedAt);
             Assert.True(await db.ServiceAccountApiKeys.AnyAsync(x => x.ServiceAccountId == seed.ServiceAccountId && x.Name == "rotated", TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.rotate", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task RotateServiceAccountApiKey_CurrentOrgRouteRevokesOldKeyAndReturnsNewPlaintextKey()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        ServiceAccountBearerSeed seed = default;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-sa-key-rotate@example.com", "Current Service Account Key Rotate");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.service_accounts.write");
+            seed = SeedServiceAccountBearerContext(db, includeReadClaim: false, disabled: false);
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/service-accounts/{seed.ServiceAccountId}/api-keys/{seed.ApiKeyId}/rotate");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"current-rotated\",\"description\":\"Current rotated key\",\"scopesJson\":\"[]\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.StartsWith("nssa_", json.RootElement.GetProperty("data").GetProperty("plaintextKey").GetString(), StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.NotNull((await db.ServiceAccountApiKeys.SingleAsync(x => x.Id == seed.ApiKeyId, TestContext.Current.CancellationToken)).RevokedAt);
+            Assert.True(await db.ServiceAccountApiKeys.AnyAsync(x => x.ServiceAccountId == seed.ServiceAccountId && x.Name == "current-rotated", TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.service_accounts.api_key.rotate", TestContext.Current.CancellationToken));
         });
     }
@@ -3377,7 +3410,7 @@ public sealed class RouteTests
                 InvitedByUserId = inviter.Id,
                 Email = invited.Email,
                 EmailUpcase = invited.EmailUpcase,
-                TokenDigest = TokenStore.ComputeDigestBase64(rawToken),
+                TokenDigest = TokenGenerator.ComputeDigestBase64(rawToken),
                 PendingRoleIdsJson = "[]",
                 PendingGroupIdsJson = "[]",
                 CreatedAt = new DateTime(2025, 1, 2, 0, 0, 0, DateTimeKind.Utc),
@@ -3642,7 +3675,7 @@ public sealed class RouteTests
         {
             var user = await db.Users.SingleAsync(x => x.Email == "root@example.com", TestContext.Current.CancellationToken);
             Assert.Equal("Root User", user.Name);
-            Assert.True(new PasswordStore().Verify("correct-horse-password", (await db.UserPasswordAuths.SingleAsync(x => x.UserId == user.Id, TestContext.Current.CancellationToken)).PasswordHash).Success);
+            Assert.True(PasswordHashing.Verify("correct-horse-password", (await db.UserPasswordAuths.SingleAsync(x => x.UserId == user.Id, TestContext.Current.CancellationToken)).PasswordHash).Success);
             Assert.True(await db.OrganizationMemberships.AnyAsync(x => x.UserId == user.Id && x.OrgId == Constants.DefaultOrganizationId && x.DeletedAt == null, TestContext.Current.CancellationToken));
             Assert.True(await db.RoleAssignments.AnyAsync(x => x.OrgId == Constants.DefaultOrganizationId && x.UserId == user.Id && x.RoleKey == BuiltInRoleStore.OwnerRoleName, TestContext.Current.CancellationToken));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "admin.bootstrap", TestContext.Current.CancellationToken));
@@ -3780,8 +3813,6 @@ public sealed class RouteTests
                         services.AddSingleton<PermissionClaimCodec>(sp => new PermissionClaimCodec(sp.GetRequiredService<PermissionRegistry>()));
                         services.AddSingleton<PermissionSnapshotCodec>();
                         services.AddScoped<PermissionResolver>();
-                        services.AddSingleton<PasswordStore>();
-                        services.AddSingleton<TokenStore>();
                         services.AddSingleton<TokenExchangeStore>();
                         services.AddSingleton<TestEmailSender>();
                         services.AddSingleton<IEmailSender>(sp => sp.GetRequiredService<TestEmailSender>());
