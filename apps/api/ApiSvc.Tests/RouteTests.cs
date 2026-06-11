@@ -2803,6 +2803,89 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task ListGroups_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.groups.read");
+            db.Groups.Add(new Group { Id = Guid.CreateVersion7(), OrgId = Constants.DefaultOrganizationId, Name = "Ops", NameUpcase = "OPS" });
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/groups?filter[name]=op");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        var data = json.RootElement.GetProperty("data");
+        Assert.Single(data.EnumerateArray());
+        Assert.Equal("Ops", data[0].GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task CreateGroup_CurrentOrgRouteCreatesGroup()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-group-create@example.com", "Current Group Create");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/groups");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"name\":\"Operators\",\"email\":\"operators@example.com\",\"description\":\"Runs systems\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("Operators", json.RootElement.GetProperty("data").GetProperty("name").GetString());
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.Groups.AnyAsync(x => x.NameUpcase == "OPERATORS" && x.OrgId == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.groups.create", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task AddGroupMember_CurrentOrgRouteAddsUserMember()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var adminId = Guid.Empty;
+        var targetId = Guid.Empty;
+        var groupId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var admin = SeedUser(db, "route-current-group-admin@example.com", "Current Group Admin");
+            var target = SeedUser(db, "route-current-group-target@example.com", "Current Group Target");
+            adminId = admin.Id;
+            targetId = target.Id;
+            GrantUserOrgPermission(db, admin.Id, "org.groups.write");
+            db.Groups.Add(new Group { Id = groupId, OrgId = Constants.DefaultOrganizationId, Name = "Workers", NameUpcase = "WORKERS" });
+        });
+        var sessionToken = await app.CreateSessionAsync(adminId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/groups/{groupId}/members/user/{targetId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            var group = await db.Groups.Include(x => x.Members).SingleAsync(x => x.Id == groupId, TestContext.Current.CancellationToken);
+            Assert.Contains(group.Members, x => x.Id == targetId);
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.groups.member.add", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task CreateInvite_WithHumanWritePermissionReturnsTokenAndWritesAuditEvent()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3327,6 +3410,7 @@ public sealed class RouteTests
                             endpoints.MapTenantEndpoints();
                             endpoints.MapOrgEndpoints();
                             endpoints.MapRoleEndpoints();
+                            endpoints.MapGroupEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
