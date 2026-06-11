@@ -148,6 +148,87 @@ public class PermissionResolverTests
     }
 
     [Fact]
+    public async Task ResolveUserAsync_IgnoresLegacyBuiltInRoleRowClaims()
+    {
+        var (db, resolver) = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "legacy-owner@example.com", "Legacy Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var role = new Role
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "Owner",
+            NameUpcase = "OWNER",
+            CreatedBy = user.Id,
+        };
+
+        db.Users.Add(user);
+        db.Roles.Add(role);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RoleClaims.Add(new RoleClaim
+        {
+            RoleId = role.Id,
+            Type = "org.settings.write",
+            Value = "organization:default",
+            CreatedBy = user.Id,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        user.Roles.Add(role);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var permissions = await resolver.ResolveUserAsync(user.Id, TestContext.Current.CancellationToken);
+
+        Assert.False(permissions.Allows(PermissionKey.Create("org.settings", "write"), PermissionScopeKind.Organization, "default"));
+    }
+
+    [Fact]
+    public async Task ResolveUserAsync_IgnoresLegacyBuiltInGroupRoleRowClaims()
+    {
+        var (db, resolver) = CreateDatabase();
+        var user = new User(Guid.NewGuid(), "legacy-group-owner@example.com", "Legacy Group Owner")
+        {
+            OrgId = Constants.DefaultOrganizationId,
+        };
+        var group = new Group
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "ops",
+            NameUpcase = "OPS",
+        };
+        var role = new Role
+        {
+            Id = Guid.NewGuid(),
+            OrgId = Constants.DefaultOrganizationId,
+            Name = "Owner",
+            NameUpcase = "OWNER",
+            CreatedBy = user.Id,
+        };
+
+        db.Users.Add(user);
+        db.Groups.Add(group);
+        db.Roles.Add(role);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        db.RoleClaims.Add(new RoleClaim
+        {
+            RoleId = role.Id,
+            Type = "org.settings.write",
+            Value = "organization:default",
+            CreatedBy = user.Id,
+        });
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+        group.Members.Add(user);
+        group.Roles.Add(role);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);
+
+        var permissions = await resolver.ResolveUserAsync(user.Id, TestContext.Current.CancellationToken);
+
+        Assert.False(permissions.Allows(PermissionKey.Create("org.settings", "write"), PermissionScopeKind.Organization, "default"));
+    }
+
+    [Fact]
     public async Task ServiceAccountResolver_IncludesDirectClaims()
     {
         var (db, resolver) = CreateDatabase();

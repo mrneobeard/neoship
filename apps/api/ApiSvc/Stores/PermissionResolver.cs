@@ -15,6 +15,8 @@ namespace NeoShip.ApiSvc.Stores;
 /// </example>
 public sealed class PermissionResolver
 {
+    private static readonly string[] ReservedRoleNames = ["OWNER", "ADMIN", "EDITOR", "READER", "AUDITOR", "MEMBER"];
+
     private readonly record struct ClaimPair(string Type, string Value);
 
     private readonly ShipDb db;
@@ -65,7 +67,7 @@ public sealed class PermissionResolver
 
         var userRoles = await this.db.Users
             .Where(x => x.Id == userId)
-            .SelectMany(x => x.Roles.Where(r => r.OrgId == userOrgId))
+            .SelectMany(x => x.Roles.Where(r => r.OrgId == userOrgId && !ReservedRoleNames.Contains(r.NameUpcase)))
             .SelectMany(x => x.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
@@ -79,7 +81,7 @@ public sealed class PermissionResolver
 
         var userGroups = await this.db.Groups
             .Where(g => userGroupIds.Contains(g.Id))
-            .SelectMany(g => g.Roles)
+            .SelectMany(g => g.Roles.Where(r => !ReservedRoleNames.Contains(r.NameUpcase)))
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
@@ -158,7 +160,7 @@ public sealed class PermissionResolver
 
         var roleClaims = await this.db.Groups
             .Where(g => serviceAccountGroupIds.Contains(g.Id))
-            .SelectMany(g => g.Roles)
+            .SelectMany(g => g.Roles.Where(r => !ReservedRoleNames.Contains(r.NameUpcase)))
             .SelectMany(r => r.Claims)
             .Select(x => new ClaimPair(x.Type, x.Value))
             .ToListAsync(ct);
