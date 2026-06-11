@@ -92,6 +92,61 @@ public class UserStore
         this.logger = logger;
     }
 
+    /// <summary>
+    /// Lists active users in an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns>The active organization users.</returns>
+    public async Task<List<User>> ListOrgUsersAsync(Guid orgId, CancellationToken ct = default)
+    {
+        return await this.db.Users
+            .Where(x => x.OrgId == orgId && x.DeletedAt == null && x.StatusId != UserStatus.Deleted.Id)
+            .OrderBy(x => x.EmailUpcase)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Soft-deletes a user in an organization.
+    /// </summary>
+    /// <param name="orgId">The organization identifier.</param>
+    /// <param name="userId">The user identifier.</param>
+    /// <param name="ct">The cancellation token.</param>
+    /// <returns><see langword="true"/> when the user was soft-deleted; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> SoftDeleteOrgUserAsync(Guid orgId, Guid userId, CancellationToken ct = default)
+    {
+        var user = await this.db.Users.FirstOrDefaultAsync(x => x.Id == userId && x.OrgId == orgId && x.DeletedAt == null, ct);
+        if (user is null)
+        {
+            return false;
+        }
+
+        var now = DateTime.UtcNow;
+        user.StatusId = UserStatus.Deleted.Id;
+        user.DeletedAt = now;
+        user.HardDeleteAt = now.AddDays(30);
+
+        var memberships = await this.db.OrganizationMemberships
+            .Where(x => x.OrgId == orgId && x.UserId == userId && x.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var membership in memberships)
+        {
+            membership.DeletedAt = now;
+        }
+
+        var sessions = await this.db.UserSessions
+            .Where(x => x.UserId == userId && x.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var session in sessions)
+        {
+            session.RevokedAt = now;
+        }
+
+        await this.db.SaveChangesAsync(ct);
+        this.logger.LogInformation("User soft-deleted: {UserId} org={OrgId}", userId, orgId);
+        return true;
+    }
+
     public async Task<(SignupResult Result, User? User, UserSession? Session, string? RawToken)> SignupAsync(
         string email,
         string name,

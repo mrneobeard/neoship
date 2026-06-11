@@ -3682,6 +3682,132 @@ public sealed class RouteTests
         });
     }
 
+    [Fact]
+    public async Task ListUsers_ReturnsCurrentOrgUsersWithEnvelope()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-users-reader@example.com", "Users Reader");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.read");
+            SeedUser(db, "route-users-target@example.com", "Users Target");
+            SeedUser(db, "route-users-deleted@example.com", "Users Deleted").DeletedAt = DateTime.UtcNow;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/users?filter[email]=target");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(1, json.RootElement.GetProperty("data").GetArrayLength());
+        Assert.Equal("route-users-target@example.com", json.RootElement.GetProperty("data")[0].GetProperty("email").GetString());
+        Assert.True(json.RootElement.TryGetProperty("pagination", out _));
+        Assert.Equal("target", json.RootElement.GetProperty("meta").GetProperty("query").GetProperty("filter").GetProperty("email").GetString());
+    }
+
+    [Fact]
+    public async Task DeleteUser_SoftDeletesCurrentOrgUser()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var targetId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-users-delete-admin@example.com", "Users Delete Admin");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.members.write");
+            targetId = SeedUser(db, "route-users-delete-target@example.com", "Users Delete Target").Id;
+            db.OrganizationMemberships.Add(new OrganizationMembership { OrgId = Constants.DefaultOrganizationId, UserId = targetId, CreatedAt = DateTime.UtcNow, AcceptedAt = DateTime.UtcNow });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/v1/users/{targetId}");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            var target = await db.Users.SingleAsync(x => x.Id == targetId, TestContext.Current.CancellationToken);
+            Assert.Equal(UserStatus.Deleted.Id, target.StatusId);
+            Assert.NotNull(target.DeletedAt);
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.users.delete", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task UserRoleRoutes_AssignBuiltInRoleToCurrentOrgUser()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var targetId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-role-admin@example.com", "User Role Admin");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.roles.write");
+            GrantUserOrgPermission(db, user.Id, "org.roles.read");
+            targetId = SeedUser(db, "route-user-role-target@example.com", "User Role Target").Id;
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var addRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/users/{targetId}/roles");
+        addRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        addRequest.Content = new StringContent($"{{\"roleId\":\"{BuiltInRoleStore.ReaderRoleId}\"}}", Encoding.UTF8, "application/json");
+        using var addResponse = await app.Client.SendAsync(addRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, addResponse.StatusCode);
+
+        using var listRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/users/{targetId}/roles");
+        listRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var listResponse = await app.Client.SendAsync(listRequest, TestContext.Current.CancellationToken);
+        var body = await listResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Contains("reader", body, StringComparison.Ordinal);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.True(await db.RoleAssignments.AnyAsync(x => x.UserId == targetId && x.RoleKey == BuiltInRoleStore.ReaderRoleName, TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
+    public async Task UserGroupRoutes_AddCurrentOrgUserToGroup()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        var targetId = Guid.Empty;
+        var groupId = Guid.CreateVersion7();
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-user-group-admin@example.com", "User Group Admin");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.groups.write");
+            GrantUserOrgPermission(db, user.Id, "org.groups.read");
+            targetId = SeedUser(db, "route-user-group-target@example.com", "User Group Target").Id;
+            db.Groups.Add(new Group { Id = groupId, OrgId = Constants.DefaultOrganizationId, Name = "Deployers", NameUpcase = "DEPLOYERS" });
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var addRequest = new HttpRequestMessage(HttpMethod.Post, $"/api/v1/users/{targetId}/groups");
+        addRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        addRequest.Content = new StringContent($"{{\"groupId\":\"{groupId}\"}}", Encoding.UTF8, "application/json");
+        using var addResponse = await app.Client.SendAsync(addRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, addResponse.StatusCode);
+
+        using var listRequest = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/users/{targetId}/groups");
+        listRequest.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        using var listResponse = await app.Client.SendAsync(listRequest, TestContext.Current.CancellationToken);
+        var body = await listResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        Assert.Contains("Deployers", body, StringComparison.Ordinal);
+    }
+
     private static User SeedUser(ShipDb db, string email, string name = "Route User")
     {
         var user = new User(Guid.CreateVersion7(), email, name)
@@ -3845,6 +3971,7 @@ public sealed class RouteTests
                             endpoints.MapAuthEndpoints();
                             endpoints.MapAdminEndpoints();
                             endpoints.MapMeEndpoints();
+                            endpoints.MapUserEndpoints();
                             endpoints.MapTenantEndpoints();
                             endpoints.MapOrgEndpoints();
                             endpoints.MapRoleEndpoints();

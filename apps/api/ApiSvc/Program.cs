@@ -166,6 +166,7 @@ app.MapGet("/", () => "NeoShip Identity API");
 app.MapAuthEndpoints();
 app.MapAdminEndpoints();
 app.MapMeEndpoints();
+app.MapUserEndpoints();
 app.MapTenantEndpoints();
 app.MapOrgEndpoints();
 app.MapRoleEndpoints();
