@@ -1214,6 +1214,51 @@ public sealed class RouteTests
     }
 
     [Fact]
+    public async Task GetAuthPolicy_CurrentOrgRouteAllowsScopedServiceAccountBearer()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var plaintextKey = string.Empty;
+        await app.SeedAsync(db =>
+        {
+            plaintextKey = SeedServiceAccountBearer(db, includeReadClaim: true, disabled: false, claimType: "org.settings.read");
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth-policy");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", plaintextKey);
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("allowPasswordAuth", body, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task UpdateAuthPolicy_CurrentOrgRouteWritesAuditEvent()
+    {
+        await using var app = await RouteTestApp.CreateAsync();
+        var userId = Guid.Empty;
+        await app.SeedAsync(db =>
+        {
+            var user = SeedUser(db, "route-current-policy-writer@example.com", "Current Policy Writer");
+            userId = user.Id;
+            GrantUserOrgPermission(db, user.Id, "org.settings.write");
+        });
+        var sessionToken = await app.CreateSessionAsync(userId);
+
+        using var request = new HttpRequestMessage(HttpMethod.Patch, "/api/v1/auth-policy");
+        request.Headers.Add("Cookie", $"{AuthEndpoints.SessionCookieName}={sessionToken}");
+        request.Content = new StringContent("{\"mfaPolicy\":\"all_members\"}", Encoding.UTF8, "application/json");
+        using var response = await app.Client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await app.WithDbAsync(async db =>
+        {
+            Assert.Equal(OrganizationMfaPolicy.AllMembers.Id, (await db.Orgs.SingleAsync(x => x.Id == Constants.DefaultOrganizationId, TestContext.Current.CancellationToken)).MfaPolicyId);
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Type == "org.auth_policy.update", TestContext.Current.CancellationToken));
+        });
+    }
+
+    [Fact]
     public async Task ListServiceAccounts_AllowsScopedServiceAccountBearer()
     {
         await using var app = await RouteTestApp.CreateAsync();
@@ -3674,6 +3719,7 @@ public sealed class RouteTests
                             endpoints.MapServiceAccountEndpoints();
                             endpoints.MapIdentityProviderEndpoints();
                             endpoints.MapPermissionEndpoints();
+                            endpoints.MapAuthPolicyEndpoints();
                         });
                     }))
                 .StartAsync(TestContext.Current.CancellationToken);
